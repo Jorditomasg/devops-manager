@@ -8,6 +8,7 @@ import threading
 import webbrowser
 import os
 import subprocess
+from datetime import datetime
 
 from gui.tooltip import ToolTip
 
@@ -70,12 +71,13 @@ class RepoCard(ctk.CTkFrame):
         self._repo = repo_info
         self._launcher = service_launcher
         self._db_presets = db_presets or {}
-        self._log = log_callback
-        self._on_edit_config = on_edit_config
+        self._global_log = log_callback
+        self._log = self._repo_log
         self._status = 'stopped'
         self._branches_cache = []
         self._branch_load_id = None
         self._expanded = False
+        self._is_installing = False
         self.selected_var = ctk.BooleanVar(value=True)
 
         self._build_header()
@@ -213,11 +215,39 @@ class RepoCard(ctk.CTkFrame):
         self._stop_btn.pack_forget()
         self._restart_btn.pack_forget()
 
-        if self._status in ('running', 'starting'):
-            self._stop_btn.pack(side="left", padx=(0, 2))
-            self._restart_btn.pack(side="left", padx=(0, 2))
+        is_installing = getattr(self, '_is_installing', False)
+
+        if is_installing:
+            if self._status in ('running', 'starting'):
+                self._stop_btn.pack(side="left", padx=(0, 2))
+                self._stop_btn.configure(state="disabled")
+                self._restart_btn.pack(side="left", padx=(0, 2))
+                self._restart_btn.configure(state="disabled")
+            else:
+                self._start_btn.pack(side="left", padx=(0, 2))
+                self._start_btn.configure(state="disabled")
         else:
-            self._start_btn.pack(side="left", padx=(0, 2))
+            if self._status in ('running', 'starting'):
+                self._stop_btn.pack(side="left", padx=(0, 2))
+                self._stop_btn.configure(state="normal")
+                self._restart_btn.pack(side="left", padx=(0, 2))
+                self._restart_btn.configure(state="normal")
+            else:
+                self._start_btn.pack(side="left", padx=(0, 2))
+                self._start_btn.configure(state="normal")
+
+        is_running = self._status in ('running', 'starting')
+        if hasattr(self, '_npm_ci_btn'):
+            if is_running:
+                self._npm_ci_btn.configure(state="disabled")
+            elif not is_installing:
+                self._npm_ci_btn.configure(state="normal")
+                
+        if hasattr(self, '_mvn_install_btn'):
+            if is_running:
+                self._mvn_install_btn.configure(state="disabled")
+            elif not is_installing:
+                self._mvn_install_btn.configure(state="normal")
 
     def _update_header_hints(self):
         """Update the branch + profile hint text in the header."""
@@ -283,6 +313,129 @@ class RepoCard(ctk.CTkFrame):
         self._build_selector_row(content, repo)
         # Row 3: Custom start command
         self._build_command_row(content, repo)
+        # Row 4: Logs
+        self._build_log_row(content)
+
+    def _build_log_row(self, content):
+        """Build the repository log console."""
+        # Save log_frame as an instance variable to hide/show it dynamically
+        self._log_frame = ctk.CTkFrame(content, fg_color="transparent")
+        # Do not pack initially to hide it when empty
+
+        header = ctk.CTkFrame(self._log_frame, fg_color="transparent")
+        header.pack(fill="x")
+        
+        ctk.CTkLabel(header, text="📋 Logs del Repositorio", font=(FONT_FAMILY, 12, "bold"), text_color="#c7d2fe").pack(side="left")
+        
+        clear_btn = ctk.CTkButton(
+            header, text="🗑 Limpiar", width=60, height=24,
+            font=(FONT_FAMILY, 10),
+            fg_color="#1e1b4b", hover_color="#312e81",
+            border_width=1, border_color="#4338ca",
+            command=self._clear_logs
+        )
+        clear_btn.pack(side="right")
+        
+        detach_btn = ctk.CTkButton(
+            header, text="🗗 Desacoplar", width=80, height=24,
+            font=(FONT_FAMILY, 10),
+            fg_color="#1e1b4b", hover_color="#312e81",
+            border_width=1, border_color="#4338ca",
+            command=self._detach_logs
+        )
+        detach_btn.pack(side="right", padx=(0, 6))
+        
+        self._log_textbox = ctk.CTkTextbox(
+            self._log_frame, height=120, font=(FONT_MONO, 11),
+            corner_radius=6, border_width=1,
+            border_color="#3b3768", fg_color="#0f0e26",
+            text_color="#e0e7ff", state="disabled"
+        )
+        self._log_textbox.pack(fill="x", pady=(4, 0))
+        
+    def _clear_logs(self):
+        """Clear the embedded and detached logs, and hide the console."""
+        if hasattr(self, '_log_textbox'):
+            self._log_textbox.configure(state="normal")
+            self._log_textbox.delete("1.0", "end")
+            self._log_textbox.configure(state="disabled")
+            
+        if getattr(self, '_detached_log_textbox', None) and self._detached_log_textbox.winfo_exists():
+            self._detached_log_textbox.configure(state="normal")
+            self._detached_log_textbox.delete("1.0", "end")
+            self._detached_log_textbox.configure(state="disabled")
+
+        self._has_logs = False
+        if hasattr(self, '_log_frame'):
+            self._log_frame.pack_forget()
+
+    def _detach_logs(self):
+        """Open the logs in a separate detached window."""
+        # Prevent multiple detached windows
+        if getattr(self, '_detached_log_window', None) and self._detached_log_window.winfo_exists():
+            self._detached_log_window.focus()
+            return
+            
+        self._detached_log_window = ctk.CTkToplevel(self)
+        self._detached_log_window.title(f"Logs - {self._repo.name}")
+        self._detached_log_window.geometry("800x600")
+        
+        self._detached_log_textbox = ctk.CTkTextbox(
+            self._detached_log_window, font=(FONT_MONO, 12),
+            corner_radius=0, border_width=0,
+            fg_color="#0f0e26", text_color="#e0e7ff"
+        )
+        self._detached_log_textbox.pack(fill="both", expand=True)
+        
+        # Copy current content
+        current_logs = self._log_textbox.get("1.0", "end")
+        self._detached_log_textbox.insert("end", current_logs)
+        self._detached_log_textbox.configure(state="disabled")
+        self._detached_log_textbox.see("end")
+
+    def _repo_log(self, message: str):
+        """Add a timestamped log message to this repo's console. Thread-safe."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        line = f"[{timestamp}] {message}\n"
+
+        def _insert():
+            # Show the log frame if it's hidden and this is the first log
+            if not getattr(self, '_has_logs', False):
+                self._has_logs = True
+                if hasattr(self, '_log_frame'):
+                    self._log_frame.pack(fill="x", pady=(8, 0))
+
+            if hasattr(self, '_log_textbox'):
+                self._log_textbox.configure(state="normal")
+                self._log_textbox.insert("end", line)
+
+                # Trim old lines
+                content = self._log_textbox.get("1.0", "end")
+                lines = content.splitlines()
+                if len(lines) > 500:
+                    excess = len(lines) - 500
+                    self._log_textbox.delete("1.0", f"{excess + 1}.0")
+
+                self._log_textbox.see("end")
+                self._log_textbox.configure(state="disabled")
+                
+            if getattr(self, '_detached_log_textbox', None) and self._detached_log_textbox.winfo_exists():
+                self._detached_log_textbox.configure(state="normal")
+                self._detached_log_textbox.insert("end", line)
+                
+                content = self._detached_log_textbox.get("1.0", "end")
+                lines = content.splitlines()
+                if len(lines) > 500:
+                    excess = len(lines) - 500
+                    self._detached_log_textbox.delete("1.0", f"{excess + 1}.0")
+                    
+                self._detached_log_textbox.see("end")
+                self._detached_log_textbox.configure(state="disabled")
+
+        try:
+            self.after(0, _insert)
+        except Exception:
+            pass
 
     def _build_branch_row(self, content, repo):
         """Build branch + secondary buttons row."""
@@ -572,8 +725,10 @@ class RepoCard(ctk.CTkFrame):
         """Run npm ci to install dependencies."""
         repo = self._repo
         if self._log:
-            self._log(f"[{repo.name}] Running npm ci...")
+            self._log(f"Running npm ci...")
         self._npm_ci_btn.configure(text=NPM_CI_RUN, state="disabled")
+        self._is_installing = True
+        self._update_button_visibility()
 
         def _run():
             try:
@@ -586,13 +741,14 @@ class RepoCard(ctk.CTkFrame):
                     if not line:
                         break
                     if self._log:
-                        self._log(f"[{repo.name}] {line.strip()}")
+                        self._log(line.strip())
                 process.wait()
 
                 def _done():
+                    self._is_installing = False
                     if process.returncode == 0:
                         if self._log:
-                            self._log(f"[{repo.name}] ✅ npm ci completado")
+                            self._log(f"✅ npm ci completado")
                         self._npm_ci_btn.configure(
                             text=NPM_CI_OK, state="normal",
                             fg_color="#1e293b", border_color="#64748b"
@@ -601,16 +757,21 @@ class RepoCard(ctk.CTkFrame):
                         self._update_header_hints()
                     else:
                         if self._log:
-                            self._log(f"[{repo.name}] ❌ npm ci falló (exit: {process.returncode})")
+                            self._log(f"❌ npm ci falló (exit: {process.returncode})")
                         self._npm_ci_btn.configure(
                             text=NPM_CI_FAIL, state="normal",
                             fg_color="#4c1616", border_color="#ef4444"
                         )
+                    self._update_button_visibility()
                 self.after(0, _done)
             except Exception as e:
                 if self._log:
-                    self._log(f"[{repo.name}] Error npm ci: {e}")
-                self.after(0, lambda: self._npm_ci_btn.configure(text=NPM_CI_FAIL, state="normal"))
+                    self._log(f"Error npm ci: {e}")
+                def _err():
+                    self._is_installing = False
+                    self._npm_ci_btn.configure(text=NPM_CI_FAIL, state="normal")
+                    self._update_button_visibility()
+                self.after(0, _err)
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -620,8 +781,10 @@ class RepoCard(ctk.CTkFrame):
         """Run mvn install -DskipTests for Java projects."""
         repo = self._repo
         if self._log:
-            self._log(f"[{repo.name}] Running mvn install -DskipTests...")
+            self._log(f"Running mvn install -DskipTests...")
         self._mvn_install_btn.configure(text=MVN_INSTALL_RUN, state="disabled")
+        self._is_installing = True
+        self._update_button_visibility()
 
         mvnw = os.path.join(repo.path, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')
         if not os.path.isfile(mvnw):
@@ -639,13 +802,14 @@ class RepoCard(ctk.CTkFrame):
                     if not line:
                         break
                     if self._log:
-                        self._log(f"[{repo.name}] {line.strip()}")
+                        self._log(line.strip())
                 process.wait()
 
                 def _done():
+                    self._is_installing = False
                     if process.returncode == 0:
                         if self._log:
-                            self._log(f"[{repo.name}] ✅ mvn install completado")
+                            self._log(f"✅ mvn install completado")
                         self._mvn_install_btn.configure(
                             text=MVN_INSTALL_OK, state="normal",
                             fg_color="#144d28", border_color="#22c55e"
@@ -653,17 +817,21 @@ class RepoCard(ctk.CTkFrame):
                         self._update_header_hints()
                     else:
                         if self._log:
-                            self._log(f"[{repo.name}] ❌ mvn install falló (exit: {process.returncode})")
+                            self._log(f"❌ mvn install falló (exit: {process.returncode})")
                         self._mvn_install_btn.configure(
                             text=MVN_INSTALL_FAIL, state="normal",
                             fg_color="#4c1616", border_color="#ef4444"
                         )
+                    self._update_button_visibility()
                 self.after(0, _done)
             except Exception as e:
                 if self._log:
-                    self._log(f"[{repo.name}] Error mvn install: {e}")
-                self.after(0, lambda: self._mvn_install_btn.configure(
-                    text=MVN_INSTALL_FAIL, state="normal"))
+                    self._log(f"Error mvn install: {e}")
+                def _err():
+                    self._is_installing = False
+                    self._mvn_install_btn.configure(text=MVN_INSTALL_FAIL, state="normal")
+                    self._update_button_visibility()
+                self.after(0, _err)
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -705,7 +873,7 @@ class RepoCard(ctk.CTkFrame):
         """Start with a custom command."""
         repo = self._repo
         if self._log:
-            self._log(f"[{repo.name}] Ejecutando: {cmd_str}")
+            self._log(f"Ejecutando: {cmd_str}")
 
         self._update_status(repo.name, 'starting')
 
@@ -723,14 +891,14 @@ class RepoCard(ctk.CTkFrame):
                     if not line:
                         break
                     if self._log:
-                        self._log(f"[{repo.name}] {line.strip()}")
+                        self._log(line.strip())
 
                 process.wait()
                 self._update_status(repo.name, 'stopped')
             except Exception as e:
                 self._update_status(repo.name, 'error')
                 if self._log:
-                    self._log(f"[{repo.name}] Error: {e}")
+                    self._log(f"Error: {e}")
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -739,6 +907,8 @@ class RepoCard(ctk.CTkFrame):
         repo = self._repo
         if hasattr(self, '_npm_ci_btn'):
             self._npm_ci_btn.configure(text=NPM_CI_RUN, state="disabled")
+        self._is_installing = True
+        self._update_button_visibility()
 
         def _run():
             try:
@@ -751,13 +921,15 @@ class RepoCard(ctk.CTkFrame):
                     if not line:
                         break
                     if self._log:
-                        self._log(f"[{repo.name}] {line.strip()}")
+                        self._log(line.strip())
                 process.wait()
 
                 def _after():
+                    self._is_installing = False
+                    self._update_button_visibility()
                     if process.returncode == 0:
                         if self._log:
-                            self._log(f"[{repo.name}] ✅ npm ci completado, iniciando...")
+                            self._log(f"✅ npm ci completado, iniciando...")
                         if hasattr(self, '_npm_ci_btn'):
                             self._npm_ci_btn.configure(
                                 text=NPM_CI_OK, state="normal",
@@ -767,13 +939,17 @@ class RepoCard(ctk.CTkFrame):
                         self._do_start()
                     else:
                         if self._log:
-                            self._log(f"[{repo.name}] ❌ npm ci falló, no se puede iniciar")
+                            self._log(f"❌ npm ci falló, no se puede iniciar")
                         if hasattr(self, '_npm_ci_btn'):
                             self._npm_ci_btn.configure(text=NPM_CI_FAIL, state="normal")
                 self.after(0, _after)
             except Exception as e:
                 if self._log:
-                    self._log(f"[{repo.name}] Error: {e}")
+                    self._log(f"Error: {e}")
+                def _err():
+                    self._is_installing = False
+                    self._update_button_visibility()
+                self.after(0, _err)
 
         threading.Thread(target=_run, daemon=True).start()
 

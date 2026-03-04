@@ -92,7 +92,7 @@ class ServiceLauncher:
                         break
                     line = line.strip()
                     if log:
-                        log(f"[{name}] {line}")
+                        log(line)
                     # Detect startup
                     if 'Started ' in line and ' in ' in line:
                         svc.status = 'running'
@@ -170,7 +170,7 @@ class ServiceLauncher:
                         break
                     line = line.strip()
                     if log:
-                        log(f"[{name}] {line}")
+                        log(line)
                     if 'Compiled successfully' in line or 'compiled successfully' in line.lower():
                         svc.status = 'running'
                         if log:
@@ -234,7 +234,7 @@ class ServiceLauncher:
                         break
                     line = line.strip()
                     if log:
-                        log(f"[{name}] {line}")
+                        log(line)
                     if 'BUILD SUCCESS' in line:
                         if log:
                             log(f"[svc] ✅ {name} built successfully")

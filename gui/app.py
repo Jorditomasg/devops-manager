@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gui.repo_card import RepoCard
 from gui.global_panel import GlobalPanel
-from gui.log_panel import LogPanel
 from gui.tooltip import ToolTip
 from gui.dialogs import CloneDialog, ConfigEditorDialog, ProfileDialog, SettingsDialog
 from core.repo_detector import detect_repos
@@ -156,33 +155,18 @@ class DevOpsManagerApp(ctk.CTk):
         settings_btn.pack(side="left", padx=3)
         ToolTip(settings_btn, "Abrir configuración")
 
-        # ─── Tabview: Repos + Logs ───
-        self._tabview = ctk.CTkTabview(
-            self, corner_radius=10,
-            fg_color="transparent",
-            segmented_button_fg_color="#16132e",
-            segmented_button_selected_color="#4f46e5",
-            segmented_button_selected_hover_color="#4338ca",
-            segmented_button_unselected_color="#16132e",
-            segmented_button_unselected_hover_color="#312e81",
-        )
-        self._tabview.pack(fill="both", expand=True, padx=10, pady=(8, 0))
-
-        # Tab 1: Repos
-        tab_repos = self._tabview.add("🖥  Repos")
-
-        # Global panel inside repos tab
+        # Global panel
         self._global_panel = GlobalPanel(
-            tab_repos, db_presets=self._db_presets, log_callback=self._log
+            self, db_presets=self._db_presets, log_callback=self._log
         )
-        self._global_panel.pack(fill="x", pady=(0, 6))
+        self._global_panel.pack(fill="x", padx=10, pady=(10, 6))
 
         # Scrollable cards area
         self._cards_scroll = ctk.CTkScrollableFrame(
-            tab_repos, corner_radius=0,
+            self, corner_radius=0,
             fg_color="transparent"
         )
-        self._cards_scroll.pack(fill="both", expand=True)
+        self._cards_scroll.pack(fill="both", expand=True, padx=10)
 
         # ─── Fix scroll tearing + overscroll ───
         canvas = self._cards_scroll._parent_canvas
@@ -216,12 +200,6 @@ class DevOpsManagerApp(ctk.CTk):
         canvas.bind("<Button-5>", _on_mousewheel)
         self._cards_scroll.bind_all("<MouseWheel>", _on_mousewheel)
 
-        # Tab 2: Logs
-        tab_logs = self._tabview.add("📋  Logs")
-
-        self._log_panel = LogPanel(tab_logs)
-        self._log_panel.pack(fill="both", expand=True)
-
         # Status bar
         self._statusbar = ctk.CTkLabel(
             self, text="Listo",
@@ -232,7 +210,9 @@ class DevOpsManagerApp(ctk.CTk):
 
     def _log(self, message: str):
         """Central log function."""
-        self._log_panel.log(message)
+        print(message)
+        if hasattr(self, '_statusbar') and len(message) < 100:
+            self._statusbar.configure(text=message)
 
     def _scan_repos(self):
         """Scan workspace for repositories."""
