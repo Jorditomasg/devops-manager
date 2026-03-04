@@ -346,27 +346,95 @@ class ProfileDialog(ctk.CTkToplevel):
 
     def _apply_profile_data(self, data: dict):
         """Apply a profile, showing import options dialog if needed."""
-        from core.profile_manager import get_missing_repos
-        missing = get_missing_repos(self._workspace_dir, data)
-        has_db = bool(data.get('db_presets'))
-        has_files = any(
-            r.get('config_files') for r in data.get('repos', {}).values()
+        changes_text = self._build_changes_text(data)
+
+        def _continue_import():
+            from core.profile_manager import get_missing_repos
+            missing = get_missing_repos(self._workspace_dir, data)
+            has_db = bool(data.get('db_presets'))
+            has_files = any(
+                r.get('config_files') for r in data.get('repos', {}).values()
+            )
+
+            # If there are options to present, show the import options dialog
+            if missing or has_db or has_files:
+                ImportOptionsDialog(
+                    self, data,
+                    missing_repos=missing,
+                    has_db_presets=has_db,
+                    has_config_files=has_files,
+                    workspace_dir=self._workspace_dir,
+                    log_callback=self._log,
+                    on_complete=self._on_import_complete
+                )
+            else:
+                # Simple case: just apply branch/profile/cmd
+                self._apply_basic_config(data)
+
+        if changes_text == "✅ Ningún cambio detectado respecto al estado actual.":
+            # If nothing really changes (or everything is identical), we can just proceed
+            # but usually the user wants to know it loaded.
+            _continue_import()
+        else:
+            PreviewChangesDialog(self, changes_text, on_accept=_continue_import)
+
+    def _build_changes_text(self, data: dict) -> str:
+        """Comparar el data con el estado actual de los repos."""
+        from core.profile_manager import build_profile_data, get_missing_repos
+        current_data = build_profile_data(
+            self._repo_cards,
+            db_presets=self._db_presets,
+            include_db_presets=False,
+            include_config_files=False
         )
 
-        # If there are options to present, show the import options dialog
-        if missing or has_db or has_files:
-            ImportOptionsDialog(
-                self, data,
-                missing_repos=missing,
-                has_db_presets=has_db,
-                has_config_files=has_files,
-                workspace_dir=self._workspace_dir,
-                log_callback=self._log,
-                on_complete=self._on_import_complete
-            )
-        else:
-            # Simple case: just apply branch/profile/cmd
-            self._apply_basic_config(data)
+        changes = []
+
+        # 1. Repos faltantes (to clone)
+        missing = get_missing_repos(self._workspace_dir, data)
+        for m in missing:
+            changes.append(f"➕ Clonar nuevo repo: {m['name']} (rama: {m['branch']})")
+
+        # 2. Diferencias en repositorios existentes
+        target_repos = data.get('repos', {})
+        current_repos = current_data.get('repos', {})
+        missing_names = {m['name'] for m in missing}
+
+        for repo_name, target_cfg in target_repos.items():
+            if repo_name in missing_names:
+                continue
+
+            if repo_name in current_repos:
+                cur_cfg = current_repos[repo_name]
+                repo_changes = []
+
+                # Check branch
+                if target_cfg.get('branch') and cur_cfg.get('branch') != target_cfg.get('branch'):
+                    repo_changes.append(f"Rama: {cur_cfg.get('branch') or 'N/A'} ➔ {target_cfg.get('branch')}")
+
+                # Check profile
+                cur_profile = cur_cfg.get('profile') or 'N/A'
+                tgt_profile = target_cfg.get('profile') or 'N/A'
+                if tgt_profile != 'N/A' and cur_profile != tgt_profile:
+                    repo_changes.append(f"Perfil: {cur_profile} ➔ {tgt_profile}")
+
+                if repo_changes:
+                    changes.append(f"🔄 {repo_name}:\n    " + "\n    ".join(repo_changes))
+
+        # 3. Presets BD
+        if data.get('db_presets'):
+            names = ", ".join(data.get('db_presets').keys())
+            changes.append(f"🗄 Importar presets de BD: {names}")
+
+        # 4. Config files
+        n_files = sum(len(r.get('config_files', {})) for r in target_repos.values())
+        if n_files > 0:
+            changes.append(f"📝 Sobrescribir archivos de config ({n_files} archivos)")
+
+        if not changes:
+            return "✅ Ningún cambio detectado respecto al estado actual."
+
+        return "\n\n".join(changes)
 
     def _apply_basic_config(self, data: dict):
         """Apply basic config (branch, profile, cmd) without interactive dialog."""
@@ -963,3 +1031,47 @@ class PresetEditorDialog(ctk.CTkToplevel):
         if self._on_save:
             self._on_save(name, data)
         self.destroy()
+
+
+class PreviewChangesDialog(ctk.CTkToplevel):
+    """Dialog that shows exactly what will change before loading a profile."""
+    def __init__(self, parent, changes_text: str, on_accept=None):
+        super().__init__(parent)
+        self.title("Vista previa de cambios")
+        self.geometry("500x400")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        self._on_accept = on_accept
+
+        ctk.CTkLabel(self, text="🔍 Cambios a aplicar:",
+                     font=(FONT_FAMILY, 15, "bold")).pack(pady=(15, 10))
+
+        # Text area
+        textbox = ctk.CTkTextbox(self, font=("Consolas", 12), wrap="word")
+        textbox.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+        textbox.insert("1.0", changes_text)
+        textbox.configure(state="disabled")
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        accept_btn = ctk.CTkButton(
+            btn_frame, text="✅ Continuar", width=120,
+            fg_color="#4CAF50", hover_color="#388E3C",
+            command=self._accept
+        )
+        accept_btn.pack(side="right", padx=(10, 0))
+
+        ctk.CTkButton(
+            btn_frame, text="Cancelar", width=100,
+            fg_color="#555", hover_color="#666",
+            command=self.destroy
+        ).pack(side="right")
+
+    def _accept(self):
+        self.destroy()
+        if self._on_accept:
+            self._on_accept()
