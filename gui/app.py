@@ -41,6 +41,9 @@ class DevOpsManagerApp(ctk.CTk):
             )
 
         self._settings = self._load_settings()
+        # Keep settings synced to prevent false change detection on close
+        self._settings['workspace_dir'] = self._workspace_dir
+
         self._service_launcher = ServiceLauncher()
         self._db_presets = self._settings.get('db_presets', {})
         self._repo_cards = []

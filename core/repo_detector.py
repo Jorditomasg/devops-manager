@@ -35,6 +35,9 @@ class RepoInfo:
 def detect_repos(workspace_dir: str) -> list[RepoInfo]:
     """Scan workspace_dir for subdirectories that are git repos and classify them."""
     repos = []
+    if not os.path.isdir(workspace_dir):
+        return repos
+
     for entry in sorted(os.listdir(workspace_dir)):
         full_path = os.path.join(workspace_dir, entry)
         if not os.path.isdir(full_path):
