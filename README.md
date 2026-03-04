@@ -11,7 +11,7 @@ Esta aplicación te permite visualizar, configurar y ejecutar tus proyectos desd
 * **Presintonías de Bases de Datos:** Aplica configuraciones específicas de base de datos a tus proyectos con un clic.
 * **Consolidación de Logs:** Visualiza los logs de ejecución de las diferentes herramientas y repositorios en una pestaña dedicada.
 * **Internacionalización (i18n):** Soporte multi-idioma con detección dinámica de archivos de lenguaje.
-* **Interfaz Moderna e Intuitiva:** Rediseñada con tarjetas de repositorios, botones con tooltips y temas visuales personalizables.
+* **Interfaz Moderna e Intuitiva:** Rediseñada con tarjetas de repositorios y botones con tooltips.
 
 ## Requisitos Previos
 
@@ -78,4 +78,4 @@ Al abrirla, la aplicación autodetectará por defecto el espacio de trabajo basa
 
 ## Configuración
 
-La configuración propia de la herramienta se guarda en `devops_manager_config.json`, donde se almacena el estado visual (tema oscuro/claro), últimos comandos introducidos, configuración de las bases de datos y la ruta de tu espacio de trabajo.
+La configuración propia de la herramienta se guarda en `devops_manager_config.json`, donde se almacena el estado visual actual, últimos comandos introducidos, configuración de las bases de datos y la ruta de tu espacio de trabajo.
