@@ -1,0 +1,213 @@
+"""
+profile_manager.py — Save/load/export/import workspace profiles (JSON config files).
+A profile stores: per-repo URL, branch, profile, custom command, config file contents.
+Optionally includes global DB presets.
+"""
+from __future__ import annotations
+import json
+import os
+import shutil
+from datetime import datetime
+from typing import Optional
+
+
+PROFILES_DIR_NAME = '.devops-profiles'
+
+
+def get_profiles_dir(workspace_dir: str) -> str:
+    """Get or create the profiles directory."""
+    d = os.path.join(workspace_dir, PROFILES_DIR_NAME)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def save_profile(workspace_dir: str, profile_name: str, config: dict) -> str:
+    """Save a profile to the profiles directory."""
+    profiles_dir = get_profiles_dir(workspace_dir)
+    filepath = os.path.join(profiles_dir, f'{profile_name}.json')
+
+    config['name'] = profile_name
+    config['created'] = datetime.now().isoformat()
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+    return filepath
+
+
+def load_profile(workspace_dir: str, profile_name: str) -> Optional[dict]:
+    """Load a profile from the profiles directory."""
+    profiles_dir = get_profiles_dir(workspace_dir)
+    filepath = os.path.join(profiles_dir, f'{profile_name}.json')
+
+    if not os.path.isfile(filepath):
+        return None
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def list_profiles(workspace_dir: str) -> list:
+    """List all available profile names."""
+    profiles_dir = get_profiles_dir(workspace_dir)
+    if not os.path.isdir(profiles_dir):
+        return []
+
+    profiles = []
+    for f in os.listdir(profiles_dir):
+        if f.endswith('.json'):
+            profiles.append(f[:-5])
+    return sorted(profiles)
+
+
+def delete_profile(workspace_dir: str, profile_name: str) -> bool:
+    """Delete a profile."""
+    profiles_dir = get_profiles_dir(workspace_dir)
+    filepath = os.path.join(profiles_dir, f'{profile_name}.json')
+    try:
+        os.remove(filepath)
+        return True
+    except Exception:
+        return False
+
+
+def export_profile_to_file(profile_data: dict, filepath_dest: str) -> bool:
+    """Export a profile dict directly to a file."""
+    try:
+        with open(filepath_dest, 'w', encoding='utf-8') as f:
+            json.dump(profile_data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
+def import_profile_from_file(filepath: str) -> Optional[dict]:
+    """Import a profile from an external JSON file (just reads it)."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if 'repos' not in data:
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def get_missing_repos(workspace_dir: str, profile_data: dict) -> list:
+    """Check which repos from a profile are missing in the workspace."""
+    missing = []
+    repos = profile_data.get('repos', {})
+    for repo_name, repo_config in repos.items():
+        expected_path = os.path.join(workspace_dir, repo_name)
+        if not os.path.isdir(expected_path):
+            missing.append({
+                'name': repo_name,
+                'git_url': repo_config.get('git_url', ''),
+                'branch': repo_config.get('branch', 'main'),
+            })
+    return missing
+
+
+def build_profile_data(repo_cards, db_presets=None,
+                       include_db_presets=False,
+                       include_config_files=False) -> dict:
+    """Build a complete profile dict from current repo card states.
+
+    Args:
+        repo_cards: list of RepoCard widgets
+        db_presets: dict of DB presets from settings
+        include_db_presets: whether to include global BD presets
+        include_config_files: whether to capture config file contents
+    """
+    from core.git_manager import get_current_branch
+
+    profile = {}
+
+    if include_db_presets and db_presets:
+        profile['db_presets'] = db_presets
+
+    repos = {}
+    for card in repo_cards:
+        repo = card.get_repo_info()
+        repo_data = {
+            'git_url': repo.git_remote_url or '',
+            'branch': get_current_branch(repo.path),
+            'type': repo.repo_type,
+            'profile': card.get_current_profile(),
+            'custom_command': card.get_custom_command(),
+        }
+
+        if include_config_files:
+            repo_data['config_files'] = _capture_config_files(repo)
+
+        repos[repo.name] = repo_data
+
+    profile['repos'] = repos
+    return profile
+
+
+def _capture_config_files(repo) -> dict:
+    """Read and capture the content of all config files for a repo."""
+    files = {}
+
+    if repo.repo_type in ('spring-boot', 'maven-lib'):
+        resources_dir = os.path.join(repo.path, 'src', 'main', 'resources')
+        if os.path.isdir(resources_dir):
+            for f in os.listdir(resources_dir):
+                if f.startswith('application') and f.endswith('.yml'):
+                    fpath = os.path.join(resources_dir, f)
+                    try:
+                        with open(fpath, 'r', encoding='utf-8') as fh:
+                            files[f] = fh.read()
+                    except Exception:
+                        pass
+
+    elif repo.repo_type == 'angular':
+        for ef in getattr(repo, 'environment_files', []):
+            fname = os.path.basename(ef)
+            try:
+                with open(ef, 'r', encoding='utf-8') as fh:
+                    files[fname] = fh.read()
+            except Exception:
+                pass
+
+    return files
+
+
+def apply_config_files(repo_path: str, repo_type: str, config_files: dict):
+    """Overwrite config files in a repo from saved profile data."""
+    from core.config_manager import backup_file
+
+    if repo_type in ('spring-boot', 'maven-lib'):
+        resources_dir = os.path.join(repo_path, 'src', 'main', 'resources')
+        os.makedirs(resources_dir, exist_ok=True)
+        for fname, content in config_files.items():
+            fpath = os.path.join(resources_dir, fname)
+            if os.path.isfile(fpath):
+                backup_file(fpath)
+            with open(fpath, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+    elif repo_type == 'angular':
+        # Find the environments dir
+        env_dir = _find_environments_dir(repo_path)
+        if env_dir:
+            for fname, content in config_files.items():
+                fpath = os.path.join(env_dir, fname)
+                if os.path.isfile(fpath):
+                    backup_file(fpath)
+                with open(fpath, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+
+def _find_environments_dir(repo_path: str) -> Optional[str]:
+    """Find the environments directory in an Angular project."""
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'dist')]
+        for f in files:
+            if f.startswith('environment') and f.endswith('.ts'):
+                return root
+    return None

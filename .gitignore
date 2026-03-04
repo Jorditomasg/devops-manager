@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# User configurations
+devops_manager_config.json
+
+# IDEs
+.vscode/
+.idea/
