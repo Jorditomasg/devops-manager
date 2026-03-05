@@ -8,6 +8,7 @@ import threading
 import webbrowser
 import os
 import subprocess
+import re
 from datetime import datetime
 
 from gui.tooltip import ToolTip
@@ -50,6 +51,7 @@ STATUS_ICONS = {
     'starting': '🟡',
     'stopped': '🔴',
     'error': '🔴',
+    'logging': '🟠',
 }
 
 # ── Card colors ─────────────────────────────────────────────────
@@ -63,7 +65,7 @@ class RepoCard(ctk.CTkFrame):
     """Accordion repo card — collapsed bar + expandable details."""
 
     def __init__(self, parent, repo_info, service_launcher, db_presets=None,
-                 log_callback=None, on_edit_config=None, **kwargs):
+                 java_versions=None, log_callback=None, on_edit_config=None, **kwargs):
         super().__init__(parent, corner_radius=10, border_width=1,
                          border_color=CARD_BORDER,
                          fg_color=CARD_BG, **kwargs)
@@ -71,14 +73,16 @@ class RepoCard(ctk.CTkFrame):
         self._repo = repo_info
         self._launcher = service_launcher
         self._db_presets = db_presets or {}
-        self._global_log = log_callback
+        self._java_versions = java_versions or {}
         self._log = self._repo_log
+        self._global_log = log_callback
         self._status = 'stopped'
         self._branches_cache = []
         self._branch_load_id = None
         self._expanded = False
         self._is_installing = False
         self.selected_var = ctk.BooleanVar(value=True)
+        self.selected_java_var = ctk.StringVar(value="Sistema (Por Defecto)")
 
         self._build_header()
         self._build_expand_panel()
@@ -164,6 +168,9 @@ class RepoCard(ctk.CTkFrame):
         # Main action buttons
         self._action_btns_frame = ctk.CTkFrame(self._header, fg_color="transparent")
         self._action_btns_frame.pack(side="left", padx=(0, 4))
+
+        btn_style = {"height": 28, "font": (FONT_FAMILY, 13), "corner_radius": 6,
+                     "border_width": 1}
 
         btn_style = {"height": 28, "font": (FONT_FAMILY, 13), "corner_radius": 6,
                      "border_width": 1}
@@ -395,6 +402,10 @@ class RepoCard(ctk.CTkFrame):
 
     def _repo_log(self, message: str):
         """Add a timestamped log message to this repo's console. Thread-safe."""
+        if message:
+            # Eliminar secuencias de escape ANSI (ej. colores)
+            message = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', message)
+            
         timestamp = datetime.now().strftime("%H:%M:%S")
         line = f"[{timestamp}] {message}\n"
 
@@ -431,11 +442,30 @@ class RepoCard(ctk.CTkFrame):
                     
                 self._detached_log_textbox.see("end")
                 self._detached_log_textbox.configure(state="disabled")
+            
+            self._flash_log_icon()
 
         try:
             self.after(0, _insert)
         except Exception:
             pass
+
+    def _flash_log_icon(self):
+        """Temporarily change the status icon to 🟠 when a log is received."""
+        if not hasattr(self, '_status_label'):
+            return
+            
+        self._status_label.configure(text=STATUS_ICONS.get('logging', '🟠'))
+
+        if getattr(self, '_log_flash_timer', None):
+            self.after_cancel(self._log_flash_timer)
+
+        def _revert():
+            if hasattr(self, '_status_label') and hasattr(self, '_status'):
+                self._status_label.configure(text=STATUS_ICONS.get(self._status, '⚪'))
+            self._log_flash_timer = None
+
+        self._log_flash_timer = self.after(300, _revert)
 
     def _build_branch_row(self, content, repo):
         """Build branch + secondary buttons row."""
@@ -508,8 +538,13 @@ class RepoCard(ctk.CTkFrame):
     def _build_npm_ci_btn(self, parent, style):
         """Build the npm ci button."""
         has_nm = os.path.isdir(os.path.join(self._repo.path, 'node_modules'))
+        has_lock = os.path.isfile(os.path.join(self._repo.path, 'package-lock.json')) or \
+                   os.path.isfile(os.path.join(self._repo.path, 'npm-shrinkwrap.json'))
+        
+        btn_text = "📦 npm ci" if has_lock else "📦 npm i"
+        
         self._npm_ci_btn = ctk.CTkButton(
-            parent, text=NPM_CI_OK if has_nm else "📦 npm ci",
+            parent, text=NPM_CI_OK if has_nm else btn_text,
             width=90,
             fg_color="#1e293b" if has_nm else "#4c1616",
             hover_color="#475569" if has_nm else "#dc2626",
@@ -517,9 +552,14 @@ class RepoCard(ctk.CTkFrame):
             command=self._run_npm_ci, **style
         )
         self._npm_ci_btn.pack(side="left", padx=(0, 3))
+        
+        tooltip_text = f"Instalar dependencias ({'npm ci' if has_lock else 'npm i'})"
+        if not has_nm:
+            tooltip_text += " — node_modules no encontrado!"
+            
         self._npm_ci_tooltip = ToolTip(
             self._npm_ci_btn,
-            "Instalar dependencias (npm ci)" + ("" if has_nm else " — node_modules no encontrado!")
+            tooltip_text
         )
 
     def _build_mvn_install_btn(self, parent, style):
@@ -606,6 +646,35 @@ class RepoCard(ctk.CTkFrame):
 
         if has_row2:
             row2.pack(fill="x", pady=(4, 0))
+
+        row_java = ctk.CTkFrame(content, fg_color="transparent")
+        has_row_java = False
+
+        if repo.repo_type in ('spring-boot', 'maven-lib'):
+            has_row_java = True
+            ctk.CTkLabel(row_java, text="Java:", font=(FONT_FAMILY, 13),
+                         text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
+            java_options = ["Sistema (Por Defecto)"] + list(self._java_versions.keys())
+            self._java_combo = ctk.CTkComboBox(
+                row_java, values=java_options, width=150,
+                variable=self.selected_java_var, **combo_style
+            )
+            self._java_combo.pack(side="left", padx=(6, 12))
+
+        if has_row_java:
+            row_java.pack(fill="x", pady=(4, 0))
+
+    def update_java_versions(self, versions: dict):
+        """Update available Java versions without restarting."""
+        self._java_versions = versions
+        if hasattr(self, '_java_combo'):
+            java_options = ["Sistema (Por Defecto)"] + list(self._java_versions.keys())
+            self._java_combo.configure(values=java_options)
+            
+            # If current selection is no longer valid, reset to default
+            current = self.selected_java_var.get()
+            if current not in java_options:
+                self.selected_java_var.set("Sistema (Por Defecto)")
 
     def _build_command_row(self, content, repo):
         """Build custom start command row."""
@@ -722,10 +791,15 @@ class RepoCard(ctk.CTkFrame):
     # ─── npm ci ──────────────────────────────────────────────────
 
     def _run_npm_ci(self):
-        """Run npm ci to install dependencies."""
+        """Run npm ci or npm i to install dependencies."""
         repo = self._repo
+        has_lock = os.path.isfile(os.path.join(repo.path, 'package-lock.json')) or \
+                   os.path.isfile(os.path.join(repo.path, 'npm-shrinkwrap.json'))
+        cmd_args = ['npm', 'ci', '--yes', '--legacy-peer-deps'] if has_lock else ['npm', 'install', '--yes', '--legacy-peer-deps']
+        cmd_str = ' '.join(cmd_args)
+        
         if self._log:
-            self._log(f"Running npm ci...")
+            self._log(f"Running {cmd_str}...")
         self._npm_ci_btn.configure(text=NPM_CI_RUN, state="disabled")
         self._is_installing = True
         self._update_button_visibility()
@@ -733,7 +807,7 @@ class RepoCard(ctk.CTkFrame):
         def _run():
             try:
                 process = subprocess.Popen(
-                    ['npm', 'ci'], cwd=repo.path,
+                    cmd_args, cwd=repo.path,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1, shell=True
                 )
@@ -748,16 +822,16 @@ class RepoCard(ctk.CTkFrame):
                     self._is_installing = False
                     if process.returncode == 0:
                         if self._log:
-                            self._log(f"✅ npm ci completado")
+                            self._log(f"✅ {cmd_str} completado")
                         self._npm_ci_btn.configure(
                             text=NPM_CI_OK, state="normal",
                             fg_color="#1e293b", border_color="#64748b"
                         )
-                        self._npm_ci_tooltip.update_text("Instalar dependencias (npm ci)")
+                        self._npm_ci_tooltip.update_text(f"Instalación completada ({cmd_str})")
                         self._update_header_hints()
                     else:
                         if self._log:
-                            self._log(f"❌ npm ci falló (exit: {process.returncode})")
+                            self._log(f"❌ {cmd_str} falló (exit: {process.returncode})")
                         self._npm_ci_btn.configure(
                             text=NPM_CI_FAIL, state="normal",
                             fg_color="#4c1616", border_color="#ef4444"
@@ -766,7 +840,7 @@ class RepoCard(ctk.CTkFrame):
                 self.after(0, _done)
             except Exception as e:
                 if self._log:
-                    self._log(f"Error npm ci: {e}")
+                    self._log(f"Error {cmd_str}: {e}")
                 def _err():
                     self._is_installing = False
                     self._npm_ci_btn.configure(text=NPM_CI_FAIL, state="normal")
@@ -778,7 +852,7 @@ class RepoCard(ctk.CTkFrame):
     # ─── mvn install ─────────────────────────────────────────────
 
     def _run_mvn_install(self):
-        """Run mvn install -DskipTests for Java projects."""
+        """Run mvn install -DskipTests for Java projects using specified Java version."""
         repo = self._repo
         if self._log:
             self._log(f"Running mvn install -DskipTests...")
@@ -789,12 +863,21 @@ class RepoCard(ctk.CTkFrame):
         mvnw = os.path.join(repo.path, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')
         if not os.path.isfile(mvnw):
             mvnw = 'mvn'
-        cmd = [mvnw, 'install', '-DskipTests']
+        cmd = [mvnw, 'install', '-DskipTests', '--batch-mode']
+        
+        # Build environment with specific JAVA_HOME
+        from core.java_manager import build_java_env
+        java_choice = self.selected_java_var.get()
+        java_home = self._java_versions.get(java_choice, "")
+        env = build_java_env(java_home)
+        
+        if java_home and self._log:
+            self._log(f"Usando JAVA_HOME: {java_home}")
 
         def _run():
             try:
                 process = subprocess.Popen(
-                    cmd, cwd=repo.path,
+                    cmd, cwd=repo.path, env=env,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1
                 )
@@ -1151,6 +1234,77 @@ class RepoCard(ctk.CTkFrame):
         if hasattr(self, '_profile_combo') and profile in self._repo.profiles:
             self._profile_combo.set(profile)
             self._update_header_hints()
+
+    def _start(self):
+        """Start the service."""
+        java_choice = self.selected_java_var.get()
+        java_home = self._java_versions.get(java_choice, "")
+        
+        if self._repo.repo_type == 'spring-boot':
+            profile = getattr(self, '_profile_combo', None)
+            active_profile = profile.get() if profile else 'default'
+            self._launcher.start_spring_boot(
+                self._repo.name, self._repo.path, active_profile,
+                self._repo.server_port, self._log, self._on_status_change, java_home=java_home
+            )
+        elif self._repo.repo_type == 'angular':
+            env = getattr(self, '_env_combo', None)
+            active_env = env.get() if env else ''
+            self._launcher.start_angular(
+                self._repo.name, self._repo.path, active_env,
+                self._log, self._on_status_change
+            )
+        elif self._repo.repo_type == 'maven-lib':
+            self._launcher.start_maven_install(
+                self._repo.name, self._repo.path, self._log, self._on_status_change, java_home=java_home
+            )
+        elif self._repo.repo_type == 'docker-infra':
+            pass # We don't have start for docker-infra directly yet
+
+    def _stop(self):
+        """Stop the service."""
+        self._launcher.stop_service(self._repo.name, self._log, self._on_status_change)
+
+    def _restart(self):
+        """Restart the service."""
+        java_choice = self.selected_java_var.get()
+        java_home = self._java_versions.get(java_choice, "")
+        
+        profile = ''
+        if getattr(self, '_profile_combo', None):
+            profile = self._profile_combo.get()
+        elif getattr(self, '_env_combo', None):
+            profile = self._env_combo.get()
+
+        self._launcher.restart_service(
+            self._repo.name, self._repo.path, self._repo.repo_type,
+            profile, self._repo.server_port, self._log, self._on_status_change, java_home=java_home
+        )
+
+    def _on_status_change(self, name: str, status: str):
+        """Callback from ServiceLauncher when status changes."""
+        if name != self._repo.name:
+            return
+
+        self._status = status
+        
+        def _update():
+            # Basic info updater that was decoupled
+            self._status_label.configure(text=STATUS_ICONS.get(status, '⚪'))
+            
+            status_text = {
+                'running': 'En ejecución',
+                'starting': 'Iniciando...',
+                'stopped': 'Detenido',
+                'error': 'Error'
+            }.get(status, status)
+            self._status_text.configure(text=status_text)
+            self._update_button_visibility()
+            
+        try:
+            self.after(0, _update)
+        except Exception:
+            pass
 
     def update_db_presets(self, presets: dict):
         self._db_presets = presets

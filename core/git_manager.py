@@ -17,7 +17,8 @@ def get_branches(repo_path: str, include_remote: bool = True) -> list[str]:
         # Local branches
         result = subprocess.run(
             ['git', 'branch', '--no-color'],
-            capture_output=True, text=True, cwd=repo_path, timeout=10
+            capture_output=True, text=True, cwd=repo_path, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         if result.returncode == 0:
             for line in result.stdout.splitlines():
@@ -29,7 +30,8 @@ def get_branches(repo_path: str, include_remote: bool = True) -> list[str]:
             # Remote branches
             result = subprocess.run(
                 ['git', 'branch', '-r', '--no-color'],
-                capture_output=True, text=True, cwd=repo_path, timeout=10
+                capture_output=True, text=True, cwd=repo_path, timeout=10,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
             )
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
@@ -49,7 +51,8 @@ def get_current_branch(repo_path: str) -> str:
     try:
         result = subprocess.run(
             ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-            capture_output=True, text=True, cwd=repo_path, timeout=5
+            capture_output=True, text=True, cwd=repo_path, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -65,7 +68,8 @@ def fetch(repo_path: str, log: LogCallback = None) -> tuple[bool, str]:
             log(f"[git] Fetching {os.path.basename(repo_path)}...")
         result = subprocess.run(
             ['git', 'fetch', '--all', '--prune'],
-            capture_output=True, text=True, cwd=repo_path, timeout=60
+            capture_output=True, text=True, cwd=repo_path, timeout=60,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         msg = result.stdout.strip() + '\n' + result.stderr.strip()
         if log:
@@ -85,7 +89,8 @@ def pull(repo_path: str, log: LogCallback = None) -> tuple[bool, str]:
             log(f"[git] Pulling {name}...")
         result = subprocess.run(
             ['git', 'pull', '--ff-only'],
-            capture_output=True, text=True, cwd=repo_path, timeout=120
+            capture_output=True, text=True, cwd=repo_path, timeout=120,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         msg = result.stdout.strip() + '\n' + result.stderr.strip()
         success = result.returncode == 0
@@ -113,7 +118,8 @@ def checkout(repo_path: str, branch: str, log: LogCallback = None) -> tuple[bool
         # First try local checkout
         result = subprocess.run(
             ['git', 'checkout', branch],
-            capture_output=True, text=True, cwd=repo_path, timeout=30
+            capture_output=True, text=True, cwd=repo_path, timeout=30,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         if result.returncode == 0:
             if log:
@@ -123,7 +129,8 @@ def checkout(repo_path: str, branch: str, log: LogCallback = None) -> tuple[bool
         # If failed, try creating from remote
         result = subprocess.run(
             ['git', 'checkout', '-b', branch, f'origin/{branch}'],
-            capture_output=True, text=True, cwd=repo_path, timeout=30
+            capture_output=True, text=True, cwd=repo_path, timeout=30,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         msg = result.stdout.strip() + '\n' + result.stderr.strip()
         success = result.returncode == 0
@@ -150,7 +157,7 @@ def clone(url: str, dest: str, log: LogCallback = None,
         process = subprocess.Popen(
             ['git', 'clone', '--progress', url, dest],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True
+            text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
 
         stderr_output = []
@@ -191,7 +198,8 @@ def get_remote_url(repo_path: str) -> Optional[str]:
     try:
         result = subprocess.run(
             ['git', 'remote', 'get-url', 'origin'],
-            capture_output=True, text=True, cwd=repo_path, timeout=5
+            capture_output=True, text=True, cwd=repo_path, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         if result.returncode == 0:
             url = result.stdout.strip()

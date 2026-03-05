@@ -12,6 +12,15 @@ sys.path.insert(0, project_root)
 
 
 def main():
+    # Set Windows AppUserModelID early so custom icon is used in taskbar
+    if sys.platform == 'win32':
+        import ctypes
+        try:
+            myappid = 'devops_manager.app.1.0'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+
     # Default workspace = parent directory of this tool
     workspace_dir = os.path.dirname(project_root)
 

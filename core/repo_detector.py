@@ -77,10 +77,21 @@ def _classify_repo(name: str, path: str) -> Optional[RepoInfo]:
     if has_pom:
         resources_dir = os.path.join(path, 'src', 'main', 'resources')
         app_yml = os.path.join(resources_dir, 'application.yml')
+        app_yaml = os.path.join(resources_dir, 'application.yaml')
+        app_properties = os.path.join(resources_dir, 'application.properties')
+        
+        main_config_file = None
         if os.path.isfile(app_yml):
-            return _build_spring_boot_repo(name, path, resources_dir, app_yml)
+            main_config_file = app_yml
+        elif os.path.isfile(app_yaml):
+            main_config_file = app_yaml
+        elif os.path.isfile(app_properties):
+            main_config_file = app_properties
+            
+        if main_config_file:
+            return _build_spring_boot_repo(name, path, resources_dir, main_config_file)
         else:
-            # Maven library (no application.yml with server config)
+            # Maven library (no application config with server config)
             return _build_maven_lib_repo(name, path)
 
     # Docker infra project (has docker-compose but no pom/package.json)
@@ -90,19 +101,22 @@ def _classify_repo(name: str, path: str) -> Optional[RepoInfo]:
     return None
 
 
-def _build_spring_boot_repo(name: str, path: str, resources_dir: str, app_yml: str) -> RepoInfo:
+def _build_spring_boot_repo(name: str, path: str, resources_dir: str, main_config_file: str) -> RepoInfo:
     """Build RepoInfo for a Spring Boot project."""
     repo = RepoInfo(name=name, path=path, repo_type='spring-boot')
 
     # Detect profiles
     repo.profiles = _detect_spring_profiles(resources_dir)
 
-    # Parse main application.yml for DB and port info
+    # Parse main config for DB and port info
     try:
-        with open(app_yml, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f) or {}
-        _extract_spring_db_info(repo, config)
-        _extract_spring_server_info(repo, config)
+        if main_config_file.endswith('.properties'):
+            _extract_spring_info_from_props(repo, main_config_file)
+        else:
+            with open(main_config_file, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+            _extract_spring_db_info(repo, config)
+            _extract_spring_server_info(repo, config)
     except Exception:
         pass
 
@@ -217,16 +231,20 @@ def _build_docker_infra_repo(name: str, path: str, dc_files: list) -> RepoInfo:
 
 
 def _detect_spring_profiles(resources_dir: str) -> list:
-    """Detect available Spring profiles from application-*.yml files."""
+    """Detect available Spring profiles from application config files."""
     profiles = []
     if not os.path.isdir(resources_dir):
         return profiles
     for f in os.listdir(resources_dir):
-        match = re.match(r'application-(.+)\.yml', f)
+        match = re.match(r'application-(.+)\.(yml|yaml|properties)$', f)
         if match:
-            profiles.append(match.group(1))
+            p = match.group(1)
+            if p not in profiles:
+                profiles.append(p)
     # Add default profile
-    if os.path.isfile(os.path.join(resources_dir, 'application.yml')):
+    has_default = any(os.path.isfile(os.path.join(resources_dir, f)) 
+                      for f in ['application.yml', 'application.yaml', 'application.properties'])
+    if has_default:
         profiles.insert(0, 'default')
     return profiles
 
@@ -257,6 +275,31 @@ def _extract_spring_server_info(repo: RepoInfo, config: dict):
         repo.context_path = ctx
 
 
+def _extract_spring_info_from_props(repo: RepoInfo, props_file: str):
+    """Extract database and server info from a properties file."""
+    try:
+        with open(props_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, val = line.split('=', 1)
+                key, val = key.strip(), val.strip()
+                
+                if key == 'spring.datasource.url':
+                    repo.has_database = True
+                    repo.database_url = val
+                    match = re.search(r'/([^/?]+)(\?|$)', val)
+                    if match:
+                        repo.database_name = match.group(1)
+                elif key == 'server.port':
+                    repo.server_port = int(val)
+                elif key == 'server.servlet.context-path':
+                    repo.context_path = val
+    except Exception:
+        pass
+
+
 def _detect_seeds(path: str) -> tuple:
     """Detect if the repo has Flyway migration seeds."""
     seed_dirs = []
@@ -285,7 +328,8 @@ def _get_git_remote(path: str) -> Optional[str]:
     try:
         result = subprocess.run(
             ['git', 'remote', 'get-url', 'origin'],
-            capture_output=True, text=True, cwd=path, timeout=5
+            capture_output=True, text=True, cwd=path, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         if result.returncode == 0:
             return result.stdout.strip()

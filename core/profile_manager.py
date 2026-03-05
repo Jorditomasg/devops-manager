@@ -14,16 +14,20 @@ from typing import Optional
 PROFILES_DIR_NAME = '.devops-profiles'
 
 
-def get_profiles_dir(workspace_dir: str) -> str:
-    """Get or create the profiles directory."""
-    d = os.path.join(workspace_dir, PROFILES_DIR_NAME)
+def get_profiles_dir() -> str:
+    """Get or create the profiles directory within the devops-manager repository."""
+    # os.path.abspath(__file__) -> .../devops-manager/core/profile_manager.py
+    # dirname -> .../devops-manager/core
+    # dirname -> .../devops-manager
+    devops_manager_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    d = os.path.join(devops_manager_dir, PROFILES_DIR_NAME)
     os.makedirs(d, exist_ok=True)
     return d
 
 
-def save_profile(workspace_dir: str, profile_name: str, config: dict) -> str:
+def save_profile(profile_name: str, config: dict) -> str:
     """Save a profile to the profiles directory."""
-    profiles_dir = get_profiles_dir(workspace_dir)
+    profiles_dir = get_profiles_dir()
     filepath = os.path.join(profiles_dir, f'{profile_name}.json')
 
     config['name'] = profile_name
@@ -35,9 +39,9 @@ def save_profile(workspace_dir: str, profile_name: str, config: dict) -> str:
     return filepath
 
 
-def load_profile(workspace_dir: str, profile_name: str) -> Optional[dict]:
+def load_profile(profile_name: str) -> Optional[dict]:
     """Load a profile from the profiles directory."""
-    profiles_dir = get_profiles_dir(workspace_dir)
+    profiles_dir = get_profiles_dir()
     filepath = os.path.join(profiles_dir, f'{profile_name}.json')
 
     if not os.path.isfile(filepath):
@@ -50,9 +54,9 @@ def load_profile(workspace_dir: str, profile_name: str) -> Optional[dict]:
         return None
 
 
-def list_profiles(workspace_dir: str) -> list:
+def list_profiles() -> list:
     """List all available profile names."""
-    profiles_dir = get_profiles_dir(workspace_dir)
+    profiles_dir = get_profiles_dir()
     if not os.path.isdir(profiles_dir):
         return []
 
@@ -63,9 +67,9 @@ def list_profiles(workspace_dir: str) -> list:
     return sorted(profiles)
 
 
-def delete_profile(workspace_dir: str, profile_name: str) -> bool:
+def delete_profile(profile_name: str) -> bool:
     """Delete a profile."""
-    profiles_dir = get_profiles_dir(workspace_dir)
+    profiles_dir = get_profiles_dir()
     filepath = os.path.join(profiles_dir, f'{profile_name}.json')
     try:
         os.remove(filepath)
@@ -138,6 +142,7 @@ def build_profile_data(repo_cards, db_presets=None,
             'type': repo.repo_type,
             'profile': card.get_current_profile(),
             'custom_command': card.get_custom_command(),
+            'java_version': card.selected_java_var.get() if hasattr(card, 'selected_java_var') else "Sistema (Por Defecto)",
         }
 
         if include_config_files:

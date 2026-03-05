@@ -49,14 +49,16 @@ class CloneDialog(ctk.CTkToplevel):
 
         self._clone_btn = ctk.CTkButton(
             btn_frame, text="Clonar", width=120,
-            fg_color="#2196F3", hover_color="#1976D2",
+            fg_color="#172554", hover_color="#2563eb",
+            border_width=1, border_color="#3b82f6",
             command=self._start_clone
         )
         self._clone_btn.pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#555", hover_color="#666",
+            fg_color="#1e293b", hover_color="#475569",
+            border_width=1, border_color="#64748b",
             command=self.destroy
         ).pack(side="right")
 
@@ -146,19 +148,22 @@ class ConfigEditorDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             btn_frame, text="💾 Guardar", width=120,
-            fg_color="#4CAF50", hover_color="#388E3C",
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
             command=self._save
         ).pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#555", hover_color="#666",
+            fg_color="#1e293b", hover_color="#475569",
+            border_width=1, border_color="#64748b",
             command=self.destroy
         ).pack(side="right")
 
         ctk.CTkButton(
             btn_frame, text="↩ Recargar", width=100,
-            fg_color="#FF9800", hover_color="#F57C00",
+            fg_color="#4a3310", hover_color="#d97706",
+            border_width=1, border_color="#f59e0b",
             command=self._reload
         ).pack(side="right", padx=(0, 10))
 
@@ -221,7 +226,8 @@ class ProfileDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             name_row, text="💾 Guardar", width=100,
-            fg_color="#4CAF50", hover_color="#388E3C",
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
             command=self._save_profile
         ).pack(side="left")
 
@@ -249,7 +255,7 @@ class ProfileDialog(ctk.CTkToplevel):
                      font=(FONT_FAMILY, 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
 
         from core.profile_manager import list_profiles
-        profiles = list_profiles(workspace_dir)
+        profiles = list_profiles()
 
         self._profile_list = ctk.CTkComboBox(
             load_frame, values=profiles if profiles else ["(Sin configs)"],
@@ -258,23 +264,26 @@ class ProfileDialog(ctk.CTkToplevel):
         self._profile_list.pack(padx=10, pady=5)
 
         btn_row = ctk.CTkFrame(load_frame, fg_color="transparent")
-        btn_row.pack(fill="x", padx=10, pady=(0, 10))
+        btn_row.pack(pady=(0, 10))
 
         ctk.CTkButton(
             btn_row, text="📂 Cargar", width=100,
-            fg_color="#2196F3", hover_color="#1976D2",
+            fg_color="#172554", hover_color="#2563eb",
+            border_width=1, border_color="#3b82f6",
             command=self._load_profile
         ).pack(side="left", padx=(0, 5))
 
         ctk.CTkButton(
             btn_row, text="🗑 Eliminar", width=100,
-            fg_color="#f44336", hover_color="#d32f2f",
+            fg_color="#450a0a", hover_color="#dc2626",
+            border_width=1, border_color="#ef4444",
             command=self._delete_profile
         ).pack(side="left", padx=(0, 5))
 
         ctk.CTkButton(
             btn_row, text="📤 Exportar", width=100,
-            fg_color="#FF9800", hover_color="#F57C00",
+            fg_color="#4a3310", hover_color="#d97706",
+            border_width=1, border_color="#f59e0b",
             command=self._export_profile
         ).pack(side="left")
 
@@ -287,7 +296,8 @@ class ProfileDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             import_frame, text="📥 Importar desde archivo...", width=250,
-            fg_color="#9C27B0", hover_color="#7B1FA2",
+            fg_color="#2e1065", hover_color="#6d28d9",
+            border_width=1, border_color="#7c3aed",
             command=self._import_profile
         ).pack(padx=10, pady=(0, 10))
 
@@ -317,7 +327,7 @@ class ProfileDialog(ctk.CTkToplevel):
             include_config_files=include_files
         )
 
-        save_profile(self._workspace_dir, name, profile_data)
+        save_profile(name, profile_data)
 
         if self._log:
             extras = []
@@ -337,7 +347,7 @@ class ProfileDialog(ctk.CTkToplevel):
             return
 
         from core.profile_manager import load_profile
-        data = load_profile(self._workspace_dir, name)
+        data = load_profile(name)
         if not data:
             messagebox.showerror("Error", f"No se pudo cargar la configuración '{name}'")
             return
@@ -348,7 +358,11 @@ class ProfileDialog(ctk.CTkToplevel):
         """Apply a profile, showing import options dialog if needed."""
         changes_text = self._build_changes_text(data)
 
-        def _continue_import():
+        if changes_text == "✅ Ningún cambio detectado respecto al estado actual.":
+            # If nothing really changes (or everything is identical), we can just proceed
+            # but usually the user wants to know it loaded.
+            _continue_import()
+        else:
             from core.profile_manager import get_missing_repos
             missing = get_missing_repos(self._workspace_dir, data)
             has_db = bool(data.get('db_presets'))
@@ -356,27 +370,16 @@ class ProfileDialog(ctk.CTkToplevel):
                 r.get('config_files') for r in data.get('repos', {}).values()
             )
 
-            # If there are options to present, show the import options dialog
-            if missing or has_db or has_files:
-                ImportOptionsDialog(
-                    self, data,
-                    missing_repos=missing,
-                    has_db_presets=has_db,
-                    has_config_files=has_files,
-                    workspace_dir=self._workspace_dir,
-                    log_callback=self._log,
-                    on_complete=self._on_import_complete
-                )
-            else:
-                # Simple case: just apply branch/profile/cmd
-                self._apply_basic_config(data)
-
-        if changes_text == "✅ Ningún cambio detectado respecto al estado actual.":
-            # If nothing really changes (or everything is identical), we can just proceed
-            # but usually the user wants to know it loaded.
-            _continue_import()
-        else:
-            PreviewChangesDialog(self, changes_text, on_accept=_continue_import)
+            ImportOptionsDialog(
+                self, data,
+                changes_text=changes_text,
+                missing_repos=missing,
+                has_db_presets=has_db,
+                has_config_files=has_files,
+                workspace_dir=self._workspace_dir,
+                log_callback=self._log,
+                on_complete=self._on_import_complete
+            )
 
     def _build_changes_text(self, data: dict) -> str:
         """Comparar el data con el estado actual de los repos."""
@@ -460,7 +463,7 @@ class ProfileDialog(ctk.CTkToplevel):
 
         if messagebox.askyesno("Confirmar", f"¿Eliminar la configuración '{name}'?"):
             from core.profile_manager import delete_profile
-            delete_profile(self._workspace_dir, name)
+            delete_profile(name)
             if self._log:
                 self._log(f"Configuración eliminada: {name}")
             self._refresh_list()
@@ -471,7 +474,7 @@ class ProfileDialog(ctk.CTkToplevel):
             return
 
         from core.profile_manager import load_profile, export_profile_to_file
-        data = load_profile(self._workspace_dir, name)
+        data = load_profile(name)
         if not data:
             messagebox.showerror("Error", "No se pudo leer la configuración")
             return
@@ -505,7 +508,7 @@ class ProfileDialog(ctk.CTkToplevel):
         # Save it locally first
         from core.profile_manager import save_profile
         profile_name = data.get('name', os.path.splitext(os.path.basename(filepath))[0])
-        save_profile(self._workspace_dir, profile_name, data)
+        save_profile(profile_name, data)
 
         if self._log:
             self._log(f"Configuración importada: {profile_name}")
@@ -516,7 +519,7 @@ class ProfileDialog(ctk.CTkToplevel):
 
     def _refresh_list(self):
         from core.profile_manager import list_profiles
-        profiles = list_profiles(self._workspace_dir)
+        profiles = list_profiles()
         self._profile_list.configure(values=profiles if profiles else ["(Sin configs)"])
         if profiles:
             self._profile_list.set(profiles[0])
@@ -530,6 +533,7 @@ class ImportOptionsDialog(ctk.CTkToplevel):
     """
 
     def __init__(self, parent, profile_data: dict,
+                 changes_text: str = "",
                  missing_repos: list = None,
                  has_db_presets: bool = False,
                  has_config_files: bool = False,
@@ -537,8 +541,8 @@ class ImportOptionsDialog(ctk.CTkToplevel):
                  log_callback=None,
                  on_complete=None):
         super().__init__(parent)
-        self.title("Opciones de Importación")
-        self.geometry("520x420")
+        self.title("Revisar y Aplicar Configuración")
+        self.geometry("580x600")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -549,12 +553,36 @@ class ImportOptionsDialog(ctk.CTkToplevel):
         self._log = log_callback
         self._on_complete = on_complete
         self._did_clone = False
+        
+        app_instance = parent.master if hasattr(parent, 'master') else None
+        self._local_javas = list(getattr(app_instance, '_java_versions', {}).keys()) if app_instance else []
+        
+        self._missing_javas = []
+        profile_javas = set()
+        for r in profile_data.get('repos', {}).values():
+            jv = r.get('java_version')
+            if jv and jv != "Sistema (Por Defecto)":
+                profile_javas.add(jv)
+                
+        for p_java in profile_javas:
+            if p_java not in self._local_javas:
+                self._missing_javas.append(p_java)
 
-        ctk.CTkLabel(self, text="📥 Opciones de Importación",
-                     font=(FONT_FAMILY, 15, "bold")).pack(pady=(15, 10))
+        ctk.CTkLabel(self, text="� Cambios a aplicar:",
+                     font=(FONT_FAMILY, 15, "bold")).pack(pady=(15, 5))
+
+        # ── Changes Preview ──
+        if changes_text:
+            textbox = ctk.CTkTextbox(self, font=("Consolas", 11), wrap="word", height=150)
+            textbox.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+            textbox.insert("1.0", changes_text)
+            textbox.configure(state="disabled")
+
+        ctk.CTkLabel(self, text="�📥 Opciones de Importación",
+                     font=(FONT_FAMILY, 14, "bold")).pack(pady=(5, 5))
 
         content = ctk.CTkFrame(self, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=20)
+        content.pack(fill="x", padx=20)
 
         # ── Missing repos ──
         if self._missing:
@@ -591,6 +619,28 @@ class ImportOptionsDialog(ctk.CTkToplevel):
         else:
             self._clone_var = ctk.BooleanVar(value=False)
             self._install_var = ctk.BooleanVar(value=False)
+
+        # ── Missing Java Versions ──
+        if self._missing_javas:
+            ctk.CTkLabel(content, text="Versiones de Java requeridas pero no encontradas:",
+                         font=(FONT_FAMILY, 12, "bold"),
+                         text_color="#f59e0b").pack(anchor="w", pady=(10, 3))
+                         
+            java_map_frame = ctk.CTkFrame(content, fg_color="transparent")
+            java_map_frame.pack(fill="x", pady=(0, 5))
+            
+            self._java_mappings = {}
+            for missing_jv in self._missing_javas:
+                row = ctk.CTkFrame(java_map_frame, fg_color="transparent")
+                row.pack(fill="x", pady=2)
+                
+                ctk.CTkLabel(row, text=f"• {missing_jv} ➔", width=120, anchor="e").pack(side="left", padx=(0, 10))
+                
+                options = ["Sistema (Por Defecto)"] + self._local_javas
+                var = ctk.StringVar(value="Sistema (Por Defecto)")
+                combo = ctk.CTkComboBox(row, values=options, variable=var, width=170)
+                combo.pack(side="left")
+                self._java_mappings[missing_jv] = var
 
         # ── DB Presets ──
         if has_db_presets:
@@ -638,14 +688,16 @@ class ImportOptionsDialog(ctk.CTkToplevel):
 
         self._apply_btn = ctk.CTkButton(
             btn_frame, text="✅ Aplicar", width=120,
-            fg_color="#4CAF50", hover_color="#388E3C",
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
             command=self._apply
         )
         self._apply_btn.pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#555", hover_color="#666",
+            fg_color="#1e293b", hover_color="#475569",
+            border_width=1, border_color="#64748b",
             command=self.destroy
         ).pack(side="right")
 
@@ -654,6 +706,13 @@ class ImportOptionsDialog(ctk.CTkToplevel):
         self._apply_btn.configure(state="disabled", text="⏳ Aplicando...")
 
         def _run():
+            # Map Java versions before modifying anything
+            if self._missing_javas:
+                for repo_name, repo_cfg in self._profile_data.get('repos', {}).items():
+                    jv = repo_cfg.get('java_version')
+                    if jv in self._missing_javas:
+                        repo_cfg['java_version'] = self._java_mappings[jv].get()
+                        
             steps_total = 0
             if self._clone_var.get() and self._missing:
                 steps_total += len(self._missing)
@@ -790,67 +849,121 @@ class SettingsDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("⚙ Configuración")
         self.geometry("600x550")
-        self.resizable(False, False)
+        self.minsize(500, 400)
+        self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
 
         self._settings = settings
         self._on_save = on_save
         self._db_presets = dict(settings.get('db_presets', {}))
+        self._java_versions = dict(settings.get('java_versions', {}))
 
-        ctk.CTkLabel(self, text="⚙ Configuración General",
-                     font=("Segoe UI", 16, "bold")).pack(pady=(20, 15))
+        self._main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Workspace dir
-        ctk.CTkLabel(self, text="Directorio del workspace:").pack(
-            anchor="w", padx=20, pady=(0, 3))
+        ctk.CTkLabel(self._main_scroll, text="Ajustes de DevOps Manager",
+                     font=("Segoe UI", 18, "bold"), text_color="#f8fafc").pack(pady=(15, 20))
 
-        dir_frame = ctk.CTkFrame(self, fg_color="transparent")
-        dir_frame.pack(fill="x", padx=20)
+        # ─── Workspace section ───
+        ws_frame = ctk.CTkFrame(self._main_scroll, fg_color="#1e1b4b", corner_radius=10, border_width=1, border_color="#312e81")
+        ws_frame.pack(fill="x", padx=10, pady=(0, 15))
 
-        self._workspace_entry = ctk.CTkEntry(dir_frame, width=470)
-        self._workspace_entry.pack(side="left")
+        ws_header = ctk.CTkFrame(ws_frame, fg_color="transparent")
+        ws_header.pack(fill="x", padx=15, pady=(15, 0))
+        ctk.CTkLabel(ws_header, text="📁 Directorio de Trabajo", font=("Segoe UI", 14, "bold"), text_color="#e2e8f0").pack(side="left")
+        ctk.CTkLabel(ws_frame, text="Ubicación donde se estructuran los repositorios de tus espacios de trabajo.", font=("Segoe UI", 11), text_color="#94a3b8").pack(anchor="w", padx=15, pady=(2, 12))
+
+        dir_inner = ctk.CTkFrame(ws_frame, fg_color="transparent")
+        dir_inner.pack(fill="x", padx=15, pady=(0, 15))
+        
+        self._workspace_entry = ctk.CTkEntry(dir_inner, height=32, font=("Consolas", 12), fg_color="#0f172a", border_color="#334155")
+        self._workspace_entry.pack(side="left", fill="x", expand=True)
         self._workspace_entry.insert(0, settings.get('workspace_dir', ''))
 
         ctk.CTkButton(
-            dir_frame, text="📁", width=40,
+            dir_inner, text="Examinar", width=80, height=32,
+            fg_color="#172554", hover_color="#2563eb",
+            border_width=1, border_color="#3b82f6",
+            font=("Segoe UI", 12, "bold"),
             command=self._browse_dir
-        ).pack(side="left", padx=(5, 0))
+        ).pack(side="left", padx=(10, 0))
 
         # ─── DB Presets section ───
-        ctk.CTkLabel(self, text="Presets de Base de Datos:",
-                     font=("Segoe UI", 12, "bold")).pack(
-            anchor="w", padx=20, pady=(20, 5))
+        db_frame = ctk.CTkFrame(self._main_scroll, fg_color="#1e1b4b", corner_radius=10, border_width=1, border_color="#312e81")
+        db_frame.pack(fill="x", padx=10, pady=(0, 15))
 
-        ctk.CTkLabel(self, text="URL template usa {db_name} como placeholder del nombre de BD.",
-                     font=("Segoe UI", 9), text_color="#888").pack(
-            anchor="w", padx=20, pady=(0, 5))
+        db_header = ctk.CTkFrame(db_frame, fg_color="transparent")
+        db_header.pack(fill="x", padx=15, pady=(15, 0))
+        ctk.CTkLabel(db_header, text="🗄️ Presets de BD", font=("Segoe UI", 14, "bold"), text_color="#e2e8f0").pack(side="left")
+        ctk.CTkLabel(db_frame, text="El template URL admite {db_name} como placeholder autodetectado. Utilízalos en perfiles para reemplazar propiedades en properties.", font=("Segoe UI", 11), text_color="#94a3b8").pack(anchor="w", padx=15, pady=(2, 12))
 
-        preset_frame = ctk.CTkFrame(self, corner_radius=8)
-        preset_frame.pack(fill="x", padx=20, pady=(0, 5))
-
-        # Preset list
-        self._preset_list_frame = ctk.CTkScrollableFrame(preset_frame, height=100)
-        self._preset_list_frame.pack(fill="x", padx=10, pady=(10, 5))
+        self._preset_list_frame = ctk.CTkScrollableFrame(db_frame, height=80, fg_color="#0f172a", border_width=1, border_color="#1e293b") 
+        self._preset_list_frame.pack(fill="x", padx=15, pady=(0, 10))
         self._refresh_preset_list()
 
-        # Add preset button row
-        add_row = ctk.CTkFrame(preset_frame, fg_color="transparent")
-        add_row.pack(fill="x", padx=10, pady=(0, 10))
+        add_row = ctk.CTkFrame(db_frame, fg_color="transparent")
+        add_row.pack(fill="x", padx=15, pady=(0, 15))
 
         ctk.CTkButton(
-            add_row, text="➕ Añadir preset", width=130,
-            fg_color="#4CAF50", hover_color="#388E3C",
-            font=("Segoe UI", 11),
+            add_row, text="➕ Añadir preset", width=140, height=32,
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
+            font=("Segoe UI", 12, "bold"),
             command=self._add_preset
         ).pack(side="left")
 
-        # Save
+        # ─── Java Versions section ───
+        java_frame = ctk.CTkFrame(self._main_scroll, fg_color="#1e1b4b", corner_radius=10, border_width=1, border_color="#312e81")
+        java_frame.pack(fill="x", padx=10, pady=(0, 15))
+
+        java_header = ctk.CTkFrame(java_frame, fg_color="transparent")
+        java_header.pack(fill="x", padx=15, pady=(15, 0))
+        ctk.CTkLabel(java_header, text="☕ Versiones de Java", font=("Segoe UI", 14, "bold"), text_color="#e2e8f0").pack(side="left")
+        ctk.CTkLabel(java_frame, text="Registra versiones de JDK locales para usarlas en los servicios Spring Boot y Maven.", font=("Segoe UI", 11), text_color="#94a3b8").pack(anchor="w", padx=15, pady=(2, 12))
+        
+        self._java_list_frame = ctk.CTkScrollableFrame(java_frame, height=80, fg_color="#0f172a", border_width=1, border_color="#1e293b")
+        self._java_list_frame.pack(fill="x", padx=15, pady=(0, 10))
+        self._refresh_java_list()
+        
+        java_add_row = ctk.CTkFrame(java_frame, fg_color="transparent")
+        java_add_row.pack(fill="x", padx=15, pady=(0, 15))
+
         ctk.CTkButton(
-            self, text="💾 Guardar", width=120,
-            fg_color="#4CAF50", hover_color="#388E3C",
+            java_add_row, text="➕ Añadir Java", width=130, height=32,
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
+            font=("Segoe UI", 12, "bold"),
+            command=self._add_java_version
+        ).pack(side="left")
+        
+        ctk.CTkButton(
+            java_add_row, text="🔍 Auto-detectar", width=140, height=32,
+            fg_color="#2e1065", hover_color="#6d28d9",
+            border_width=1, border_color="#7c3aed",
+            font=("Segoe UI", 12, "bold"),
+            command=self._auto_detect_java
+        ).pack(side="left", padx=(10, 0))
+
+        # Save container (Not scrolling, fixed at bottom)
+        save_frame = ctk.CTkFrame(self, fg_color="transparent")
+        save_frame.pack(fill="x", padx=20, pady=15)
+
+        ctk.CTkButton(
+            save_frame, text="💾 Guardar Cambios", width=150, height=36,
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
+            font=("Segoe UI", 13, "bold"),
             command=self._save
-        ).pack(pady=15)
+        ).pack(side="right")
+        
+        ctk.CTkButton(
+            save_frame, text="Cancelar", width=100, height=36,
+            fg_color="#1e293b", hover_color="#475569",
+            border_width=1, border_color="#64748b",
+            font=("Segoe UI", 13),
+            command=self.destroy
+        ).pack(side="right", padx=(0, 15))
 
     def _refresh_preset_list(self):
         """Rebuild the preset list display."""
@@ -884,14 +997,16 @@ class SettingsDialog(ctk.CTkToplevel):
 
             ctk.CTkButton(
                 row, text="✏", width=28, height=24,
-                fg_color="#FF9800", hover_color="#F57C00",
+                fg_color="#4a3310", hover_color="#d97706",
+                border_width=1, border_color="#f59e0b",
                 font=("Segoe UI", 11),
                 command=lambda n=name: self._edit_preset(n)
             ).pack(side="right", padx=(2, 0))
 
             ctk.CTkButton(
                 row, text="🗑", width=28, height=24,
-                fg_color="#f44336", hover_color="#d32f2f",
+                fg_color="#450a0a", hover_color="#dc2626",
+                border_width=1, border_color="#ef4444",
                 font=("Segoe UI", 11),
                 command=lambda n=name: self._delete_preset(n)
             ).pack(side="right")
@@ -916,6 +1031,97 @@ class SettingsDialog(ctk.CTkToplevel):
         if messagebox.askyesno("Confirmar", f"¿Eliminar el preset '{name}'?"):
             del self._db_presets[name]
             self._refresh_preset_list()
+            
+    # --- Java Versions Methods ---
+    def _refresh_java_list(self):
+        """Rebuild the java versions list display."""
+        for widget in self._java_list_frame.winfo_children():
+            widget.destroy()
+
+        if not self._java_versions:
+            ctk.CTkLabel(
+                self._java_list_frame,
+                text="(Sin versiones configuradas. Usa '➕ Añadir Java' o '🔍 Auto-detectar')",
+                font=("Segoe UI", 10), text_color="#888"
+            ).pack(pady=5)
+            return
+
+        for name, path in self._java_versions.items():
+            row = ctk.CTkFrame(self._java_list_frame, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+
+            ctk.CTkLabel(
+                row, text=f"☕ {name}",
+                font=("Segoe UI", 11, "bold"), width=120, anchor="w"
+            ).pack(side="left")
+
+            path_display = path
+            if len(path_display) > 35:
+                path_display = path_display[:32] + '...'
+            ctk.CTkLabel(
+                row, text=path_display,
+                font=("Consolas", 9), text_color="#888", anchor="w"
+            ).pack(side="left", padx=(5, 0), fill="x", expand=True)
+
+            ctk.CTkButton(
+                row, text="✏", width=28, height=24,
+                fg_color="#4a3310", hover_color="#d97706",
+                border_width=1, border_color="#f59e0b",
+                font=("Segoe UI", 11),
+                command=lambda n=name: self._edit_java(n)
+            ).pack(side="right", padx=(2, 0))
+
+            ctk.CTkButton(
+                row, text="🗑", width=28, height=24,
+                fg_color="#450a0a", hover_color="#dc2626",
+                border_width=1, border_color="#ef4444",
+                font=("Segoe UI", 11),
+                command=lambda n=name: self._delete_java(n)
+            ).pack(side="right")
+
+    def _auto_detect_java(self):
+        """Auto-detect Java installations and add them to the list."""
+        from core.java_manager import auto_detect_java_paths
+        found = auto_detect_java_paths()
+        added_count = 0
+        for name, path in found.items():
+            # Avoid overwriting existing custom paths with identical names if they exist
+            if name not in self._java_versions and path not in self._java_versions.values():
+                self._java_versions[name] = path
+                added_count += 1
+                
+        self._refresh_java_list()
+        
+        if added_count > 0:
+            messagebox.showinfo("Java Detectado", f"Se han encontrado y añadido {added_count} instalaciones de Java automáticamente.")
+        else:
+            res = messagebox.askyesno(
+                "Java No Encontrado",
+                "No se encontraron nuevas instalaciones de Java automáticamente.\n\n¿Deseas añadir la ruta a tu Java manualmente?"
+            )
+            if res:
+                self._add_java_version()
+            
+    def _add_java_version(self):
+        """Open the Java Version Editor dialog to add a new version."""
+        JavaVersionEditorDialog(self, on_save=self._on_java_saved)
+        
+    def _edit_java(self, name: str):
+        """Open the Java Version Editor dialog to edit an existing version."""
+        path = self._java_versions.get(name, "")
+        JavaVersionEditorDialog(self, version_name=name, version_path=path,
+                                on_save=self._on_java_saved)
+                                
+    def _on_java_saved(self, name: str, path: str):
+        """Callback when a Java version is saved."""
+        self._java_versions[name] = path
+        self._refresh_java_list()
+        
+    def _delete_java(self, name: str):
+        """Delete a Java version."""
+        if messagebox.askyesno("Confirmar", f"¿Eliminar la configuración de Java '{name}'?"):
+            del self._java_versions[name]
+            self._refresh_java_list()
 
     def _browse_dir(self):
         d = filedialog.askdirectory(title="Seleccionar workspace")
@@ -926,6 +1132,7 @@ class SettingsDialog(ctk.CTkToplevel):
     def _save(self):
         self._settings['workspace_dir'] = self._workspace_entry.get().strip()
         self._settings['db_presets'] = self._db_presets
+        self._settings['java_versions'] = self._java_versions
         if self._on_save:
             self._on_save(self._settings)
         self.destroy()
@@ -1000,13 +1207,15 @@ class PresetEditorDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             btn_frame, text="💾 Guardar", width=120,
-            fg_color="#4CAF50", hover_color="#388E3C",
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
             command=self._save
         ).pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#555", hover_color="#666",
+            fg_color="#1e293b", hover_color="#475569",
+            border_width=1, border_color="#64748b",
             command=self.destroy
         ).pack(side="right")
 
@@ -1033,45 +1242,96 @@ class PresetEditorDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class PreviewChangesDialog(ctk.CTkToplevel):
-    """Dialog that shows exactly what will change before loading a profile."""
-    def __init__(self, parent, changes_text: str, on_accept=None):
-        super().__init__(parent)
-        self.title("Vista previa de cambios")
-        self.geometry("500x400")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-
-        self._on_accept = on_accept
-
-        ctk.CTkLabel(self, text="🔍 Cambios a aplicar:",
-                     font=(FONT_FAMILY, 15, "bold")).pack(pady=(15, 10))
-
-        # Text area
-        textbox = ctk.CTkTextbox(self, font=("Consolas", 12), wrap="word")
-        textbox.pack(fill="both", expand=True, padx=20, pady=(0, 15))
-        textbox.insert("1.0", changes_text)
-        textbox.configure(state="disabled")
-
-        # Buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=(0, 15))
-
-        accept_btn = ctk.CTkButton(
-            btn_frame, text="✅ Continuar", width=120,
-            fg_color="#4CAF50", hover_color="#388E3C",
-            command=self._accept
-        )
-        accept_btn.pack(side="right", padx=(10, 0))
-
-        ctk.CTkButton(
-            btn_frame, text="Cancelar", width=100,
-            fg_color="#555", hover_color="#666",
-            command=self.destroy
-        ).pack(side="right")
-
     def _accept(self):
         self.destroy()
         if self._on_accept:
             self._on_accept()
+
+class JavaVersionEditorDialog(ctk.CTkToplevel):
+    """Dialog for adding/editing a Java version configuration."""
+
+    def __init__(self, parent, version_name: str = '', version_path: str = '',
+                 on_save=None):
+        super().__init__(parent)
+        self.title("Editar Versión Java" if version_name else "Nueva Versión Java")
+        self.geometry("520x220")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        self._on_save = on_save
+
+        ctk.CTkLabel(self, text="☕ Configuración de Java",
+                     font=("Segoe UI", 14, "bold")).pack(pady=(15, 10))
+
+        form = ctk.CTkFrame(self, fg_color="transparent")
+        form.pack(fill="x", padx=20)
+
+        # Name
+        ctk.CTkLabel(form, text="Nombre:", font=("Segoe UI", 11),
+                     width=80, anchor="w").grid(row=0, column=0, pady=4, sticky="w")
+        self._name_entry = ctk.CTkEntry(form, width=380, placeholder_text="Ej: Java 17 o Java 8 (Corretto)")
+        self._name_entry.grid(row=0, column=1, pady=4, sticky="w", columnspan=2)
+        if version_name:
+            self._name_entry.insert(0, version_name)
+
+        # Path (JAVA_HOME)
+        ctk.CTkLabel(form, text="Directorio:", font=("Segoe UI", 11),
+                     width=80, anchor="w").grid(row=1, column=0, pady=4, sticky="w")
+        self._path_entry = ctk.CTkEntry(form, width=330, placeholder_text="JAVA_HOME path (carpeta principal con /bin)")
+        self._path_entry.grid(row=1, column=1, pady=4, sticky="w")
+        if version_path:
+            self._path_entry.insert(0, version_path)
+
+        def _browse_path():
+            d = filedialog.askdirectory(title="Seleccionar directorio JAVA_HOME")
+            if d:
+                self._path_entry.delete(0, "end")
+                self._path_entry.insert(0, d)
+
+        ctk.CTkButton(
+            form, text="📁", width=40,
+            fg_color="#172554", hover_color="#2563eb",
+            border_width=1, border_color="#3b82f6",
+            command=_browse_path
+        ).grid(row=1, column=2, padx=(10,0))
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=15)
+
+        ctk.CTkButton(
+            btn_frame, text="💾 Guardar", width=120,
+            fg_color="#064e3b", hover_color="#047857",
+            border_width=1, border_color="#10b981",
+            command=self._save
+        ).pack(side="right", padx=(10, 0))
+
+        ctk.CTkButton(
+            btn_frame, text="Cancelar", width=100,
+            fg_color="#1e293b", hover_color="#475569",
+            border_width=1, border_color="#64748b",
+            command=self.destroy
+        ).pack(side="right")
+
+    def _save(self):
+        name = self._name_entry.get().strip()
+        path = self._path_entry.get().strip()
+        
+        if not name:
+            messagebox.showwarning("Error", "El nombre identificativo de la versión Java es obligatorio.")
+            return
+
+        if not path or not os.path.isdir(path):
+            messagebox.showwarning("Error", "Debes especificar una ruta válida de un directorio para el JAVA_HOME.")
+            return
+
+        # Simple heuristic to make sure it looks like a valid JAVA_HOME
+        java_exe = os.path.join(path, "bin", "java.exe" if os.name == 'nt' else "java")
+        if not os.path.isfile(java_exe):
+            if not messagebox.askyesno("Advertencia", f"No se ha encontrado el ejecutable java en {java_exe}. ¿Estás seguro de que esta es una ruta JAVA_HOME válida?"):
+                return
+
+        if self._on_save:
+            self._on_save(name, path)
+        self.destroy()

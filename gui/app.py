@@ -6,6 +6,21 @@ import os
 import json
 import sys
 import threading
+import pystray
+import re
+import ctypes
+from PIL import Image
+from pystray import MenuItem as item
+
+class StreamRedirector:
+    def __init__(self, callback):
+        self.callback = callback
+
+    def write(self, string):
+        self.callback(string)
+
+    def flush(self):
+        pass
 
 # Add parent to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,6 +53,8 @@ class DevOpsManagerApp(ctk.CTk):
             self._workspace_dir = os.path.dirname(
                 os.path.dirname(os.path.abspath(__file__))
             )
+            
+        self._app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         self._settings = self._load_settings()
         # Keep settings synced to prevent false change detection on close
@@ -57,11 +74,27 @@ class DevOpsManagerApp(ctk.CTk):
         ctk.set_appearance_mode('dark')
         ctk.set_default_color_theme("blue")
 
+        # Set Window icon
+        icon_path = os.path.join(self._app_dir, "icon_red.ico")
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)
+            self.after(200, lambda: self.iconbitmap(icon_path))
+
         # Handle close
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
+        # Setup Tray
+        self._tray_icon = None
+        self._init_tray()
+        
+        # Bind Unmap to catch minimize
+        self.bind("<Unmap>", self._on_window_unmap)
+
         self._build_ui()
         self._scan_repos()
+
+        # Start background check loop for tray icon status
+        self._check_tray_status()
 
     def _build_ui(self):
         """Build the main UI layout."""
@@ -155,6 +188,17 @@ class DevOpsManagerApp(ctk.CTk):
         settings_btn.pack(side="left", padx=3)
         ToolTip(settings_btn, "Abrir configuración")
 
+        log_btn = ctk.CTkButton(
+            btn_frame, text="📜", width=38, height=34,
+            font=(FONT_FAMILY, 16),
+            fg_color="#1e293b", hover_color="#475569",
+            border_width=1, border_color="#64748b",
+            corner_radius=6,
+            command=self._toggle_global_log
+        )
+        log_btn.pack(side="left", padx=3)
+        ToolTip(log_btn, "Mostrar/Ocultar Log Global")
+
         # Global panel
         self._global_panel = GlobalPanel(
             self, db_presets=self._db_presets, log_callback=self._log
@@ -174,6 +218,11 @@ class DevOpsManagerApp(ctk.CTk):
 
         def _on_mousewheel(event):
             """Smooth scroll with overscroll prevention."""
+            # Only intercept scroll if hovering over the main cards area
+            widget = self.winfo_containing(event.x_root, event.y_root)
+            if not widget or not str(widget).startswith(str(self._cards_scroll)):
+                return
+
             top, bottom = canvas.yview()
             # Content fits entirely — no scroll needed
             if top <= 0.0 and bottom >= 1.0:
@@ -200,6 +249,41 @@ class DevOpsManagerApp(ctk.CTk):
         canvas.bind("<Button-5>", _on_mousewheel)
         self._cards_scroll.bind_all("<MouseWheel>", _on_mousewheel)
 
+        # Global log panel (hidden by default)
+        self._global_log_frame = ctk.CTkFrame(self, fg_color="#0f0e26", height=150)
+        self._global_log_frame.pack_propagate(False)
+        
+        log_header = ctk.CTkFrame(self._global_log_frame, fg_color="transparent")
+        log_header.pack(fill="x", padx=10, pady=(5, 0))
+        
+        ctk.CTkLabel(log_header, text="📜 Log Global", font=(FONT_FAMILY, 12, "bold"), text_color="#c7d2fe").pack(side="left")
+        
+        clear_btn = ctk.CTkButton(
+            log_header, text="🗑 Limpiar", width=60, height=24,
+            font=(FONT_FAMILY, 10),
+            fg_color="#1e1b4b", hover_color="#312e81",
+            border_width=1, border_color="#4338ca",
+            command=self._clear_global_log
+        )
+        clear_btn.pack(side="right")
+        
+        detach_btn = ctk.CTkButton(
+            log_header, text="🗗 Desacoplar", width=80, height=24,
+            font=(FONT_FAMILY, 10),
+            fg_color="#1e1b4b", hover_color="#312e81",
+            border_width=1, border_color="#4338ca",
+            command=self._detach_global_log
+        )
+        detach_btn.pack(side="right", padx=(0, 6))
+
+        self._global_log_textbox = ctk.CTkTextbox(
+            self._global_log_frame, font=("Consolas", 11),
+            corner_radius=6, border_width=1,
+            border_color="#3b3768", fg_color="#16132e",
+            text_color="#e0e7ff", state="disabled"
+        )
+        self._global_log_textbox.pack(fill="both", expand=True, padx=10, pady=5)
+
         # Status bar
         self._statusbar = ctk.CTkLabel(
             self, text="Listo",
@@ -208,11 +292,103 @@ class DevOpsManagerApp(ctk.CTk):
         )
         self._statusbar.pack(fill="x", padx=15, pady=(0, 6))
 
+        # Setup standard output redirection
+        self._setup_global_log_redirect()
+
     def _log(self, message: str):
         """Central log function."""
         print(message)
         if hasattr(self, '_statusbar') and len(message) < 100:
             self._statusbar.configure(text=message)
+
+    def _toggle_global_log(self):
+        if self._global_log_frame.winfo_ismapped():
+            self._global_log_frame.pack_forget()
+        else:
+            self._global_log_frame.pack(fill="x", padx=10, pady=(5, 5), before=self._statusbar)
+
+    def _clear_global_log(self):
+        if hasattr(self, '_global_log_textbox'):
+            self._global_log_textbox.configure(state="normal")
+            self._global_log_textbox.delete("1.0", "end")
+            self._global_log_textbox.configure(state="disabled")
+
+        if getattr(self, '_detached_global_log_textbox', None) and self._detached_global_log_textbox.winfo_exists():
+            self._detached_global_log_textbox.configure(state="normal")
+            self._detached_global_log_textbox.delete("1.0", "end")
+            self._detached_global_log_textbox.configure(state="disabled")
+
+    def _detach_global_log(self):
+        """Open the global logs in a separate detached window and hide the embedded one."""
+        if getattr(self, '_detached_global_log_window', None) and self._detached_global_log_window.winfo_exists():
+            self._detached_global_log_window.focus()
+            return
+
+        # Hide the embedded log
+        if self._global_log_frame.winfo_ismapped():
+            self._global_log_frame.pack_forget()
+            
+        self._detached_global_log_window = ctk.CTkToplevel(self)
+        self._detached_global_log_window.title("Log Global - DevOps Manager")
+        self._detached_global_log_window.geometry("800x600")
+        
+        self._detached_global_log_textbox = ctk.CTkTextbox(
+            self._detached_global_log_window, font=("Consolas", 12),
+            corner_radius=0, border_width=0,
+            fg_color="#0f0e26", text_color="#e0e7ff"
+        )
+        self._detached_global_log_textbox.pack(fill="both", expand=True)
+        
+        # Copy current content
+        current_logs = self._global_log_textbox.get("1.0", "end")
+        self._detached_global_log_textbox.insert("end", current_logs)
+        self._detached_global_log_textbox.configure(state="disabled")
+        self._detached_global_log_textbox.see("end")
+
+    def _setup_global_log_redirect(self):
+        self._original_stdout = sys.stdout
+        self._original_stderr = sys.stderr
+        redirector = StreamRedirector(self._log_global_stream)
+        sys.stdout = redirector
+        sys.stderr = redirector
+
+    def _log_global_stream(self, string):
+        if string:
+            string = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', string)
+
+        def _insert():
+            # Embedded
+            if hasattr(self, '_global_log_textbox') and self._global_log_textbox.winfo_exists():
+                self._global_log_textbox.configure(state="normal")
+                self._global_log_textbox.insert("end", string)
+                
+                content = self._global_log_textbox.get("1.0", "end")
+                lines = content.splitlines()
+                if len(lines) > 1000:
+                    excess = len(lines) - 1000
+                    self._global_log_textbox.delete("1.0", f"{excess + 1}.0")
+                    
+                self._global_log_textbox.see("end")
+                self._global_log_textbox.configure(state="disabled")
+
+            # Detached
+            if getattr(self, '_detached_global_log_textbox', None) and self._detached_global_log_textbox.winfo_exists():
+                self._detached_global_log_textbox.configure(state="normal")
+                self._detached_global_log_textbox.insert("end", string)
+                
+                content = self._detached_global_log_textbox.get("1.0", "end")
+                lines = content.splitlines()
+                if len(lines) > 1000:
+                    excess = len(lines) - 1000
+                    self._detached_global_log_textbox.delete("1.0", f"{excess + 1}.0")
+                    
+                self._detached_global_log_textbox.see("end")
+                self._detached_global_log_textbox.configure(state="disabled")
+
+        try:
+            self.after(0, _insert)
+        except Exception:
+            pass
 
     def _scan_repos(self):
         """Scan workspace for repositories."""
@@ -244,6 +420,7 @@ class DevOpsManagerApp(ctk.CTk):
 
         # Restore persisted state
         repo_state = self._settings.get('repo_state', {})
+        self._java_versions = self._settings.get('java_versions', {})
 
         # Single column list layout
         for idx, repo in enumerate(repos):
@@ -251,6 +428,7 @@ class DevOpsManagerApp(ctk.CTk):
                 self._cards_scroll, repo,
                 self._service_launcher,
                 db_presets=self._db_presets,
+                java_versions=self._java_versions,
                 log_callback=self._log,
                 on_edit_config=self._open_config_editor
             )
@@ -263,6 +441,8 @@ class DevOpsManagerApp(ctk.CTk):
                 card.set_selected(state['selected'])
             if state.get('custom_command'):
                 card.set_custom_command(state['custom_command'])
+            if state.get('java_version'):
+                card.selected_java_var.set(state['java_version'])
 
             # Stagger branch loading
             if card._branch_load_id:
@@ -313,6 +493,14 @@ class DevOpsManagerApp(ctk.CTk):
                 profile = config.get('profile', '')
                 if profile:
                     card.set_profile(profile)
+                # Apply custom command
+                custom_cmd = config.get('custom_command')
+                if custom_cmd is not None:
+                    card.set_custom_command(custom_cmd)
+                # Apply java version
+                java_version = config.get('java_version')
+                if java_version is not None and hasattr(card, 'selected_java_var'):
+                    card.selected_java_var.set(java_version)
 
         self._log("[config] Configuración aplicada a todos los repos")
 
@@ -356,6 +544,12 @@ class DevOpsManagerApp(ctk.CTk):
         self._global_panel.update_db_presets(self._db_presets)
         for card in self._repo_cards:
             card.update_db_presets(self._db_presets)
+            
+        # Update Java versions
+        self._java_versions = settings.get('java_versions', {})
+        for card in self._repo_cards:
+            if hasattr(card, "update_java_versions"):
+                card.update_java_versions(self._java_versions)
 
         # Rescan if workspace changed
         if settings.get('workspace_dir') and settings['workspace_dir'] != self._workspace_dir:
@@ -363,17 +557,109 @@ class DevOpsManagerApp(ctk.CTk):
             self._scan_repos()
 
     def _save_repo_state(self):
-        """Save per-repo state (selection, custom commands) to settings."""
+        """Save per-repo state (selection, custom commands, java version) to settings."""
         state = {}
         for card in self._repo_cards:
             state[card.get_name()] = {
                 'selected': card.is_selected(),
                 'custom_command': card.get_custom_command(),
+                'java_version': card.selected_java_var.get()
             }
         self._settings['repo_state'] = state
 
+    def _init_tray(self):
+        self._tray_icon = None
+
+    def _on_window_unmap(self, event):
+        # Only handle events from the main window itself, intercept minimize
+        if event.widget != self:
+            return
+
+        if self.state() == 'iconic':
+            self.withdraw()
+            
+            # Recreate the tray icon to avoid state issues
+            any_running = False
+            for card in getattr(self, '_repo_cards', []):
+                if getattr(card, '_status', '') in ('running', 'starting'):
+                    any_running = True
+                    break
+                    
+            color = "green" if any_running else "red"
+            icon_path = os.path.join(self._app_dir, f"icon_{color}.ico")
+            
+            if os.path.exists(icon_path):
+                try:
+                    image = Image.open(icon_path)
+                except Exception:
+                    image = Image.new('RGB', (64, 64), color='red')
+            else:
+                image = Image.new('RGB', (64, 64), color='red')
+
+            menu = pystray.Menu(
+                item('Mostrar', self._restore_window, default=True),
+                item('Salir', self._quit_app)
+            )
+            self._tray_icon = pystray.Icon("devops_manager", image, "DevOps Manager", menu)
+            
+            # run_detached handles the background thread natively in pystray
+            self._tray_icon.run_detached()
+
+    def _restore_window(self, icon, item):
+        if self._tray_icon:
+            self._tray_icon.stop()
+            self._tray_icon = None
+        
+        # Must schedule the UI update in the main thread
+        def _show():
+            self.deiconify()
+            self.state('normal')
+        self.after(0, _show)
+
+    def _quit_app(self, icon, item):
+        if self._tray_icon:
+            self._tray_icon.stop()
+        self.after(0, self._on_close)
+
+    def _check_tray_status(self):
+        def _update():
+            # Check if any repo is running or starting
+            any_running = False
+            for card in self._repo_cards:
+                if card._status in ('running', 'starting'):
+                    any_running = True
+                    break
+                    
+            color = "green" if any_running else "red"
+            icon_path = os.path.join(self._app_dir, f"icon_{color}.ico")
+            
+            if os.path.exists(icon_path):
+                # Update main window icon if not withdrawn
+                if self.state() != 'iconic':
+                    try:
+                        self.iconbitmap(icon_path)
+                    except Exception:
+                        pass
+                
+                # Update tray icon image if running
+                if self._tray_icon:
+                    try:
+                        self._tray_icon.icon = Image.open(icon_path)
+                    except Exception:
+                        pass
+                        
+            # Loop every 2 seconds
+            self.after(2000, self._check_tray_status)
+
+        self.after(0, _update)
+
     def _on_close(self):
         """Handle window close."""
+        if hasattr(self, '_original_stdout'):
+            sys.stdout = self._original_stdout
+        if hasattr(self, '_original_stderr'):
+            sys.stderr = self._original_stderr
+
         self._service_launcher.stop_all(self._log)
         self._save_repo_state()
         self._save_settings(self._settings)

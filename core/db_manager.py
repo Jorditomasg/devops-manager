@@ -13,7 +13,8 @@ def is_docker_available() -> bool:
     """Check if Docker is available."""
     try:
         result = subprocess.run(['docker', 'info'],
-                                capture_output=True, text=True, timeout=10)
+                                capture_output=True, text=True, timeout=10,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         return result.returncode == 0
     except Exception:
         return False
@@ -24,7 +25,8 @@ def is_container_running(container_name: str) -> bool:
     try:
         result = subprocess.run(
             ['docker', 'ps', '--filter', f'name={container_name}', '--format', '{{.Names}}'],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         return container_name in result.stdout
     except Exception:
@@ -36,7 +38,8 @@ def get_running_containers(project_prefix: str = '') -> list[dict]:
     try:
         result = subprocess.run(
             ['docker', 'ps', '--format', '{{.Names}}\t{{.Status}}\t{{.Ports}}'],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         containers = []
         if result.returncode == 0:
@@ -72,7 +75,8 @@ def docker_compose_up(compose_file: str, services: list = None,
             log(f"[docker] Starting {svc_str} from {fname}...")
 
         result = subprocess.run(cmd, capture_output=True, text=True,
-                                cwd=cwd, timeout=120)
+                                cwd=cwd, timeout=120,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         msg = result.stdout.strip() + '\n' + result.stderr.strip()
 
         if log:
@@ -100,7 +104,8 @@ def docker_compose_down(compose_file: str, log: LogCallback = None) -> tuple[boo
             log(f"[docker] Stopping services from {fname}...")
 
         result = subprocess.run(cmd, capture_output=True, text=True,
-                                cwd=cwd, timeout=60)
+                                cwd=cwd, timeout=60,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         msg = result.stdout.strip() + '\n' + result.stderr.strip()
 
         if log:
@@ -193,7 +198,8 @@ def stop_service_compose(compose_file: str, service_name: str = None,
             if log:
                 log(f"[docker] Stopping {service_name}...")
             result = subprocess.run(cmd, capture_output=True, text=True,
-                                    cwd=cwd, timeout=60)
+                                    cwd=cwd, timeout=60,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             msg = result.stdout.strip() + '\n' + result.stderr.strip()
             return result.returncode == 0, msg.strip()
         except Exception as e:

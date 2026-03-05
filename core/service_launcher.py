@@ -46,10 +46,10 @@ class ServiceLauncher:
             return svc.process.poll() is None
         return False
 
-    def start_spring_boot(self, name: str, repo_path: str, profile: str = 'default',
-                          port: int = None, log: LogCallback = None,
-                          status_callback: Callable = None) -> bool:
-        """Start a Spring Boot service using mvnw."""
+    def start_spring_boot(self, name: str, repo_path: str, profile: str = '',
+                          port: int = 8080, log: LogCallback = None,
+                          status_callback: Callable = None, java_home: str = "") -> bool:
+        """Start a Spring Boot application."""
         if self.is_running(name):
             if log:
                 log(f"[svc] {name} is already running")
@@ -63,23 +63,30 @@ class ServiceLauncher:
         if profile and profile != 'default':
             cmd.append(f'-Dspring-boot.run.profiles={profile}')
 
+        # Build environment with specific JAVA_HOME
+        from core.java_manager import build_java_env
+        env = build_java_env(java_home)
+
         svc = RunningService(name=name, repo_path=repo_path, port=port,
                              profile=profile, status='starting')
         self._services[name] = svc
 
         if log:
-            log(f"[svc] Starting {name} (profile: {profile})...")
+            log(f"[svc] Starting {name} (profile: {profile or 'default'}) on port {port}...")
+            if java_home:
+                log(f"[svc] Using JAVA_HOME: {java_home}")
 
         if status_callback:
             status_callback(name, 'starting')
 
         def _run():
             try:
+                # Use process group to allow clean termination of children (like the java proc spawned by mvn)
                 process = subprocess.Popen(
-                    cmd, cwd=repo_path,
+                    cmd, cwd=repo_path, env=env,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
+                    creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
                 )
                 svc.process = process
                 svc.status = 'running'
@@ -160,7 +167,7 @@ class ServiceLauncher:
                     cmd, cwd=repo_path,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1, shell=True,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
+                    creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
                 )
                 svc.process = process
                 svc.status = 'running'
@@ -198,11 +205,9 @@ class ServiceLauncher:
 
     def start_maven_install(self, name: str, repo_path: str,
                             log: LogCallback = None,
-                            status_callback: Callable = None) -> bool:
-        """Run mvn install for a library project."""
+                            status_callback: Callable = None, java_home: str = "") -> bool:
+        """Run mvn install -DskipTests as a service (blocking or long-running)."""
         if self.is_running(name):
-            if log:
-                log(f"[svc] {name} is already running")
             return False
 
         mvnw = os.path.join(repo_path, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')
@@ -211,21 +216,28 @@ class ServiceLauncher:
 
         cmd = [mvnw, 'install', '-DskipTests']
 
-        svc = RunningService(name=name, repo_path=repo_path, status='starting')
+        # Build environment with specific JAVA_HOME
+        from core.java_manager import build_java_env
+        env = build_java_env(java_home)
+
+        svc = RunningService(name=name, repo_path=repo_path, port=0,
+                             profile='', status='starting')
         self._services[name] = svc
 
         if log:
-            log(f"[svc] Building {name} (mvn install)...")
-
+            log(f"[svc] Running mvn install for {name}...")
+            if java_home:
+                log(f"[svc] Using JAVA_HOME: {java_home}")
         if status_callback:
             status_callback(name, 'starting')
 
         def _run():
             try:
                 process = subprocess.Popen(
-                    cmd, cwd=repo_path,
+                    cmd, cwd=repo_path, env=env,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1
+                    text=True, bufsize=1,
+                    creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
                 )
                 svc.process = process
 
@@ -274,7 +286,8 @@ class ServiceLauncher:
                 # Windows: use taskkill to kill the entire process tree
                 subprocess.run(
                     ['taskkill', '/F', '/T', '/PID', str(svc.process.pid)],
-                    capture_output=True, timeout=15
+                    capture_output=True, timeout=15,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
                 )
             else:
                 os.killpg(os.getpgid(svc.process.pid), signal.SIGTERM)
@@ -300,21 +313,24 @@ class ServiceLauncher:
             return True
 
     def restart_service(self, name: str, repo_path: str, repo_type: str,
-                        profile: str = '', port: int = None,
-                        log: LogCallback = None,
-                        status_callback: Callable = None) -> bool:
-        """Restart a service (stop then start)."""
+                        profile: str = '', port: int = 8080, log: LogCallback = None,
+                        status_callback: Callable = None, java_home: str = "") -> bool:
+        """Stop and then start a service."""
+        if log:
+            log(f"[svc] Restarting {name}...")
+
         self.stop_service(name, log, status_callback)
 
+        # Wait briefly to ensure ports are freed (Windows can be slow)
         import time
         time.sleep(1)
 
         if repo_type == 'spring-boot':
-            return self.start_spring_boot(name, repo_path, profile, port, log, status_callback)
+            return self.start_spring_boot(name, repo_path, profile, port, log, status_callback, java_home)
         elif repo_type == 'angular':
             return self.start_angular(name, repo_path, profile, log, status_callback)
         elif repo_type == 'maven-lib':
-            return self.start_maven_install(name, repo_path, log, status_callback)
+            return self.start_maven_install(name, repo_path, log, status_callback, java_home)
         return False
 
     def stop_all(self, log: LogCallback = None,
