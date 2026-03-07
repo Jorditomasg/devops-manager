@@ -108,6 +108,15 @@ def _build_spring_boot_repo(name: str, path: str, resources_dir: str, main_confi
     # Detect profiles
     repo.profiles = _detect_spring_profiles(resources_dir)
 
+    # Detect environment files
+    env_files = []
+    for root, dirs, files in os.walk(path):
+        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'target')]
+        for f in files:
+            if f.startswith('application') and f.endswith(('.yml', '.yaml', '.properties')):
+                env_files.append(os.path.join(root, f))
+    repo.environment_files = env_files
+
     # Parse main config for DB and port info
     try:
         if main_config_file.endswith('.properties'):
@@ -163,7 +172,9 @@ def _build_angular_repo(name: str, path: str) -> RepoInfo:
         match = re.match(r'environment\.?(.*)\.ts', fname)
         if match:
             prof = match.group(1)
-            profiles.append(prof if prof else 'default')
+            prof = prof if prof else 'default'
+            if prof not in profiles:
+                profiles.append(prof)
     repo.profiles = profiles
 
     # Git remote
@@ -201,9 +212,9 @@ def _build_maven_lib_repo(name: str, path: str) -> RepoInfo:
 
     mvnw = 'mvnw.cmd' if os.name == 'nt' else './mvnw'
     if os.path.isfile(os.path.join(path, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')):
-        repo.run_command = f'{mvnw} install -DskipTests'
+        repo.run_command = f'{mvnw} clean install -DskipTests -B'
     else:
-        repo.run_command = 'mvn install -DskipTests'
+        repo.run_command = 'mvn clean install -DskipTests -B'
 
     # Detect profiles (may have application-local.yml for tests)
     resources_dir = os.path.join(path, 'src', 'main', 'resources')

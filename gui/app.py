@@ -46,6 +46,15 @@ class DevOpsManagerApp(ctk.CTk):
     def __init__(self, workspace_dir: str = None):
         super().__init__()
 
+        # Configurar AppUserModelID en Windows para que la barra de tareas
+        # agrupe el icono correctamente y use la versión de alta resolución.
+        try:
+            if sys.platform == "win32":
+                myappid = 'boa.devopsmanager.app.1'
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+
         # Determine workspace directory
         if workspace_dir:
             self._workspace_dir = workspace_dir
@@ -331,6 +340,10 @@ class DevOpsManagerApp(ctk.CTk):
         self._detached_global_log_window = ctk.CTkToplevel(self)
         self._detached_global_log_window.title("Log Global - DevOps Manager")
         self._detached_global_log_window.geometry("800x600")
+        
+        # Bring window to front
+        self.after(100, lambda: self._detached_global_log_window.lift())
+        self.after(110, lambda: self._detached_global_log_window.focus_force())
         
         self._detached_global_log_textbox = ctk.CTkTextbox(
             self._detached_global_log_window, font=("Consolas", 12),
@@ -655,12 +668,26 @@ class DevOpsManagerApp(ctk.CTk):
 
     def _on_close(self):
         """Handle window close."""
-        if hasattr(self, '_original_stdout'):
-            sys.stdout = self._original_stdout
-        if hasattr(self, '_original_stderr'):
-            sys.stderr = self._original_stderr
+        try:
+            if hasattr(self, '_original_stdout'):
+                sys.stdout = self._original_stdout
+            if hasattr(self, '_original_stderr'):
+                sys.stderr = self._original_stderr
 
-        self._service_launcher.stop_all(self._log)
-        self._save_repo_state()
-        self._save_settings(self._settings)
-        self.destroy()
+            if hasattr(self, '_tray_icon') and self._tray_icon is not None:
+                try:
+                    self._tray_icon.stop()
+                except Exception:
+                    pass
+
+            if hasattr(self, '_service_launcher'):
+                self._service_launcher.stop_all(self._log)
+                
+            self._save_repo_state()
+            self._save_settings(self._settings)
+        except Exception:
+            pass
+        finally:
+            self.destroy()
+            os._exit(0)
+

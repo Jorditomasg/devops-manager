@@ -73,15 +73,7 @@ def detect_db_name_from_repo(resources_dir: str, profile: str = 'default') -> st
 
 def backup_file(filepath: str) -> str:
     """Create a timestamped backup of a file before modifying it."""
-    if not os.path.isfile(filepath):
-        return ''
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_dir = os.path.join(os.path.dirname(filepath), '.config_backups')
-    os.makedirs(backup_dir, exist_ok=True)
-    basename = os.path.basename(filepath)
-    backup_path = os.path.join(backup_dir, f'{basename}.{timestamp}.bak')
-    shutil.copy2(filepath, backup_path)
-    return backup_path
+    return ''
 
 
 # ─── Spring Boot Config ─────────────────────────────────────────────────────
@@ -236,3 +228,82 @@ def write_config_file_raw(filepath: str, content: str) -> bool:
         return True
     except Exception:
         return False
+
+# ─── Repo Configs (Env/App) ─────────────────────────────────────────────────
+
+def load_repo_configs(repo_name: str, config_path: str = '') -> dict:
+    """Load the custom environments/profiles for a specific repository.
+    Returns a dict like:
+      { 'dev': 'content of environment.dev.ts...', 'prod': '...' }
+    """
+    if not config_path:
+        config_path = get_config_path()
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        repo_configs = config.get('repo_configs', {})
+        return repo_configs.get(repo_name, {})
+    except Exception:
+        return {}
+
+
+def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = ''):
+    """Save the custom environments/profiles for a specific repository."""
+    if not config_path:
+        config_path = get_config_path()
+    try:
+        if os.path.isfile(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        else:
+            config = {}
+        
+        if 'repo_configs' not in config:
+            config['repo_configs'] = {}
+            
+        config['repo_configs'][repo_name] = configs_dict
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def auto_import_configs(repo_path: str, repo_type: str, environment_files: list = None) -> dict:
+    """Scan a repository for existing configuration files and import them.
+    Returns a dict of found configs: { 'name': 'content ...' }
+    """
+    imported = {}
+    
+    if repo_type == 'angular':
+        files_to_scan = environment_files if environment_files else []
+        for file_path in files_to_scan:
+            if not os.path.isfile(file_path):
+                continue
+            name = 'default'
+            basename = os.path.basename(file_path)
+            parts = basename.split('.')
+            if len(parts) > 2:
+                name = parts[1]
+            
+            content = read_config_file_raw(file_path)
+            if content:
+                imported[name] = content
+                        
+    elif repo_type == 'spring-boot':
+        res_dir = os.path.join(repo_path, 'src', 'main', 'resources')
+        if os.path.isdir(res_dir):
+            for file in os.listdir(res_dir):
+                if (file.startswith('application') and 
+                   (file.endswith('.yml') or file.endswith('.yaml') or file.endswith('.properties'))):
+                    
+                    name = 'default'
+                    # splitext removes extension, so we get 'application-dev'
+                    base = os.path.splitext(file)[0]
+                    if '-' in base:
+                        name = base.split('-', 1)[1]
+                        
+                    content = read_config_file_raw(os.path.join(res_dir, file))
+                    if content:
+                        imported[name] = content
+                        
+    return imported

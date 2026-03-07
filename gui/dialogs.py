@@ -1335,3 +1335,255 @@ class JavaVersionEditorDialog(ctk.CTkToplevel):
         if self._on_save:
             self._on_save(name, path)
         self.destroy()
+
+# ─── Config Manager Dialog ──────────────────────────────────────────────────
+
+class RepoConfigManagerDialog(ctk.CTkToplevel):
+    """Dialog to manage Env/App configurations for a repository."""
+
+    def __init__(self, parent, repo, config_key=None, log_callback=None, on_close_callback=None):
+        super().__init__(parent)
+        self._repo = repo
+        self._config_key = config_key if config_key else repo.name
+        self._log = log_callback
+        self._on_close = on_close_callback
+        
+        self.title(f"⚙ Gestor de Entornos/Apps - {self._config_key}")
+        self.geometry("850x600")
+        self.minsize(700, 450)
+        self.transient(parent)
+        
+        from core.config_manager import load_repo_configs
+        self._configs = load_repo_configs(self._config_key)
+        self._current_selected = None
+        
+        self._build_ui()
+        self._refresh_list()
+        
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        self.grab_set()
+
+    def _build_ui(self):
+        # Paneles principales
+        left_panel = ctk.CTkFrame(self, width=250, corner_radius=0)
+        left_panel.pack(side="left", fill="y", padx=0, pady=0)
+        left_panel.pack_propagate(False)
+        
+        right_panel = ctk.CTkFrame(self, fg_color="transparent")
+        right_panel.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+        
+        # --- Left Panel ---
+        ctk.CTkLabel(left_panel, text="Entornos Guardados", font=("Segoe UI", 14, "bold")).pack(pady=(15, 10))
+        
+        self._list_frame = ctk.CTkScrollableFrame(left_panel, fg_color="transparent")
+        self._list_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        btn_style = {"height": 28, "font": ("Segoe UI", 12), "corner_radius": 6, "border_width": 1}
+        
+        ctk.CTkButton(
+            left_panel, text="➕ Nuevo",
+            fg_color="#172554", hover_color="#2563eb", border_color="#3b82f6",
+            command=self._cmd_new, **btn_style
+        ).pack(fill="x", padx=15, pady=(5, 5))
+        
+        ctk.CTkButton(
+            left_panel, text="📥 Auto-Importar",
+            fg_color="#4c1d95", hover_color="#6d28d9", border_color="#7c3aed",
+            command=self._cmd_auto_import, **btn_style
+        ).pack(fill="x", padx=15, pady=(0, 15))
+        
+        # --- Right Panel ---
+        self._title_var = ctk.StringVar(value="Selecciona un entorno")
+        header = ctk.CTkFrame(right_panel, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 10))
+        
+        ctk.CTkLabel(header, textvariable=self._title_var, font=("Segoe UI", 16, "bold")).pack(side="left")
+        
+        self._actions_frame = ctk.CTkFrame(header, fg_color="transparent")
+        self._actions_frame.pack(side="right")
+        
+        self._btn_rename = ctk.CTkButton(
+            self._actions_frame, text="✏️ Renombrar", width=90,
+            fg_color="#1e293b", hover_color="#475569", border_color="#64748b",
+            command=self._cmd_rename, state="disabled", **btn_style
+        )
+        self._btn_rename.pack(side="left", padx=3)
+        
+        self._btn_duplicate = ctk.CTkButton(
+            self._actions_frame, text="📄 Duplicar", width=80,
+            fg_color="#1e293b", hover_color="#475569", border_color="#64748b",
+            command=self._cmd_duplicate, state="disabled", **btn_style
+        )
+        self._btn_duplicate.pack(side="left", padx=3)
+        
+        self._btn_delete = ctk.CTkButton(
+            self._actions_frame, text="🗑 Eliminar", width=80,
+            fg_color="#4c1616", hover_color="#dc2626", border_color="#ef4444",
+            command=self._cmd_delete, state="disabled", **btn_style
+        )
+        self._btn_delete.pack(side="left", padx=3)
+        
+        # Editor
+        self._editor = ctk.CTkTextbox(
+            right_panel, font=("Consolas", 12),
+            wrap="none", corner_radius=6, border_width=1, border_color="#3b3768"
+        )
+        self._editor.pack(fill="both", expand=True, pady=(0, 10))
+        self._editor.configure(state="disabled")
+        
+        # Save btn
+        self._btn_save = ctk.CTkButton(
+            right_panel, text="💾 Guardar Cambios en Entorno", height=32,
+            font=("Segoe UI", 14, "bold"), corner_radius=6,
+            fg_color="#064e3b", hover_color="#047857", border_width=1, border_color="#10b981",
+            command=self._cmd_save_text, state="disabled"
+        )
+        self._btn_save.pack(side="right")
+        
+    def _refresh_list(self):
+        for widget in self._list_frame.winfo_children():
+            widget.destroy()
+            
+        for name in sorted(self._configs.keys()):
+            color = "#3b82f6" if name == self._current_selected else "transparent"
+            btn = ctk.CTkButton(
+                self._list_frame, text=name, anchor="w",
+                fg_color=color, hover_color="#2563eb",
+                command=lambda n=name: self._select_config(n)
+            )
+            btn.pack(fill="x", pady=2)
+            
+    def _select_config(self, name: str):
+        if self._current_selected and self._current_selected != name:
+            self._check_unsaved_changes()
+            
+        self._current_selected = name
+        self._refresh_list()
+        
+        if name and name in self._configs:
+            self._title_var.set(f"Editando: {name}")
+            self._editor.configure(state="normal")
+            self._editor.delete("1.0", "end")
+            self._editor.insert("1.0", self._configs[name])
+            
+            self._btn_rename.configure(state="normal")
+            self._btn_duplicate.configure(state="normal")
+            self._btn_delete.configure(state="normal")
+            self._btn_save.configure(state="normal")
+        else:
+            self._title_var.set("Selecciona un entorno")
+            self._editor.delete("1.0", "end")
+            self._editor.configure(state="disabled")
+            
+            self._btn_rename.configure(state="disabled")
+            self._btn_duplicate.configure(state="disabled")
+            self._btn_delete.configure(state="disabled")
+            self._btn_save.configure(state="disabled")
+
+    def _check_unsaved_changes(self):
+        if not self._current_selected or self._current_selected not in self._configs:
+            return
+        current_text = self._editor.get("1.0", "end-1c")
+        if current_text != self._configs[self._current_selected]:
+            if messagebox.askyesno("Cambios sin guardar", f"Hay cambios sin guardar en '{self._current_selected}'. ¿Deseas guardarlos antes de cambiar?"):
+                self._cmd_save_text()
+                
+    def _cmd_save_text(self):
+        if not self._current_selected:
+            return
+        new_text = self._editor.get("1.0", "end-1c")
+        self._configs[self._current_selected] = new_text
+        self._persist_to_db()
+        messagebox.showinfo("Guardado", f"El entorno '{self._current_selected}' se ha actualizado correctamente.")
+        
+    def _cmd_new(self):
+        from tkinter import simpledialog
+        name = simpledialog.askstring("Nuevo Entorno", "Nombre del nuevo entorno/app:", parent=self)
+        if name:
+            name = name.strip()
+            if not name:
+                return
+            if name in self._configs:
+                messagebox.showerror("Error", "Ya existe un entorno con ese nombre.")
+                return
+            self._configs[name] = ""
+            self._persist_to_db()
+            self._select_config(name)
+            
+    def _cmd_rename(self):
+        if not self._current_selected:
+            return
+        from tkinter import simpledialog
+        new_name = simpledialog.askstring("Renombrar Entorno", "Nuevo nombre:", initialvalue=self._current_selected, parent=self)
+        if new_name:
+            new_name = new_name.strip()
+            if not new_name or new_name == self._current_selected:
+                return
+            if new_name in self._configs:
+                messagebox.showerror("Error", "Ya existe un entorno con ese nombre.")
+                return
+            
+            # Transfer data
+            self._configs[new_name] = self._configs.pop(self._current_selected)
+            self._persist_to_db()
+            self._select_config(new_name)
+
+    def _cmd_duplicate(self):
+        if not self._current_selected:
+            return
+        from tkinter import simpledialog
+        new_name = simpledialog.askstring("Duplicar Entorno", "Nombre de la copia:", initialvalue=f"{self._current_selected}_copia", parent=self)
+        if new_name:
+            new_name = new_name.strip()
+            if not new_name:
+                return
+            if new_name in self._configs:
+                messagebox.showerror("Error", "Ya existe un entorno con ese nombre.")
+                return
+            
+            self._configs[new_name] = self._configs[self._current_selected]
+            self._persist_to_db()
+            self._select_config(new_name)
+
+    def _cmd_delete(self):
+        if not self._current_selected:
+            return
+        if messagebox.askyesno("Eliminar Entorno", f"¿Seguro que deseas eliminar '{self._current_selected}'?"):
+            del self._configs[self._current_selected]
+            self._persist_to_db()
+            self._current_selected = None
+            self._select_config(None)
+
+    def _cmd_auto_import(self):
+        from core.config_manager import auto_import_configs
+        imported = auto_import_configs(
+            self._repo.path, 
+            self._repo.repo_type, 
+            environment_files=getattr(self._repo, 'environment_files', [])
+        )
+        if not imported:
+            messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")
+            return
+            
+        added = 0
+        for k, v in imported.items():
+            if k not in self._configs:
+                self._configs[k] = v
+                added += 1
+                
+        if added > 0:
+            self._persist_to_db()
+            messagebox.showinfo("Auto-Import", f"Se han importado {added} configuraciones correctamente.")
+            self._refresh_list()
+        else:
+            messagebox.showinfo("Auto-Import", "No hay configuraciones nuevas que importar (las encontradas ya existen).")
+            
+    def _persist_to_db(self):
+        from core.config_manager import save_repo_configs
+        save_repo_configs(self._config_key, self._configs)
+        
+    def _on_window_close(self):
+        self._check_unsaved_changes()
+        if self._on_close:
+            self._on_close()
+        self.destroy()

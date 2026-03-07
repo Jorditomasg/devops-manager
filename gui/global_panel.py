@@ -275,7 +275,7 @@ class GlobalPanel(ctk.CTkFrame):
             self._log(f"[global] Installing dependencies for {len(selected)} repos...")
 
         for card in selected:
-            card.install_dependencies()
+            card.install_dependencies(skip_if_installed=True)
 
     def _start_selected(self):
         """Start all selected repos."""

@@ -11,6 +11,27 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
 
+import traceback
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """Global exception handler to ensure everything shuts down on fatal error."""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    print("Fatal Error encountered. Shutting down services...", file=sys.stderr)
+    traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stderr)
+    
+    # Give it a last effort to kill from the imported service launcher fallback
+    try:
+        from core.service_launcher import ServiceLauncher
+        # Since service launcher registers an atexit hook, we just need to forcefully quit
+    except Exception:
+        pass
+        
+    os._exit(1)
+
+
 def main():
     # Set Windows AppUserModelID early so custom icon is used in taskbar
     if sys.platform == 'win32':
@@ -20,6 +41,9 @@ def main():
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         except Exception:
             pass
+
+    # Set global exception hook
+    sys.excepthook = handle_exception
 
     # Default workspace = parent directory of this tool
     workspace_dir = os.path.dirname(project_root)

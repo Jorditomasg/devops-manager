@@ -6,6 +6,7 @@ import subprocess
 import os
 import signal
 import threading
+import atexit
 from typing import Optional, Callable
 from dataclasses import dataclass, field
 
@@ -30,6 +31,7 @@ class ServiceLauncher:
     def __init__(self):
         self._services: dict[str, RunningService] = {}
         self._lock = threading.Lock()
+        atexit.register(self.stop_all)
 
     def get_service(self, name: str) -> Optional[RunningService]:
         """Get a running service by name."""
@@ -178,10 +180,20 @@ class ServiceLauncher:
                     line = line.strip()
                     if log:
                         log(line)
-                    if 'Compiled successfully' in line or 'compiled successfully' in line.lower():
+                    lower_line = line.lower()
+                    success_keywords = [
+                        'compiled successfully',
+                        'project is running at',
+                        'server is listening',
+                        'application bundle generation complete',
+                        'listening on http',
+                        'listening at http'
+                    ]
+                    
+                    if any(keyword in lower_line for keyword in success_keywords):
                         svc.status = 'running'
                         if log:
-                            log(f"[svc] ✅ {name} compiled successfully on :4200")
+                            log(f"[svc] ✅ {name} started successfully")
                         if status_callback:
                             status_callback(name, 'running')
 
@@ -214,7 +226,7 @@ class ServiceLauncher:
         if not os.path.isfile(mvnw):
             mvnw = 'mvn'
 
-        cmd = [mvnw, 'install', '-DskipTests']
+        cmd = [mvnw, 'clean', 'install', '-DskipTests', '-B']
 
         # Build environment with specific JAVA_HOME
         from core.java_manager import build_java_env

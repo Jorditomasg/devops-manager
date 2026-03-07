@@ -212,3 +212,113 @@ def get_remote_url(repo_path: str) -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+def get_commits_behind(repo_path: str, branch: str) -> int:
+    """Get number of commits the local branch is behind its remote tracking branch."""
+    try:
+        # Check if origin/branch exists
+        result = subprocess.run(
+            ['git', 'rev-parse', '--verify', f'origin/{branch}'],
+            capture_output=True, text=True, cwd=repo_path,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        if result.returncode != 0:
+            return 0  # No remote branch or error
+
+        result = subprocess.run(
+            ['git', 'rev-list', '--count', f'HEAD..origin/{branch}'],
+            capture_output=True, text=True, cwd=repo_path, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip())
+    except Exception:
+        pass
+    return 0
+
+
+def count_modified_files(repo_path: str) -> int:
+    """Count number of modified/untracked files."""
+    try:
+        result = subprocess.run(
+            ['git', 'status', '--porcelain'],
+            capture_output=True, text=True, cwd=repo_path, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        if result.returncode == 0:
+            lines = [line for line in result.stdout.splitlines() if line.strip()]
+            return len(lines)
+    except Exception:
+        pass
+    return 0
+
+
+def get_local_changes(repo_path: str, ignore_files: list[str] = None) -> list[str]:
+    """Get a list of modified files, ignoring specific filenames."""
+    if ignore_files is None:
+        ignore_files = []
+    changes = []
+    try:
+        result = subprocess.run(
+            ['git', 'status', '--porcelain'],
+            capture_output=True, text=True, cwd=repo_path, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if not line.strip():
+                    continue
+                # Status is 2 chars, then space, then filename
+                file_path = line[3:].strip()
+                filename = os.path.basename(file_path)
+                
+                if filename not in ignore_files:
+                    changes.append(file_path)
+    except Exception:
+        pass
+    return changes
+
+
+def clean_repo(repo_path: str, log: LogCallback = None) -> tuple[bool, str]:
+    """Discard all local changes (reset hard and clean)."""
+    name = os.path.basename(repo_path)
+    try:
+        if log:
+            log(f"[git] Limpiando {name} (reset --hard & clean)...")
+            
+        # Add all to track them (so new files are discarded by reset/clean properly)
+        subprocess.run(
+            ['git', 'add', '-A'],
+            capture_output=True, cwd=repo_path,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        
+        # Reset hard
+        res1 = subprocess.run(
+            ['git', 'reset', '--hard', 'HEAD'],
+            capture_output=True, text=True, cwd=repo_path, timeout=30,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        
+        # Clean untracked
+        res2 = subprocess.run(
+            ['git', 'clean', '-fd'],
+            capture_output=True, text=True, cwd=repo_path, timeout=30,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        
+        success = res1.returncode == 0 and res2.returncode == 0
+        msg = res1.stdout.strip() + '\n' + res2.stdout.strip()
+        
+        if log:
+            if success:
+                log(f"[git] {name} limpio correctamente.")
+            else:
+                log(f"[git] Error limpiando {name}: {res1.stderr.strip()} {res2.stderr.strip()}")
+                
+        return success, msg
+    except Exception as e:
+        if log:
+            log(f"[git] Clean error: {e}")
+        return False, str(e)
