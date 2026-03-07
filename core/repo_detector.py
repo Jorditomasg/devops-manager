@@ -30,6 +30,7 @@ class RepoInfo:
     run_command: Optional[str] = None
     run_profile_flag: Optional[str] = None
     environment_files: list = field(default_factory=list)
+    java_version: Optional[str] = None
 
 
 def detect_repos(workspace_dir: str) -> list[RepoInfo]:
@@ -147,6 +148,8 @@ def _build_spring_boot_repo(name: str, path: str, resources_dir: str, main_confi
         repo.run_command = 'mvn spring-boot:run'
         repo.run_profile_flag = '-Dspring-boot.run.profiles='
 
+    repo.java_version = _extract_java_version_from_pom(path)
+
     return repo
 
 
@@ -220,6 +223,8 @@ def _build_maven_lib_repo(name: str, path: str) -> RepoInfo:
     resources_dir = os.path.join(path, 'src', 'main', 'resources')
     if os.path.isdir(resources_dir):
         repo.profiles = _detect_spring_profiles(resources_dir)
+
+    repo.java_version = _extract_java_version_from_pom(path)
 
     return repo
 
@@ -344,6 +349,24 @@ def _get_git_remote(path: str) -> Optional[str]:
         )
         if result.returncode == 0:
             return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+def _extract_java_version_from_pom(path: str) -> Optional[str]:
+    """Extract java.version or maven.compiler.source from pom.xml."""
+    pom_path = os.path.join(path, 'pom.xml')
+    if not os.path.isfile(pom_path):
+        return None
+    try:
+        with open(pom_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            match = re.search(r'<java\.version>([^<]+)</java\.version>', content)
+            if match:
+                return match.group(1).strip()
+            match = re.search(r'<maven\.compiler\.source>([^<]+)</maven\.compiler\.source>', content)
+            if match:
+                return match.group(1).strip()
     except Exception:
         pass
     return None

@@ -505,14 +505,9 @@ class ProfileDialog(ctk.CTkToplevel):
             messagebox.showerror("Error", "Archivo de configuración inválido")
             return
 
-        # Save it locally first
-        from core.profile_manager import save_profile
         profile_name = data.get('name', os.path.splitext(os.path.basename(filepath))[0])
-        save_profile(profile_name, data)
-
-        if self._log:
-            self._log(f"Configuración importada: {profile_name}")
-        self._refresh_list()
+        # Only parse and optionally import, do not save yet until accepted.
+        data['name'] = profile_name
 
         # Show the import options dialog
         self._apply_profile_data(data)
@@ -785,41 +780,29 @@ class ImportOptionsDialog(ctk.CTkToplevel):
                     _update_progress(f"✅ Clonado: {m['name']}")
                     self._did_clone = True
 
-            # 2) Install dependencies
+            # 2) Install dependencies in background
             if self._install_var.get() and self._missing:
-                import subprocess
-                for m in self._missing:
-                    dest = os.path.join(self._workspace_dir, m['name'])
-                    repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
-                    rtype = repo_cfg.get('type', '')
-
-                    if rtype == 'angular':
-                        if self._log:
-                            self._log(f"[import] npm ci en {m['name']}...")
-                        try:
-                            subprocess.run(
-                                ['npm', 'ci'], cwd=dest, shell=True,
-                                capture_output=True, timeout=300
-                            )
-                        except Exception:
-                            pass
-                        _update_progress(f"📦 npm ci: {m['name']}")
-
-                    elif rtype in ('spring-boot', 'maven-lib'):
-                        if self._log:
-                            self._log(f"[import] mvn install en {m['name']}...")
-                        mvnw = os.path.join(dest, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')
-                        cmd = [mvnw, 'install', '-DskipTests'] if os.path.isfile(mvnw) else ['mvn', 'install', '-DskipTests']
-                        try:
-                            subprocess.run(
-                                cmd, cwd=dest,
-                                capture_output=True, timeout=600
-                            )
-                        except Exception:
-                            pass
-                        _update_progress(f"🔧 mvn install: {m['name']}")
-                    else:
-                        _update_progress(f"⏭ {m['name']}: sin instalación")
+                app_instance = self.master if hasattr(self, 'master') else None
+                launcher = getattr(app_instance, '_launcher', None)
+                if launcher:
+                    for m in self._missing:
+                        dest = os.path.join(self._workspace_dir, m['name'])
+                        repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
+                        rtype = repo_cfg.get('type', '')
+                        java_ver = repo_cfg.get('java_version', '')
+                        
+                        # Iniciar la instalación usando el service launcher para que se vea en el log de cada card y no bloquee
+                        if rtype == 'angular':
+                            _update_progress(f"Iniciando instalación npm para {m['name']}...")
+                            launcher.start_angular_install(m['name'], dest, log=self._log)
+                        elif rtype in ('spring-boot', 'maven-lib'):
+                            _update_progress(f"Iniciando instalación mvn para {m['name']}...")
+                            launcher.start_maven_install(m['name'], dest, log=self._log, java_home="")
+                        else:
+                            _update_progress(f"⏭ {m['name']}: sin instalación")
+                else:
+                    if self._log:
+                         self._log("[import] Error: service launcher not found, cannot install dependencies in background.")
 
             # 3) Import DB presets
             if self._import_db_var.get():

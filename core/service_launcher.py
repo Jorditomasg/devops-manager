@@ -215,6 +215,62 @@ class ServiceLauncher:
         thread.start()
         return True
 
+    def start_angular_install(self, name: str, repo_path: str,
+                              log: LogCallback = None,
+                              status_callback: Callable = None) -> bool:
+        """Run npm ci as a service (blocking or long-running)."""
+        if self.is_running(name):
+            return False
+
+        cmd = ['npm', 'ci']
+
+        svc = RunningService(name=name, repo_path=repo_path, port=0,
+                             profile='', status='starting')
+        self._services[name] = svc
+
+        if log:
+            log(f"[svc] Running npm ci for {name}...")
+        if status_callback:
+            status_callback(name, 'starting')
+
+        def _run():
+            try:
+                process = subprocess.Popen(
+                    cmd, cwd=repo_path,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1, shell=True,
+                    creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
+                )
+                svc.process = process
+
+                for line in iter(process.stdout.readline, ''):
+                    if not line:
+                        break
+                    line = line.strip()
+                    if log:
+                        log(line)
+                    if 'added' in line and 'packages' in line:
+                        if log:
+                            log(f"[svc] ✅ {name} installed successfully")
+
+                process.wait()
+                svc.status = 'stopped'
+                if status_callback:
+                    status_callback(name, 'stopped')
+                if log:
+                    log(f"[svc] {name} npm ci finished (exit code: {process.returncode})")
+            except Exception as e:
+                svc.status = 'error'
+                if status_callback:
+                    status_callback(name, 'error')
+                if log:
+                    log(f"[svc] {name} error: {e}")
+
+        thread = threading.Thread(target=_run, daemon=True, name=f'svc-{name}')
+        svc.thread = thread
+        thread.start()
+        return True
+
     def start_maven_install(self, name: str, repo_path: str,
                             log: LogCallback = None,
                             status_callback: Callable = None, java_home: str = "") -> bool:

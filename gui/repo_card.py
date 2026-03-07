@@ -805,6 +805,21 @@ class RepoCard(ctk.CTkFrame):
             )
             self._java_combo.pack(side="left", padx=(6, 12))
 
+            if getattr(repo, 'java_version', None):
+                self._java_hint_label = ctk.CTkLabel(row_java, text=f"Recomendado (pom.xml): Java {repo.java_version}", font=(FONT_FAMILY, 11), text_color="#6b7280")
+                self._java_hint_label.pack(side="left", padx=(0, 10))
+
+                def _on_java_change(*args):
+                    if not hasattr(self, '_java_hint_label') or not self._java_hint_label.winfo_exists():
+                        return
+                    if self.selected_java_var.get() == "Sistema (Por Defecto)":
+                        self._java_hint_label.pack(side="left", padx=(0, 10))
+                    else:
+                        self._java_hint_label.pack_forget()
+
+                self.selected_java_var.trace("w", _on_java_change)
+                _on_java_change()
+
         if has_row_java:
             row_java.pack(fill="x", pady=(4, 0))
 
