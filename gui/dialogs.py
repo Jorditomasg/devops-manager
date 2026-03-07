@@ -542,8 +542,9 @@ class ImportOptionsDialog(ctk.CTkToplevel):
                  on_complete=None):
         super().__init__(parent)
         self.title("Revisar y Aplicar Configuración")
-        self.geometry("580x600")
-        self.resizable(False, False)
+        self.geometry("580x650")
+        self.minsize(500, 500)
+        self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
 
@@ -568,138 +569,168 @@ class ImportOptionsDialog(ctk.CTkToplevel):
             if p_java not in self._local_javas:
                 self._missing_javas.append(p_java)
 
-        ctk.CTkLabel(self, text="� Cambios a aplicar:",
-                     font=(FONT_FAMILY, 15, "bold")).pack(pady=(15, 5))
+        # ── Main Container ──
+        self._main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self._main_container.pack(fill="both", expand=True)
 
-        # ── Changes Preview ──
-        if changes_text:
-            textbox = ctk.CTkTextbox(self, font=("Consolas", 11), wrap="word", height=150)
-            textbox.pack(fill="both", expand=True, padx=20, pady=(0, 10))
-            textbox.insert("1.0", changes_text)
-            textbox.configure(state="disabled")
-
-        ctk.CTkLabel(self, text="�📥 Opciones de Importación",
-                     font=(FONT_FAMILY, 14, "bold")).pack(pady=(5, 5))
-
-        content = ctk.CTkFrame(self, fg_color="transparent")
-        content.pack(fill="x", padx=20)
-
-        # ── Missing repos ──
-        if self._missing:
-            ctk.CTkLabel(content, text="Repos que no existen en el workspace:",
-                         font=(FONT_FAMILY, 12, "bold"),
-                         text_color="#f59e0b").pack(anchor="w", pady=(5, 3))
-
-            missing_frame = ctk.CTkScrollableFrame(content, height=80,
-                                                    corner_radius=6)
-            missing_frame.pack(fill="x", pady=(0, 5))
-
-            for m in self._missing:
-                url_hint = m['git_url'][:60] + '...' if len(m['git_url']) > 60 else m['git_url']
-                ctk.CTkLabel(
-                    missing_frame,
-                    text=f"  • {m['name']}  ({url_hint})",
-                    font=(FONT_FAMILY, 10), text_color="#94a3b8",
-                    anchor="w"
-                ).pack(anchor="w")
-
-            self._clone_var = ctk.BooleanVar(value=True)
-            ctk.CTkCheckBox(
-                content, text="🔗 Clonar repos faltantes",
-                variable=self._clone_var,
-                font=(FONT_FAMILY, 12), checkbox_width=20, checkbox_height=20
-            ).pack(anchor="w", pady=(2, 0))
-
-            self._install_var = ctk.BooleanVar(value=True)
-            ctk.CTkCheckBox(
-                content, text="📦 Instalar dependencias (npm ci / mvn install)",
-                variable=self._install_var,
-                font=(FONT_FAMILY, 12), checkbox_width=20, checkbox_height=20
-            ).pack(anchor="w", pady=(2, 0))
-        else:
-            self._clone_var = ctk.BooleanVar(value=False)
-            self._install_var = ctk.BooleanVar(value=False)
-
-        # ── Missing Java Versions ──
-        if self._missing_javas:
-            ctk.CTkLabel(content, text="Versiones de Java requeridas pero no encontradas:",
-                         font=(FONT_FAMILY, 12, "bold"),
-                         text_color="#f59e0b").pack(anchor="w", pady=(10, 3))
-                         
-            java_map_frame = ctk.CTkFrame(content, fg_color="transparent")
-            java_map_frame.pack(fill="x", pady=(0, 5))
-            
-            self._java_mappings = {}
-            for missing_jv in self._missing_javas:
-                row = ctk.CTkFrame(java_map_frame, fg_color="transparent")
-                row.pack(fill="x", pady=2)
-                
-                ctk.CTkLabel(row, text=f"• {missing_jv} ➔", width=120, anchor="e").pack(side="left", padx=(0, 10))
-                
-                options = ["Sistema (Por Defecto)"] + self._local_javas
-                var = ctk.StringVar(value="Sistema (Por Defecto)")
-                combo = ctk.CTkComboBox(row, values=options, variable=var, width=170)
-                combo.pack(side="left")
-                self._java_mappings[missing_jv] = var
-
-        # ── DB Presets ──
-        if has_db_presets:
-            db_presets = profile_data.get('db_presets', {})
-            names = ", ".join(db_presets.keys())
-            self._import_db_var = ctk.BooleanVar(value=True)
-            ctk.CTkCheckBox(
-                content,
-                text=f"🗄 Importar presets de BD ({names})",
-                variable=self._import_db_var,
-                font=(FONT_FAMILY, 12), checkbox_width=20, checkbox_height=20
-            ).pack(anchor="w", pady=(10, 0))
-        else:
-            self._import_db_var = ctk.BooleanVar(value=False)
-
-        # ── Config files ──
-        if has_config_files:
-            n_files = sum(
-                len(r.get('config_files', {}))
-                for r in profile_data.get('repos', {}).values()
-            )
-            self._overwrite_configs_var = ctk.BooleanVar(value=True)
-            ctk.CTkCheckBox(
-                content,
-                text=f"📝 Sobrescribir archivos de config ({n_files} archivos)",
-                variable=self._overwrite_configs_var,
-                font=(FONT_FAMILY, 12), checkbox_width=20, checkbox_height=20
-            ).pack(anchor="w", pady=(10, 0))
-        else:
-            self._overwrite_configs_var = ctk.BooleanVar(value=False)
-
-        # ── Progress ──
-        self._progress_label = ctk.CTkLabel(
-            content, text="", font=(FONT_FAMILY, 10), text_color="#94a3b8"
-        )
-        self._progress_label.pack(anchor="w", pady=(15, 2))
-
-        self._progress = ctk.CTkProgressBar(content, width=460)
-        self._progress.pack(fill="x", pady=(0, 5))
-        self._progress.set(0)
-
-        # ── Buttons ──
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=(0, 15))
-
+        # ── Buttons (Bottom) ──
+        self._btn_frame = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._btn_frame.pack(side="bottom", fill="x", padx=20, pady=10)
+        
         self._apply_btn = ctk.CTkButton(
-            btn_frame, text="✅ Aplicar", width=120,
+            self._btn_frame, text="✅ Aceptar y Aplicar", width=150, height=36,
             fg_color="#064e3b", hover_color="#047857",
             border_width=1, border_color="#10b981",
+            font=("Segoe UI", 12, "bold"),
             command=self._apply
         )
         self._apply_btn.pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
-            btn_frame, text="Cancelar", width=100,
+            self._btn_frame, text="Cancelar", width=100, height=36,
             fg_color="#1e293b", hover_color="#475569",
             border_width=1, border_color="#64748b",
             command=self.destroy
         ).pack(side="right")
+
+        # ── Main Content Area (Scrollable) ──
+        main_scroll = ctk.CTkScrollableFrame(self._main_container, fg_color="transparent")
+        main_scroll.pack(side="top", fill="both", expand=True, padx=5, pady=(5, 0))
+
+        ctk.CTkLabel(main_scroll, text="📥 Opciones de Importación",
+                     font=(FONT_FAMILY, 15, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+
+        # Checkboxes and Map Frame
+        options_frame = ctk.CTkFrame(main_scroll, corner_radius=8)
+        options_frame.pack(fill="x", padx=10, pady=(0, 15))
+
+        # ── Missing repos ──
+        self._clone_var = ctk.BooleanVar(value=True if self._missing else False)
+        self._install_var = ctk.BooleanVar(value=True if self._missing else False)
+
+        if self._missing:
+            ctk.CTkLabel(options_frame, text="Repositorios faltantes encontrados:",
+                         font=(FONT_FAMILY, 12, "bold"), text_color="#f59e0b").pack(anchor="w", padx=10, pady=(10, 0))
+
+            missing_txt = ", ".join([m['name'] for m in self._missing])
+            if len(missing_txt) > 80: missing_txt = missing_txt[:77] + "..."
+            ctk.CTkLabel(options_frame, text=f"• {missing_txt}",
+                         font=(FONT_FAMILY, 11), text_color="#94a3b8").pack(anchor="w", padx=20)
+
+            ctk.CTkCheckBox(options_frame, text="🔗 Clonar repos faltantes", variable=self._clone_var,
+                            command=self._update_preview, checkbox_width=20, checkbox_height=20
+                            ).pack(anchor="w", padx=10, pady=(5, 2))
+
+            ctk.CTkCheckBox(options_frame, text="📦 Instalar dependencias (npm/mvn)", variable=self._install_var,
+                            command=self._update_preview, checkbox_width=20, checkbox_height=20
+                            ).pack(anchor="w", padx=10, pady=(2, 10))
+
+        # ── DB Presets ──
+        self._import_db_var = ctk.BooleanVar(value=True if has_db_presets else False)
+        if has_db_presets:
+            names = ", ".join(profile_data.get('db_presets', {}).keys())
+            ctk.CTkCheckBox(options_frame, text=f"🗄 Importar presets de BD ({names})",
+                            variable=self._import_db_var, command=self._update_preview,
+                            checkbox_width=20, checkbox_height=20).pack(anchor="w", padx=10, pady=5)
+
+        # ── Config files ──
+        self._overwrite_configs_var = ctk.BooleanVar(value=True if has_config_files else False)
+        if has_config_files:
+            n_files = sum(len(r.get('config_files', {})) for r in profile_data.get('repos', {}).values())
+            ctk.CTkCheckBox(options_frame, text=f"📝 Sobrescribir {n_files} archivos de config (yml/ts)",
+                            variable=self._overwrite_configs_var, command=self._update_preview,
+                            checkbox_width=20, checkbox_height=20).pack(anchor="w", padx=10, pady=(5, 10))
+
+        # ── Missing Java Versions ──
+        self._java_mappings = {}
+        if self._missing_javas:
+            ctk.CTkLabel(options_frame, text="Asociar versiones de Java locales:",
+                         font=(FONT_FAMILY, 12, "bold"), text_color="#f59e0b").pack(anchor="w", padx=10, pady=(5, 0))
+
+            for missing_jv in self._missing_javas:
+                row = ctk.CTkFrame(options_frame, fg_color="transparent")
+                row.pack(fill="x", padx=15, pady=2)
+                ctk.CTkLabel(row, text=f"Perfil pide: {missing_jv} ➔", width=140, anchor="e").pack(side="left", padx=(0, 10))
+                options = ["Sistema (Por Defecto)"] + self._local_javas
+                var = ctk.StringVar(value="Sistema (Por Defecto)")
+                combo = ctk.CTkComboBox(row, values=options, variable=var, width=170)
+                combo.pack(side="left")
+                self._java_mappings[missing_jv] = var
+                
+                # Buscar qué repositorios necesitan esta versión
+                repos_needing_java = []
+                for repo_name, repo_cfg in profile_data.get('repos', {}).items():
+                    if repo_cfg.get('java_version') == missing_jv:
+                        repos_needing_java.append(repo_name)
+                
+                if repos_needing_java:
+                    repos_txt = " usará en: " + ", ".join(repos_needing_java)
+                    if len(repos_txt) > 50:
+                        repos_txt = repos_txt[:47] + "..."
+                    ctk.CTkLabel(row, text=repos_txt, font=("Consolas", 10), text_color="#888").pack(side="left", padx=(10, 0))
+            ctk.CTkLabel(options_frame, text="").pack(pady=2)
+
+        # ── Changes Preview ──
+        ctk.CTkLabel(main_scroll, text="📋 Resumen de Cambios",
+                     font=(FONT_FAMILY, 14, "bold")).pack(anchor="w", padx=10, pady=(5, 5))
+
+        self._preview_box = ctk.CTkTextbox(main_scroll, font=("Consolas", 11), wrap="none", height=150)
+        self._preview_box.pack(fill="x", padx=10, pady=(0, 10))
+
+        # ── Progress ──
+        self._progress_label = ctk.CTkLabel(main_scroll, text="", font=(FONT_FAMILY, 10), text_color="#94a3b8")
+        self._progress_label.pack(anchor="w", padx=10, pady=(5, 0))
+        self._progress = ctk.CTkProgressBar(main_scroll)
+        self._progress.pack(fill="x", padx=10, pady=(0, 10))
+        self._progress.set(0)
+
+        # Initial preview population
+        self._base_changes_text = changes_text
+        self._update_preview()
+
+    def _update_preview(self):
+        """Update the preview textbox dynamically based on selected checkboxes."""
+        self._preview_box.configure(state="normal")
+        self._preview_box.delete("1.0", "end")
+
+        lines = []
+
+        if self._base_changes_text and "Ningún cambio detectado" not in self._base_changes_text:
+            lines.append("--- CAMBIOS EN REPOSITORIOS (RAMA / PERFIL) ---")
+            for line in self._base_changes_text.splitlines():
+                if "Clonar nuevo repo" not in line and "Importar presets de BD" not in line and "Sobrescribir archivos" not in line and line.strip() != "":
+                    lines.append(line)
+            lines.append("")
+
+        if self._clone_var.get() and self._missing:
+            lines.append("--- CLONACIÓN ---")
+            for m in self._missing:
+                repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
+                java_ver = repo_cfg.get('java_version')
+                req_java_text = f" | Usa Java: {java_ver}" if java_ver and java_ver != "Sistema (Por Defecto)" else ""
+                lines.append(f"➕ Se clonará: {m['name']} (rama: {m.get('branch', 'default')}){req_java_text}")
+            lines.append("")
+
+        if self._install_var.get() and self._missing:
+            lines.append("--- INSTALACIÓN ---")
+            for m in self._missing:
+                lines.append(f"� Se ejecutarán comandos de instalación en: {m['name']}")
+            lines.append("")
+
+        if self._import_db_var.get():
+            db_presets = self._profile_data.get('db_presets', {})
+            names = ", ".join(db_presets.keys())
+            lines.append(f"🗄 Se importarán los presets de BD: {names}\n")
+
+        if self._overwrite_configs_var.get():
+            n_files = sum(len(r.get('config_files', {})) for r in self._profile_data.get('repos', {}).values())
+            lines.append(f"📝 Se sobrescribirán {n_files} archivos de configuración locales.\n")
+
+        if not lines:
+            lines.append("✅ Ningún cambio seleccionado.")
+
+        self._preview_box.insert("1.0", "\n".join(lines).strip())
+        self._preview_box.configure(state="disabled")
 
     def _apply(self):
         """Run all selected import operations."""
