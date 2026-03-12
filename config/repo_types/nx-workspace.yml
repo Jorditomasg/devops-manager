@@ -1,0 +1,35 @@
+# Nx Monorepo Repository Definition
+type: "nx-workspace"
+priority: 50
+icon: "🅰"
+color: "#ef4444"
+
+detection:
+  required_files:
+    - "package.json"
+    - "nx.json"
+
+commands:
+  install_cmd: "npm ci"
+  reinstall_cmd: "rmdir /s /q node_modules & npm i"
+  # This uses a variable `{main_app}` that will be resolved by the python script reading the 'apps' folder
+  start_cmd: "npx nx serve {main_app}"
+  profile_flag: "--configuration="
+
+env_files:
+  patterns:
+    - "environment*.ts"
+    - ".env"
+    - ".env.*"
+  exclude_dirs:
+    - "node_modules"
+    - ".git"
+    - "dist"
+
+ui:
+  selectors:
+    - label: "Env:"
+  install:
+    label_missing: "Install"
+    label_ok: "Reinstall ✓"
+    tooltip: "npm ci // npm install --yes --legacy-peer-deps"

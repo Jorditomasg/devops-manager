@@ -1,0 +1,30 @@
+# Maven Library Repository Definition
+type: "maven-lib"
+priority: 20
+icon: "📦"
+color: "#f97316"
+
+detection:
+  required_files:
+    - "pom.xml"
+  exclude_files: []
+
+heuristics:
+  must_have_directories:
+    - "src"
+  must_not_have_directories:
+    - "src/main/resources"
+
+commands:
+  install_cmd: "mvn clean install -DskipTests -B"
+  start_cmd: "mvn clean install -DskipTests -B"
+  windows_start_cmd: "mvnw.cmd clean install -DskipTests -B"
+  unix_start_cmd: "./mvnw clean install -DskipTests -B"
+  profile_flag: ""
+
+env_files:
+  patterns: []
+  exclude_dirs: []
+
+features:
+  - "java_version"

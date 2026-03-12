@@ -1,0 +1,38 @@
+# React Repository Definition (Example of scalability without code changes)
+type: "react"
+icon: "⚛\ufe0f"
+color: "#61dafb"
+
+detection:
+  required_files:
+    - "package.json"
+  exclude_files:
+    - "angular.json"
+    - "nx.json"
+    
+# We can use heuristics to further identify React vs generic Node
+heuristics:
+  must_match_package_json:
+    - "react"
+    - "react-dom"
+
+commands:
+  install_cmd: "npm ci"
+  reinstall_cmd: "rmdir /s /q node_modules & npm i"
+  start_cmd: "npm start"
+  profile_flag: ""
+
+env_files:
+  patterns:
+    - ".env*"
+  exclude_dirs:
+    - "node_modules"
+    - ".git"
+
+ui:
+  selectors:
+    - label: "Env:"
+  install:
+    label_missing: "Install"
+    label_ok: "Reinstall ✓"
+    tooltip: "npm install"

@@ -1,0 +1,31 @@
+# Angular Repository Definition
+type: "angular"
+priority: 40
+icon: "🅰"
+color: "#ef4444"
+
+detection:
+  required_files:
+    - "package.json"
+    - "angular.json"
+
+commands:
+  install_cmd: "npm i"
+  reinstall_cmd: "rmdir /s /q node_modules & npm i"
+  start_cmd: "npx ng serve"
+  profile_flag: "--configuration="
+
+env_files:
+  patterns:
+    - "environment*.ts"
+  exclude_dirs:
+    - "node_modules"
+    - ".git"
+
+ui:
+  selectors:
+    - label: "Env:"
+  install:
+    label_missing: "Install"
+    label_ok: "Reinstall ✓"
+    tooltip: "npm install --yes --legacy-peer-deps"

@@ -6,31 +6,12 @@ import os
 import re
 import yaml
 import subprocess
+from domain.models.repo_info import RepoInfo
 from dataclasses import dataclass, field
 from typing import Optional
 
-
-@dataclass
-class RepoInfo:
-    """Holds all detected metadata for a single repository."""
-    name: str
-    path: str
-    repo_type: str  # 'spring-boot', 'angular', 'docker-infra', 'maven-lib'
-    profiles: list = field(default_factory=list)
-    has_database: bool = False
-    database_name: Optional[str] = None
-    database_url: Optional[str] = None
-    has_seeds: bool = False
-    seed_dirs: list = field(default_factory=list)
-    docker_compose_files: list = field(default_factory=list)
-    server_port: Optional[int] = None
-    context_path: Optional[str] = None
-    git_remote_url: Optional[str] = None
-    current_branch: Optional[str] = None
-    run_command: Optional[str] = None
-    run_profile_flag: Optional[str] = None
-    environment_files: list = field(default_factory=list)
-    java_version: Optional[str] = None
+MVNW_CMD_WINDOWS = 'mvnw.cmd'
+CONFIG_FLAG = '--configuration='
 
 
 def detect_repos(workspace_dir: str) -> list[RepoInfo]:
@@ -70,12 +51,16 @@ def _classify_repo(name: str, path: str) -> Optional[RepoInfo]:
     has_angular = os.path.isfile(os.path.join(path, 'angular.json'))
     dc_files = _find_docker_compose_files(path)
 
+    repo = None
+
     # Angular / Nx project
     if has_package_json and (has_nx or has_angular):
-        return _build_angular_repo(name, path)
+            repo = _build_angular_repo(name, path)
+            if has_nx:
+                 repo.repo_type = 'nx-workspace'
 
     # Spring Boot project
-    if has_pom:
+    elif has_pom:
         resources_dir = os.path.join(path, 'src', 'main', 'resources')
         app_yml = os.path.join(resources_dir, 'application.yml')
         app_yaml = os.path.join(resources_dir, 'application.yaml')
@@ -90,16 +75,65 @@ def _classify_repo(name: str, path: str) -> Optional[RepoInfo]:
             main_config_file = app_properties
             
         if main_config_file:
-            return _build_spring_boot_repo(name, path, resources_dir, main_config_file)
+            repo = _build_spring_boot_repo(name, path, resources_dir, main_config_file)
         else:
             # Maven library (no application config with server config)
-            return _build_maven_lib_repo(name, path)
+            repo = _build_maven_lib_repo(name, path)
 
     # Docker infra project (has docker-compose but no pom/package.json)
-    if dc_files:
-        return _build_docker_infra_repo(name, path, dc_files)
+    elif dc_files:
+        repo = _build_docker_infra_repo(name, path, dc_files)
 
-    return None
+    # Inyectar ui_config desde el YAML correspondiente
+    if repo:
+        try:
+            # Asumimos que la carpeta config está a nivel de src (arriba de core)
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            config_file = os.path.join(base_dir, 'config', 'repo_types', f"{repo.repo_type}.yml")
+            if os.path.isfile(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    yml_data = yaml.safe_load(f) or {}
+                    if 'ui' in yml_data:
+                        repo.ui_config = yml_data['ui']
+                        
+                    if 'features' in yml_data:
+                        repo.features = yml_data['features']
+                        
+                    if 'commands' in yml_data:
+                        cmds = yml_data['commands']
+                        repo.run_install_cmd = cmds.get('install_cmd')
+                        repo.run_reinstall_cmd = cmds.get('reinstall_cmd')
+                        
+                        cmd = cmds.get('start_cmd')
+                        
+                        if os.name == 'nt' and 'windows_start_cmd' in cmds:
+                            if os.path.isfile(os.path.join(path, MVNW_CMD_WINDOWS)) or MVNW_CMD_WINDOWS not in cmds['windows_start_cmd']:
+                                cmd = cmds['windows_start_cmd']
+                        elif os.name != 'nt' and 'unix_start_cmd' in cmds:
+                            if os.path.isfile(os.path.join(path, 'mvnw')) or './mvnw' not in cmds['unix_start_cmd']:
+                                cmd = cmds['unix_start_cmd']
+                                
+                        if cmd:
+                            if '{main_app}' in cmd and repo.repo_type == 'nx-workspace':
+                                apps_dir = os.path.join(path, 'apps')
+                                main_app = ''
+                                if os.path.isdir(apps_dir):
+                                    app_names = [d for d in os.listdir(apps_dir) if os.path.isdir(os.path.join(apps_dir, d)) and not d.startswith('.')]
+                                    if app_names:
+                                        main_app = app_names[0]
+                                if main_app:
+                                    cmd = cmd.replace('{main_app}', main_app)
+                                else:
+                                    cmd = cmd.replace(' {main_app}', '')
+                            repo.run_command = cmd.strip()
+
+                        if 'profile_flag' in cmds:
+                            repo.run_profile_flag = cmds['profile_flag']
+        except Exception:
+            # Fallback seguro: ignora si no puede cargar
+            pass
+
+    return repo
 
 
 def _build_spring_boot_repo(name: str, path: str, resources_dir: str, main_config_file: str) -> RepoInfo:
@@ -139,9 +173,9 @@ def _build_spring_boot_repo(name: str, path: str, resources_dir: str, main_confi
     # Git remote
     repo.git_remote_url = _get_git_remote(path)
 
-    # Run command
-    mvnw = 'mvnw.cmd' if os.name == 'nt' else './mvnw'
-    if os.path.isfile(os.path.join(path, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')):
+    # Run command fallback
+    mvnw = MVNW_CMD_WINDOWS if os.name == 'nt' else './mvnw'
+    if os.path.isfile(os.path.join(path, MVNW_CMD_WINDOWS if os.name == 'nt' else 'mvnw')):
         repo.run_command = f'{mvnw} spring-boot:run'
         repo.run_profile_flag = '-Dspring-boot.run.profiles='
     else:
@@ -194,16 +228,16 @@ def _build_angular_repo(name: str, path: str) -> RepoInfo:
             if app_names:
                 main_app = app_names[0]
                 repo.run_command = f'npx nx serve {main_app}'
-                repo.run_profile_flag = '--configuration='
+                repo.run_profile_flag = CONFIG_FLAG
             else:
                 repo.run_command = 'npx nx serve'
-                repo.run_profile_flag = '--configuration='
+                repo.run_profile_flag = CONFIG_FLAG
         else:
             repo.run_command = 'npx nx serve'
-            repo.run_profile_flag = '--configuration='
+            repo.run_profile_flag = CONFIG_FLAG
     else:
         repo.run_command = 'ng serve'
-        repo.run_profile_flag = '--configuration='
+        repo.run_profile_flag = CONFIG_FLAG
 
     return repo
 
@@ -213,8 +247,8 @@ def _build_maven_lib_repo(name: str, path: str) -> RepoInfo:
     repo = RepoInfo(name=name, path=path, repo_type='maven-lib')
     repo.git_remote_url = _get_git_remote(path)
 
-    mvnw = 'mvnw.cmd' if os.name == 'nt' else './mvnw'
-    if os.path.isfile(os.path.join(path, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')):
+    mvnw = MVNW_CMD_WINDOWS if os.name == 'nt' else './mvnw'
+    if os.path.isfile(os.path.join(path, MVNW_CMD_WINDOWS if os.name == 'nt' else 'mvnw')):
         repo.run_command = f'{mvnw} clean install -DskipTests -B'
     else:
         repo.run_command = 'mvn clean install -DskipTests -B'

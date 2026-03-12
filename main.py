@@ -57,7 +57,26 @@ def main():
 
     # Import and launch
     from gui.app import DevOpsManagerApp
-    app = DevOpsManagerApp(workspace_dir=workspace_dir)
+    from application.services.project_analyzer import ProjectAnalyzerService
+    from infrastructure.process.process_manager import ProcessManager
+    from application.use_cases.manage_services_use_case import ManageServicesUseCase
+    
+    config_dir = os.path.join(project_root, "config")
+    project_analyzer = ProjectAnalyzerService(config_dir=config_dir)
+    
+    # We will instantiate ProcessManager globally, but UI app will handle repos for now.
+    # To avoid circularity in initialization, we pass ProjectAnalyzer to App.
+    # App detects repos, then we need to feed them to the Use Case.
+    process_manager = ProcessManager()
+    
+    app = DevOpsManagerApp(
+        workspace_dir=workspace_dir, 
+        project_analyzer=project_analyzer,
+        process_manager=process_manager
+    )
+    
+    # The Use Case needs the repositories. We will instantiate it inside the App or right after detection.
+    # For now, let app handle it or we pass a Factory.
     app.mainloop()
 
 

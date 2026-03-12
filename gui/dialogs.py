@@ -191,7 +191,7 @@ class ProfileDialog(ctk.CTkToplevel):
     def __init__(self, parent, workspace_dir: str, repos: list,
                  repo_cards: list = None, db_presets: dict = None,
                  log_callback=None, on_profile_loaded=None,
-                 on_rescan=None):
+                 on_rescan=None, on_profiles_changed=None):
         super().__init__(parent)
         self.title("Configuraciones Guardadas")
         self.geometry("580x520")
@@ -206,12 +206,16 @@ class ProfileDialog(ctk.CTkToplevel):
         self._log = log_callback
         self._on_profile_loaded = on_profile_loaded
         self._on_rescan = on_rescan
+        self._on_profiles_changed = on_profiles_changed
 
-        ctk.CTkLabel(self, text="💾 Configuraciones Guardadas",
+        self._main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
+
+        ctk.CTkLabel(self._main_scroll, text="💾 Configuraciones Guardadas",
                      font=(FONT_FAMILY, 16, "bold")).pack(pady=(15, 10))
 
         # ─── Save section ───
-        save_frame = ctk.CTkFrame(self, corner_radius=8)
+        save_frame = ctk.CTkFrame(self._main_scroll, corner_radius=8)
         save_frame.pack(fill="x", padx=20, pady=5)
 
         ctk.CTkLabel(save_frame, text="Guardar configuración actual:",
@@ -248,7 +252,7 @@ class ProfileDialog(ctk.CTkToplevel):
         ).pack(side="left")
 
         # ─── Load / Export section ───
-        load_frame = ctk.CTkFrame(self, corner_radius=8)
+        load_frame = ctk.CTkFrame(self._main_scroll, corner_radius=8)
         load_frame.pack(fill="x", padx=20, pady=5)
 
         ctk.CTkLabel(load_frame, text="Configuraciones guardadas:",
@@ -256,12 +260,16 @@ class ProfileDialog(ctk.CTkToplevel):
 
         from core.profile_manager import list_profiles
         profiles = list_profiles()
-
-        self._profile_list = ctk.CTkComboBox(
-            load_frame, values=profiles if profiles else ["(Sin configs)"],
-            width=300
+        
+        # Profile List (Scrollable)
+        self._profile_list_frame = ctk.CTkScrollableFrame(
+            load_frame, height=120, fg_color="#0f172a", 
+            border_width=1, border_color="#1e293b"
         )
-        self._profile_list.pack(padx=10, pady=5)
+        self._profile_list_frame.pack(fill="x", padx=10, pady=5)
+        
+        self._selected_profile = ctk.StringVar(value="")
+        self._refresh_list()
 
         btn_row = ctk.CTkFrame(load_frame, fg_color="transparent")
         btn_row.pack(pady=(0, 10))
@@ -288,7 +296,7 @@ class ProfileDialog(ctk.CTkToplevel):
         ).pack(side="left")
 
         # ─── Import section ───
-        import_frame = ctk.CTkFrame(self, corner_radius=8)
+        import_frame = ctk.CTkFrame(self._main_scroll, corner_radius=8)
         import_frame.pack(fill="x", padx=20, pady=5)
 
         ctk.CTkLabel(import_frame, text="Importar configuración externa:",
@@ -303,7 +311,7 @@ class ProfileDialog(ctk.CTkToplevel):
 
         # ─── Info ───
         ctk.CTkLabel(
-            self, text="💡 Guardar: guarda repos (URL, rama, env, cmd) + opciones BD/configs.\n"
+            self._main_scroll, text="💡 Guardar: guarda repos (URL, rama, env, cmd) + opciones BD/configs.\n"
                        "    Importar: permite clonar repos, instalar deps, aplicar configs.",
             font=(FONT_FAMILY, 10), text_color="#888",
             justify="left"
@@ -315,7 +323,13 @@ class ProfileDialog(ctk.CTkToplevel):
             messagebox.showwarning("Error", "Introduce un nombre para la configuración")
             return
 
-        from core.profile_manager import build_profile_data, save_profile
+        from core.profile_manager import build_profile_data, save_profile, list_profiles
+        
+        # Check if profile with this name already exists
+        existing_profiles = list_profiles()
+        if name in existing_profiles:
+            if not messagebox.askyesno("Sobrescribir", f"El perfil '{name}' ya existe.\n¿Deseas sobrescribirlo con los cambios actuales?"):
+                return
 
         include_db = self._include_db_var.get()
         include_files = self._include_files_var.get()
@@ -340,10 +354,14 @@ class ProfileDialog(ctk.CTkToplevel):
 
         messagebox.showinfo("Guardado", f"Configuración '{name}' guardada correctamente")
         self._refresh_list()
+        
+        if self._on_profiles_changed:
+            self._on_profiles_changed()
 
     def _load_profile(self):
-        name = self._profile_list.get()
+        name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
+            messagebox.showwarning("Aviso", "Selecciona un perfil de la lista primero")
             return
 
         from core.profile_manager import load_profile
@@ -457,8 +475,9 @@ class ProfileDialog(ctk.CTkToplevel):
         self.destroy()
 
     def _delete_profile(self):
-        name = self._profile_list.get()
+        name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
+            messagebox.showwarning("Aviso", "Selecciona un perfil de la lista primero")
             return
 
         if messagebox.askyesno("Confirmar", f"¿Eliminar la configuración '{name}'?"):
@@ -467,10 +486,14 @@ class ProfileDialog(ctk.CTkToplevel):
             if self._log:
                 self._log(f"Configuración eliminada: {name}")
             self._refresh_list()
+            
+            if self._on_profiles_changed:
+                self._on_profiles_changed()
 
     def _export_profile(self):
-        name = self._profile_list.get()
+        name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
+            messagebox.showwarning("Aviso", "Selecciona un perfil de la lista primero")
             return
 
         from core.profile_manager import load_profile, export_profile_to_file
@@ -515,11 +538,42 @@ class ProfileDialog(ctk.CTkToplevel):
     def _refresh_list(self):
         from core.profile_manager import list_profiles
         profiles = list_profiles()
-        self._profile_list.configure(values=profiles if profiles else ["(Sin configs)"])
-        if profiles:
-            self._profile_list.set(profiles[0])
-        else:
-            self._profile_list.set("(Sin configs)")
+        
+        for widget in self._profile_list_frame.winfo_children():
+            widget.destroy()
+
+        if not profiles:
+            ctk.CTkLabel(
+                self._profile_list_frame,
+                text="(Sin configs guardadas)",
+                font=(FONT_FAMILY, 11), text_color="#888"
+            ).pack(pady=10)
+            self._selected_profile.set("")
+            return
+
+        for profile in profiles:
+            color = "#1e293b"
+            if self._selected_profile.get() == profile:
+                color = "#2563eb"  # Selected color
+
+            btn = ctk.CTkButton(
+                self._profile_list_frame, text=profile,
+                anchor="w", fg_color=color, hover_color="#3b82f6",
+                font=(FONT_FAMILY, 12, "bold"),
+                command=lambda p=profile: self._select_profile_item(p)
+            )
+            btn.pack(fill="x", pady=2)
+            
+        # Ensure selection is valid
+        if self._selected_profile.get() not in profiles:
+            self._select_profile_item(profiles[0])
+
+    def _select_profile_item(self, profile):
+        self._selected_profile.set(profile)
+        # Populate save text input so it's easy to overwrite
+        self._save_name.delete(0, "end")
+        self._save_name.insert(0, profile)
+        self._refresh_list()  # trigger re-render to update selection color
 
 
 class ImportOptionsDialog(ctk.CTkToplevel):
@@ -1151,6 +1205,11 @@ class SettingsDialog(ctk.CTkToplevel):
             self._on_save(self._settings)
         self.destroy()
 
+    def _open_profile_manager(self):
+        if hasattr(self.master, '_show_configs'):
+            self.master._show_configs()
+            self.destroy()
+
 
 class PresetEditorDialog(ctk.CTkToplevel):
     """Dialog for adding/editing a single DB preset."""
@@ -1369,6 +1428,11 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
         
         from core.config_manager import load_repo_configs
         self._configs = load_repo_configs(self._config_key)
+        if not self._configs:
+            legacy_configs = load_repo_configs(self._repo.name)
+            if legacy_configs:
+                self._configs = legacy_configs.copy()
+        
         self._current_selected = None
         
         self._build_ui()

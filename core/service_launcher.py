@@ -7,22 +7,11 @@ import os
 import signal
 import threading
 import atexit
+from domain.models.running_service import RunningService
 from typing import Optional, Callable
 from dataclasses import dataclass, field
 
 LogCallback = Optional[Callable[[str], None]]
-
-
-@dataclass
-class RunningService:
-    """Tracks a running service process."""
-    name: str
-    repo_path: str
-    process: Optional[subprocess.Popen] = None
-    thread: Optional[threading.Thread] = None
-    status: str = 'stopped'  # stopped, starting, running, error
-    port: Optional[int] = None
-    profile: Optional[str] = None
 
 
 class ServiceLauncher:

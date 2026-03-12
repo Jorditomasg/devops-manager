@@ -19,10 +19,15 @@ FONT_FAMILY = "Segoe UI"
 FONT_MONO = "Consolas"
 
 # ── String constants ────────────────────────────────────────────
-NO_DB_PRESET = "(Sin presets BD)"
+NO_DB_PRESET = "- Ninguna (Local) -"
+REINSTALL_LBL = "Reinstall ✓"
 NPM_INSTALL_OK = "📦 npm install ✓"
 NPM_INSTALL_FAIL = "📦 npm install ✗"
 NPM_INSTALL_RUN = "⏳ Instalando..."
+
+PACKAGE_JSON_FILE = 'package.json'
+POM_XML_FILE = 'pom.xml'
+
 MVN_INSTALL_OK = "🔧 mvn install ✓"
 MVN_INSTALL_FAIL = "🔧 mvn install ✗"
 MVN_INSTALL_RUN = "⏳ Compilando..."
@@ -91,34 +96,47 @@ class RepoCard(ctk.CTkFrame):
         self._build_expand_panel()
         self._expand_panel.pack_forget()
 
+        from domain.ports.event_bus import bus
+        bus.subscribe("SERVICE_STATUS_CHANGED", self._on_bus_status_changed)
+
         self._header.bind("<Enter>", self._on_hover_enter)
         self._header.bind("<Leave>", self._on_hover_leave)
+        
+        # Vincular evento Map para el FocusIn a Toplevel
+        self.bind("<Map>", self._on_map)
+        
         self._branch_load_id = self.after(200, self._refresh_branch)
         self._badge_timer = self.after(3000, self._refresh_badge_loop)
+        
+    def _on_bus_status_changed(self, event: dict):
+        if event.get("name") == self._repo.name:
+            self._update_status(self._repo.name, event.get("status"))
     
     def get_config_key(self, target_file: str) -> str:
         """Get the unique config key for a specific module's target file."""
         import os
         repo_path = self._repo.path
-        if not target_file or not os.path.exists(target_file):
+        if not target_file:
             return self._repo.name
         
         rel_path = os.path.relpath(target_file, repo_path).replace('\\', '/')
         parts = rel_path.split('/')
-        if 'src' in parts:
-            idx = parts.index('src')
-            mod_name = parts[idx-1] if idx > 0 else 'App'
-        else:
-            mod_name = parts[0] if len(parts) > 1 else 'App'
+        
+        ignored_names = {'src', 'environments', 'main', 'resources', 'config'}
+        # Filter out ignored directories and the file name itself (parts[:-1])
+        valid_dirs = [p for p in parts[:-1] if p not in ignored_names and p != '.']
+        
+        mod_name = "_".join(valid_dirs) if valid_dirs else "App"
             
         return f"{self._repo.name}::{mod_name}"
 
     def _refresh_badge_loop(self):
         """Periodically refresh the unsigned changes badge."""
         self._refresh_badge()
-        self._badge_timer = self.after(10000, self._refresh_badge_loop)
+        if self.winfo_exists():
+            self._badge_timer = self.after(10000, self._refresh_badge_loop)
 
-    def _refresh_badge(self):
+    def _refresh_badge(self, event=None):
         """Count modified files and update the badge label."""
         def _run():
             from core.git_manager import count_modified_files
@@ -141,6 +159,15 @@ class RepoCard(ctk.CTkFrame):
 
     def _on_hover_leave(self, event=None):
         self._header.configure(fg_color="transparent")
+
+    def _on_map(self, event=None):
+        # Cuando se muestra visualmente, vinculamos FocusIn del TopLevel de forma aditiva
+        if not hasattr(self, '_focus_bound'):
+            try:
+                self.winfo_toplevel().bind("<FocusIn>", self._refresh_badge, add="+")
+                self._focus_bound = True
+            except Exception:
+                pass
 
     # ─── HEADER (always visible, compact) ────────────────────────
 
@@ -319,6 +346,12 @@ class RepoCard(ctk.CTkFrame):
             parts.append(f"⚙ {self._profile_combo.get()}")
         elif hasattr(self, '_env_combo'):
             parts.append(f"🌐 {self._env_combo.get()}")
+        elif hasattr(self, '_config_combos') and self._config_combos:
+            for _, combo in self._config_combos.items():
+                v = combo.get()
+                if v and v not in ('- Sin Seleccionar -', ''):
+                    parts.append(f"⚙ {v}")
+                    break
         # Custom command
         if hasattr(self, '_cmd_entry'):
             cmd = self._cmd_entry.get().strip()
@@ -329,13 +362,13 @@ class RepoCard(ctk.CTkFrame):
         elif self._repo.run_command:
             parts.append(f"$ {self._repo.run_command}")
 
-        is_installed = False
-        if self._repo.repo_type == 'angular':
+        is_installed = True
+        has_package_json = os.path.isfile(os.path.join(self._repo.path, PACKAGE_JSON_FILE))
+        has_pom_xml = os.path.isfile(os.path.join(self._repo.path, POM_XML_FILE))
+        if has_package_json:
             is_installed = os.path.isdir(os.path.join(self._repo.path, 'node_modules'))
-        elif self._repo.repo_type in ('spring-boot', 'maven-lib'):
+        elif has_pom_xml:
             is_installed = os.path.isdir(os.path.join(self._repo.path, 'target'))
-        else:
-            is_installed = True
 
         if not is_installed:
             parts.insert(0, "❌ Faltan deps")
@@ -344,18 +377,22 @@ class RepoCard(ctk.CTkFrame):
 
     def install_dependencies(self, skip_if_installed=False):
         """Method to trigger dependency installation (NPM or Maven)."""
-        repo = self._repo
+        path = repo.path
+        has_package_json = os.path.isfile(os.path.join(path, 'package.json'))
+        has_pom_xml = os.path.isfile(os.path.join(path, 'pom.xml'))
         
-        if repo.repo_type == 'angular':
-            has_node_modules = os.path.isdir(os.path.join(repo.path, 'node_modules'))
-            if skip_if_installed and has_node_modules:
-                return
-            self._run_npm_install()
-        elif repo.repo_type in ('spring-boot', 'maven-lib'):
-            has_target = os.path.isdir(os.path.join(repo.path, 'target'))
-            if skip_if_installed and has_target:
-                return
-            self._run_mvn_install()
+        is_installed = False
+        if has_package_json:
+            is_installed = os.path.isdir(os.path.join(path, 'node_modules'))
+        elif has_pom_xml:
+            is_installed = os.path.isdir(os.path.join(path, 'target'))
+        else:
+            return
+            
+        if skip_if_installed and is_installed:
+            return
+            
+        self._run_install_cmd(bypass_confirm=True)
 
     # ─── EXPAND PANEL ────────────────────────────────────────────
 
@@ -369,7 +406,7 @@ class RepoCard(ctk.CTkFrame):
         ctk.CTkFrame(self._expand_panel, height=1, fg_color="#312e81").pack(fill="x", padx=10)
 
         content = ctk.CTkFrame(self._expand_panel, fg_color="transparent")
-        content.pack(fill="x", padx=14, pady=6)
+        content.pack(fill="x", padx=12, pady=(4, 4))
 
         # Row 1: Branch + secondary buttons
         self._build_branch_row(content, repo)
@@ -383,7 +420,7 @@ class RepoCard(ctk.CTkFrame):
     def _build_log_row(self, content):
         """Build the repository log console."""
         self._log_frame = ctk.CTkFrame(content, fg_color="transparent")
-        self._log_frame.pack(fill="x", pady=(8, 0))
+        self._log_frame.pack(fill="x", pady=(4, 0))
 
         header = ctk.CTkFrame(self._log_frame, fg_color="transparent")
         header.pack(fill="x")
@@ -509,6 +546,13 @@ class RepoCard(ctk.CTkFrame):
         if not hasattr(self, '_status_label'):
             return
             
+        # Only flash orange if status is already running or starting
+        if getattr(self, '_status', 'stopped') not in ('running', 'starting'):
+            return
+            
+        if hasattr(self, '_log_flash_timer') and self._log_flash_timer:
+            self.after_cancel(self._log_flash_timer)
+
         self._status_label.configure(text="🔴", text_color=STATUS_ICONS.get('logging', '#f97316'))
 
         def _revert():
@@ -575,7 +619,7 @@ class RepoCard(ctk.CTkFrame):
         ToolTip(self._clean_btn, "Limpiar ficheros no commiteados y reestablecer cambios")
 
         # Config
-        if not ((repo.repo_type == 'spring-boot' and repo.profiles) or (repo.repo_type == 'angular' and repo.profiles)):
+        if not repo.environment_files:
             edit_btn = ctk.CTkButton(
                 row1, text=BTN_CONFIG_TEXT, width=80,
                 fg_color="#1e293b", hover_color="#475569",
@@ -587,19 +631,14 @@ class RepoCard(ctk.CTkFrame):
 
         # Right-aligned frame for install buttons
         self.right_frame = ctk.CTkFrame(row1, fg_color="transparent")
-        self.right_frame.pack(side="right", fill="y", padx=(10, 0))
+        self.right_frame.pack(side="right", padx=(10, 0))
         self.btn_style = sec_btn_style # Store for reuse
 
-        # npm ci for Angular
-        if repo.repo_type == 'angular':
-            self._build_npm_install_btn(self.right_frame, self.btn_style)
-
-        # mvn install for Spring Boot / Maven lib
-        if repo.repo_type in ('spring-boot', 'maven-lib'):
-            self._build_mvn_install_btn(self.right_frame, self.btn_style)
+        # Install Button
+        self._build_install_btn(self.right_frame, self.btn_style)
 
         # Seed
-        if repo.has_seeds or (repo.repo_type == 'docker-infra' and repo.has_database):
+        if repo.has_seeds or ('docker_checkboxes' in repo.features and repo.has_database):
             seed_btn = ctk.CTkButton(
                 row1, text="🌱 Seed", width=70,
                 fg_color="#2e1065", hover_color="#9333ea",
@@ -609,64 +648,59 @@ class RepoCard(ctk.CTkFrame):
             seed_btn.pack(side="left", padx=(0, 3))
             ToolTip(seed_btn, "Ejecutar seeds de BD")
 
-    def _build_npm_install_btn(self, parent, style):
-        """Build the npm install button."""
-        has_node_modules = os.path.isdir(os.path.join(self._repo.path, 'node_modules'))
+    def _build_install_btn(self, parent, style):
+        """Build the general install button (Install or Reinstall) based on UI Config."""
+        repo = self._repo
+        path = repo.path
         
-        btn_text = "📦 npm i"
-        if has_node_modules:
-            btn_text = "📦 npm i ✓"
+        has_package_json = os.path.isfile(os.path.join(path, PACKAGE_JSON_FILE))
+        has_pom_xml = os.path.isfile(os.path.join(path, POM_XML_FILE))
+        
+        if not has_package_json and not has_pom_xml:
+            return  # Don't build install button if neither PACKAGE_JSON_FILE nor POM_XML_FILE exists
+
+        is_installed = False
+        default_tt = ""
+        
+        if has_package_json:
+            is_installed = os.path.isdir(os.path.join(path, 'node_modules'))
+            default_tt = repo.run_install_cmd or "npm install"
+            if not is_installed:
+                default_tt += "\n(node_modules no encontrado)"
+        elif has_pom_xml:
+            is_installed = os.path.isdir(os.path.join(path, 'target'))
+            default_tt = repo.run_install_cmd or "mvn install"
+            if not is_installed:
+                default_tt += "\n(carpeta target no encontrada)"
+        
+        # Load from config or fallback
+        install_cfg = getattr(repo, 'ui_config', {}).get('install', {})
+        tooltip_text = install_cfg.get('tooltip', default_tt)
+        
+        # Override tooltip with exact YAML command if missing
+        if is_installed and repo.run_install_cmd:
+            tooltip_text = repo.run_install_cmd
+        
+        if is_installed:
+            btn_text = install_cfg.get('label_ok', REINSTALL_LBL)
             fg_color = "#334155"
             border_color = "#64748b"
             hover_color = "#475569"
         else:
+            btn_text = install_cfg.get('label_missing', "Install")
             fg_color = "#7f1d1d" 
             border_color = "#b91c1c"
             hover_color = "#991b1b"
 
-        self._npm_install_btn = ctk.CTkButton(
+        self._install_btn = ctk.CTkButton(
             parent, text=btn_text, width=100,
             fg_color=fg_color, hover_color=hover_color,
             border_color=border_color,
-            command=self._run_npm_install, **style
+            command=self._run_install_cmd, **style
         )
-        self._npm_install_btn.pack(side="left", padx=(0, 6))
-        
-        tooltip_text = f"Instalar dependencias (npm i)"
-        if not has_node_modules:
-            tooltip_text += " — node_modules no encontrado!"
-            
-        self._npm_install_tooltip = ToolTip(
-            self._npm_install_btn,
-            tooltip_text
-        )
+        self._install_btn.pack(side="left", padx=(0, 6))
+        self._install_tooltip = ToolTip(self._install_btn, tooltip_text)
 
-    def _build_mvn_install_btn(self, parent, style):
-        """Build the mvn install button."""
-        has_target = os.path.isdir(os.path.join(self._repo.path, 'target'))
-        
-        btn_text = "🔧 mvn inst"
-        if has_target:
-            btn_text = "🔧 mvn inst ✓"
-            fg_color = "#334155"
-            border_color = "#64748b"
-            hover_color = "#475569"
-        else:
-            fg_color = "#7f1d1d" 
-            border_color = "#b91c1c"
-            hover_color = "#991b1b"
-
-        self._mvn_install_btn = ctk.CTkButton(
-            parent, text=btn_text, width=100,
-            fg_color=fg_color, hover_color=hover_color,
-            border_color=border_color,
-            command=self._run_mvn_install, **style
-        )
-        self._mvn_install_btn.pack(side="left", padx=(0, 6))
-        self._mvn_install_tooltip = ToolTip(
-            self._mvn_install_btn,
-            "Compilar e instalar dependencias (mvn install -DskipTests)"
-        )
 
     def _build_selector_row(self, content, repo):
         """Build conditional selector row (profile, DB, env, docker)."""
@@ -677,51 +711,56 @@ class RepoCard(ctk.CTkFrame):
                        "fg_color": "#1e1b4b", "border_color": "#4338ca",
                        "button_color": "#4338ca"}
 
-        sec_btn_style = {"height": 28, "font": (FONT_FAMILY, 12), "corner_radius": 6,
-                         "border_width": 1}
-
-        if repo.repo_type in ('spring-boot', 'angular') and repo.environment_files:
+        if repo.environment_files:
             has_row2 = True
-            from core.config_manager import load_repo_configs
+            from core.config_manager import load_repo_configs, load_active_config
             
             target_files = []
-            if repo.repo_type == 'angular':
-                target_files = sorted(list({f for f in repo.environment_files if os.path.basename(f) == 'environment.ts'}))
-                if not target_files and repo.environment_files:
-                    dirs = {os.path.dirname(f) for f in repo.environment_files}
-                    for d in dirs:
-                        env_files_in_dir = [f for f in repo.environment_files if os.path.dirname(f) == d]
-                        if env_files_in_dir:
-                            target_files.append(sorted(env_files_in_dir)[0])
-            elif repo.repo_type == 'spring-boot':
-                target_files = sorted(list({f for f in repo.environment_files if os.path.basename(f) in ('application.yml', 'application.yaml', 'application.properties')}))
-            
-            if not target_files:
-                if repo.repo_type == 'spring-boot':
-                    target_files = [os.path.join(repo.path, 'src', 'main', 'resources', 'application.yml')]
+            env_dirs: dict = {}
+            for f in repo.environment_files:
+                parent = os.path.dirname(f)
+                basename = os.path.basename(f)
+                
+                # If we haven't seen this directory yet, add it
+                if parent not in env_dirs:
+                    env_dirs[parent] = f
                 else:
-                    if repo.environment_files:
-                        target_files = [repo.environment_files[0]]
+                    # Priority rules if we already have a file for this directory:
+                    # 1. Prefer .yml over .properties
+                    # 2. Prefer environment.ts over specific like environment.prod.ts
+                    current_file = env_dirs[parent]
+                    if current_file.endswith('.properties') and basename.endswith('.yml'):
+                        env_dirs[parent] = f
+                    elif basename == 'environment.ts':
+                        env_dirs[parent] = f
+
+            target_files = sorted(list(env_dirs.values()))
             
-            target_files = sorted(list(set(target_files)))
             self._config_combos = {} 
             
-            # Use a vertical frame to stack them
+            # Extract label prefix from UI config if defined, defaults to 'App'
+            lbl_prefix = "App"
+            if getattr(repo, 'ui_config', {}) and 'selectors' in repo.ui_config:
+                selectors = repo.ui_config['selectors']
+                if selectors and isinstance(selectors, list):
+                    lbl_prefix = selectors[0].get('label', 'App').replace(':', '')
+            
+            # Vertical container — use fill=x only, no expand, to keep compact height
             selectors_container = ctk.CTkFrame(row2, fg_color="transparent")
-            selectors_container.pack(side="left", padx=0, expand=True, fill="both")
+            selectors_container.pack(side="left", padx=0, fill="x", expand=True)
             
             for target_file in target_files:
-                rel_path = os.path.relpath(target_file, repo.path).replace('\\', '/')
-                parts = rel_path.split('/')
-                if 'src' in parts:
-                    idx = parts.index('src')
-                    mod_name = parts[idx-1] if idx > 0 else 'App'
-                else:
-                    mod_name = parts[0] if len(parts) > 1 else 'App'
-                
                 sel_frame = ctk.CTkFrame(selectors_container, fg_color="transparent")
-                sel_frame.pack(side="top", pady=2, anchor="w")
+                sel_frame.pack(side="top", fill="x", pady=(0, 4))
                 
+                # Identify submodule name for tooltip/label
+                try:
+                    rel_path = os.path.relpath(target_file, repo.path)
+                    mod_name = os.path.dirname(rel_path) or "root"
+                except ValueError:
+                    mod_name = "unknown"
+
+                # Load config values for THIS specific target file
                 config_key = self.get_config_key(target_file)
                 configs = load_repo_configs(config_key)
                 
@@ -733,31 +772,43 @@ class RepoCard(ctk.CTkFrame):
                     
                 opts = ["- Sin Seleccionar -"] + list(configs.keys())
                 
-                lbl_text = f"App ({mod_name}):" if repo.repo_type == 'spring-boot' else f"Env ({mod_name}):"
-                if len(target_files) == 1:
-                    lbl_text = "App:" if repo.repo_type == 'spring-boot' else "Env:"
-                    
+                lbl_text = f"{lbl_prefix}:"
+
                 ctk.CTkLabel(sel_frame, text=lbl_text, font=(FONT_FAMILY, 13),
-                             text_color="#c7d2fe", anchor="w").pack(side="left")
-                             
+                             text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
+
                 combo = ctk.CTkComboBox(
-                    sel_frame, values=opts, width=130,
+                    sel_frame, values=opts, width=180,
                     command=lambda val, tf=target_file: self._on_config_change(val, tf), **combo_style
                 )
-                combo.pack(side="left", padx=(6, 0))
-                combo.set("- Sin Seleccionar -")
+                combo.pack(side="left", padx=(6, 4))
+                
+                active_config = load_active_config(config_key)
+                if active_config in opts:
+                    combo.set(active_config)
+                    # Force application of the active config just in case it was lost
+                    self.after(500, self._on_config_change, active_config, target_file, True)
+                else:
+                    combo.set("- Sin Seleccionar -")
+                    
                 self._config_combos[target_file] = combo
                 
-                edit_btn = ctk.CTkButton(
-                    sel_frame, text="⚙️", width=35,
-                    fg_color="#1e293b", hover_color="#475569",
-                    border_color="#64748b",
-                    command=lambda tf=target_file: self._open_config_manager(tf), **sec_btn_style
+                # Config Button inside the selector row
+                cfg_btn = ctk.CTkButton(
+                    sel_frame, text="⚙", width=28, height=28,
+                    font=(FONT_FAMILY, 14), fg_color="#1e293b",
+                    hover_color="#475569", border_width=1, border_color="#64748b",
+                    corner_radius=6, command=lambda tf=target_file: self._open_config_manager(tf)
                 )
-                edit_btn.pack(side="left", padx=(6, 12))
-                ToolTip(edit_btn, f"Gestor de configuraciones ({lbl_text})")
+                cfg_btn.pack(side="left", padx=(0, 6))
+                ToolTip(cfg_btn, f"Modificar esta configuración ({mod_name})")
 
-        if repo.has_database and repo.repo_type == 'spring-boot':
+                # Type label on the right as plain grey hint
+                if len(target_files) > 1:
+                    ctk.CTkLabel(sel_frame, text=mod_name, font=(FONT_MONO, 10),
+                                 text_color="#6b7280", anchor="w").pack(side="left", padx=(0, 8))
+
+        if repo.has_database and 'database_selector' in repo.features:
             has_row2 = True
             ctk.CTkLabel(row2, text="BD:", font=(FONT_FAMILY, 13),
                          text_color="#c7d2fe", width=35, anchor="e").pack(side="left")
@@ -772,7 +823,7 @@ class RepoCard(ctk.CTkFrame):
             else:
                 self._db_combo.set(NO_DB_PRESET)
 
-        if repo.repo_type == 'docker-infra' and repo.docker_compose_files:
+        if 'docker_checkboxes' in repo.features and repo.docker_compose_files:
             self._docker_checkboxes = {}
             for dc_file in repo.docker_compose_files:
                 dc_name = os.path.basename(dc_file).replace('docker-compose.', '').replace('.yml', '')
@@ -794,7 +845,7 @@ class RepoCard(ctk.CTkFrame):
         row_java = ctk.CTkFrame(content, fg_color="transparent")
         has_row_java = False
 
-        if repo.repo_type in ('spring-boot', 'maven-lib'):
+        if 'java_version' in repo.features:
             has_row_java = True
             ctk.CTkLabel(row_java, text="Java:", font=(FONT_FAMILY, 13),
                          text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
@@ -863,7 +914,7 @@ class RepoCard(ctk.CTkFrame):
         """Toggle expanded/collapsed state."""
         self._expanded = not self._expanded
         if self._expanded:
-            self._expand_panel.pack(fill="x", padx=3, pady=(0, 3), after=self._header)
+            self._expand_panel.pack(fill="x", padx=3, pady=(0, 2), after=self._header)
             self._toggle_btn.configure(text="▲")
         else:
             self._expand_panel.pack_forget()
@@ -937,10 +988,10 @@ class RepoCard(ctk.CTkFrame):
         import threading
         threading.Thread(target=_run, daemon=True).start()
 
-    def _on_config_change(self, config_name: str, target_file: str = None):
+    def _on_config_change(self, config_name: str, target_file: str = None, skip_log: bool = False):
         """Handle env/app change and overwrite target config file."""
         from tkinter import messagebox
-        from core.config_manager import load_repo_configs, write_angular_environment_raw, write_config_file_raw
+        from core.config_manager import load_repo_configs, write_angular_environment_raw, write_config_file_raw, save_active_config
         
         repo = self._repo
         
@@ -957,75 +1008,84 @@ class RepoCard(ctk.CTkFrame):
                 target_file = os.path.join(repo.path, 'src', 'main', 'resources', 'application.yml')
 
         config_key = self.get_config_key(target_file)
+        save_active_config(config_key, config_name)
         
-        if config_name == "- Sin Seleccionar -":
-            if self._log:
-                self._log(f"[{self._repo.name}] Configuración deseleccionada. Restaurando configuración original.")
-            if target_file and os.path.isfile(target_file):
-                import subprocess
-                subprocess.run(['git', 'checkout', '--', target_file], cwd=repo.path, capture_output=True)
-            self._update_header_hints()
-            return
+        def _run_change():
+            nonlocal target_file
+            if config_name == "- Sin Seleccionar -":
+                if self._log and not skip_log:
+                    self._log(f"[{self._repo.name}] Configuración deseleccionada. Restaurando configuración original.")
+                if target_file and os.path.isfile(target_file):
+                    import subprocess
+                    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+                    subprocess.run(['git', 'checkout', '--', target_file], cwd=repo.path, capture_output=True, creationflags=flags)
+                self.after(0, self._update_header_hints)
+                return
 
-        configs = load_repo_configs(config_key)
-        
-        # Check legacy keys
-        if not configs:
-            legacy_configs = load_repo_configs(repo.name)
-            if legacy_configs:
-                configs = legacy_configs
-                
-        config_data = configs.get(config_name)
-        
-        if not config_data:
-            if self._log:
-                self._log(f"[{self._repo.name}] La configuración '{config_name}' no se encontró.")
-            return
-
-        res = False
-        if repo.repo_type == 'angular':
-            import json
-            if isinstance(config_data, dict):
-                content = "\n".join([f"export const environment = {json.dumps(config_data, indent=2)};", ""])
-            else:
-                content = str(config_data)
-            res = write_angular_environment_raw(target_file, content)
-        elif repo.repo_type == 'spring-boot':
-            config_str = str(config_data)
-            # Detect if it's properties or yaml based on first few lines
-            is_props = "=" in config_str.split("\n", 3)[0] or "=" in config_str
-            if is_props and not config_str.startswith("spring:") and not config_str.startswith("server:"):
-                target_file = target_file.replace('.yml', '.properties')
-            else:
-                target_file = target_file.replace('.properties', '.yml')
-                
-            # Remove the opposite file to avoid Spring Boot loading both and conflicting
-            opposite_file = target_file.replace('.properties', '.yml') if target_file.endswith('.properties') else target_file.replace('.yml', '.properties')
-            if os.path.exists(opposite_file):
-                try:
-                    os.remove(opposite_file)
-                except Exception:
-                    pass
+            configs = load_repo_configs(config_key)
             
-            # Also clean up the opposite file from target/classes if it exists
-            target_classes_dir = os.path.join(repo.path, 'target', 'classes')
-            opposite_basename = os.path.basename(opposite_file)
-            target_classes_file = os.path.join(target_classes_dir, opposite_basename)
-            if os.path.exists(target_classes_file):
-                try:
-                    os.remove(target_classes_file)
-                except Exception:
-                    pass
+            # Check legacy keys
+            if not configs:
+                legacy_configs = load_repo_configs(repo.name)
+                if legacy_configs:
+                    configs = legacy_configs
                     
-            res = write_config_file_raw(target_file, config_data)
-
-        if res:
-            if self._log:
-                self._log(f"[{self._repo.name}] Configuración '{config_name}' aplicada.")
-        else:
-            messagebox.showerror("Error", f"No se pudo escribir en '{target_file}'")
+            config_data = configs.get(config_name)
             
-        self._update_header_hints()
+            if not config_data:
+                if self._log and not skip_log:
+                    self._log(f"[{self._repo.name}] La configuración '{config_name}' no se encontró.")
+                return
+
+            res = False
+            if repo.repo_type in ('angular', 'nx-workspace'):
+                import json
+                if isinstance(config_data, dict):
+                    content = "\n".join([f"export const environment = {json.dumps(config_data, indent=2)};", ""])
+                else:
+                    content = str(config_data)
+                res = write_angular_environment_raw(target_file, content)
+            elif repo.repo_type == 'spring-boot':
+                config_str = str(config_data)
+                # Detect if it's properties or yaml based on first few lines
+                is_props = "=" in config_str.split("\n", 3)[0] or "=" in config_str
+                if is_props and not config_str.startswith("spring:") and not config_str.startswith("server:"):
+                    target_file = target_file.replace('.yml', '.properties')
+                else:
+                    target_file = target_file.replace('.properties', '.yml')
+                    
+                # Remove the opposite file to avoid Spring Boot loading both and conflicting
+                opposite_file = target_file.replace('.properties', '.yml') if target_file.endswith('.properties') else target_file.replace('.yml', '.properties')
+                if os.path.exists(opposite_file):
+                    try:
+                        os.remove(opposite_file)
+                    except Exception:
+                        pass
+                
+                # Also clean up the opposite file from target/classes if it exists
+                target_classes_dir = os.path.join(repo.path, 'target', 'classes')
+                opposite_basename = os.path.basename(opposite_file)
+                target_classes_file = os.path.join(target_classes_dir, opposite_basename)
+                if os.path.exists(target_classes_file):
+                    try:
+                        os.remove(target_classes_file)
+                    except Exception:
+                        pass
+                        
+                res = write_config_file_raw(target_file, config_data)
+
+            if res:
+                if self._log and not skip_log:
+                    self._log(f"[{self._repo.name}] Configuración '{config_name}' aplicada.")
+            else:
+                if not skip_log:
+                    self.after(0, lambda: messagebox.showerror("Error", f"No se pudo escribir en '{target_file}'"))
+                
+            self.after(0, self._update_header_hints)
+
+        import threading
+        # Ensure we only start threading for git checkout if needed to avoid overhead, but since we have file ops, let's keep it threaded.
+        threading.Thread(target=_run_change, daemon=True).start()
 
     def _open_config_manager(self, target_file: str = None):
         """Open the RepoConfigManagerDialog for this repository."""
@@ -1080,101 +1140,69 @@ class RepoCard(ctk.CTkFrame):
 
         threading.Thread(target=_run, daemon=True).start()
 
-    # ─── npm install ─────────────────────────────────────────────
+    # ─── install_cmd ─────────────────────────────────────────────
 
-    def _run_npm_install(self):
-        """Run npm install to install dependencies."""
+    def _run_install_cmd(self, bypass_confirm=False):
+        """Run the appropriate install command (npm install or mvn install) depending on repo type."""
         from tkinter import messagebox
-        if hasattr(self, '_npm_install_btn') and self._npm_install_btn.cget("text") in (NPM_INSTALL_OK, NPM_INSTALL_FAIL):
+        repo = self._repo
+        path = repo.path
+        has_package_json = os.path.isfile(os.path.join(path, PACKAGE_JSON_FILE))
+        has_pom_xml = os.path.isfile(os.path.join(path, POM_XML_FILE))
+        
+        is_frontend = has_package_json
+        
+        # Check if already installed
+        already_installed = False
+        if is_frontend:
+            already_installed = os.path.isdir(os.path.join(path, 'node_modules'))
+        elif has_pom_xml:
+            already_installed = os.path.isdir(os.path.join(path, 'target'))
+            
+        if hasattr(self, '_install_btn') and already_installed and not bypass_confirm:
             if not messagebox.askyesno("Reinstalar", "¿Estás seguro de que deseas volver a instalar dependencias?"):
                 return
                 
-        repo = self._repo
-        cmd_args = ['npm', 'install', '--yes', '--legacy-peer-deps']
-        cmd_str = ' '.join(cmd_args)
+        # Build full tool-tip text on hover and use corresponding CMD
+        install_cfg = getattr(repo, 'ui_config', {}).get('install', {})
         
+        if already_installed and repo.run_reinstall_cmd:
+            cmd_str = repo.run_reinstall_cmd
+        else:
+            if is_frontend:
+                cmd_str = repo.run_install_cmd or 'npm install --legacy-peer-deps'
+            else:
+                cmd_str = repo.run_install_cmd or 'mvn install -DskipTests --batch-mode'
+                
+        running_text = "Installing..."
+        success_text = install_cfg.get('label_ok', REINSTALL_LBL)
+        fail_text = "Error!"
+            
         if self._log:
             self._log(f"Running {cmd_str}...")
-        self._npm_install_btn.configure(text=NPM_INSTALL_RUN, state="disabled")
+            
+        self._install_btn.configure(text=running_text, state="disabled")
         self._is_installing = True
         self._update_button_visibility()
 
-        def _run():
-            try:
-                process = subprocess.Popen(
-                    cmd_args, cwd=repo.path,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1, shell=True,
-                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
-                )
-                for line in iter(process.stdout.readline, ''):
-                    if not line:
-                        break
-                    if self._log:
-                        self._log(line.strip())
-                process.wait()
-
-                def _done():
-                    self._is_installing = False
-                    if os.path.isdir(os.path.join(self._repo.path, 'node_modules')):
-                        self._npm_install_btn.configure(
-                            text="📦 npm i ✓", fg_color="#334155", border_color="#64748b", hover_color="#475569"
-                        )
-                        if self._log:
-                            self._log(f"[{self._repo.name}] npm install finalizado ✓")
-                    else:
-                        self._npm_install_btn.configure(
-                            text="📦 npm i", fg_color="#7f1d1d", border_color="#b91c1c", hover_color="#991b1b"
-                        )
-                        if self._log:
-                            self._log(f"[{self._repo.name}] Fallo al instalar NPM. node_modules no encontrado.")
-                    self._update_button_visibility()
-                self.after(0, _done)
-            except Exception as e:
-                if self._log:
-                    self._log(f"Error {cmd_str}: {e}")
-                def _err():
-                    self._is_installing = False
-                    self._npm_install_btn.configure(text=NPM_INSTALL_FAIL, state="normal")
-                    self._update_button_visibility()
-                self.after(0, _err)
-
-        threading.Thread(target=_run, daemon=True).start()
-
-    # ─── mvn install ─────────────────────────────────────────────
-
-    def _run_mvn_install(self):
-        """Run mvn install -DskipTests for Java projects using specified Java version."""
-        from tkinter import messagebox
-        if hasattr(self, '_mvn_install_btn') and self._mvn_install_btn.cget("text") in (MVN_INSTALL_OK, MVN_INSTALL_FAIL):
-            if not messagebox.askyesno("Reinstalar", "¿Estás seguro de que deseas volver a compilar (mvn install)?"):
-                return
-                
-        repo = self._repo
-        if self._log:
-            self._log(f"Running mvn install -DskipTests...")
-        self._mvn_install_btn.configure(text=MVN_INSTALL_RUN, state="disabled")
-        self._is_installing = True
-        self._update_button_visibility()
-
-        mvnw = os.path.join(repo.path, 'mvnw.cmd' if os.name == 'nt' else 'mvnw')
-        if not os.path.isfile(mvnw):
-            mvnw = 'mvn'
-        cmd = [mvnw, 'install', '-DskipTests', '--batch-mode']
-        
-        # Build environment with specific JAVA_HOME
-        from core.java_manager import build_java_env
-        java_choice = self.selected_java_var.get()
-        java_home = self._java_versions.get(java_choice, "")
-        env = build_java_env(java_home)
-        
-        if java_home and self._log:
-            self._log(f"Usando JAVA_HOME: {java_home}")
+        # Build environment with specific JAVA_HOME for Java projects
+        env = None
+        if not is_frontend:
+            from core.java_manager import build_java_env
+            java_choice = getattr(self, 'selected_java_var', None)
+            if java_choice:
+                java_home = self._java_versions.get(java_choice.get(), "")
+                env = build_java_env(java_home)
+                if java_home and self._log:
+                    self._log(f"Usando JAVA_HOME: {java_home}")
 
         def _run():
             try:
+                # Use shell=True for all config-driven commands, allowing &&, &, and shell features.
+                use_shell = True
                 process = subprocess.Popen(
-                    cmd, cwd=repo.path, env=env,
+                    cmd_str, 
+                    cwd=repo.path, env=env, shell=use_shell,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1,
                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
@@ -1188,26 +1216,27 @@ class RepoCard(ctk.CTkFrame):
 
                 def _done():
                     self._is_installing = False
-                    if os.path.isdir(os.path.join(self._repo.path, 'target')):
-                        self._mvn_install_btn.configure(
-                            text="🔧 mvn inst ✓", fg_color="#334155", border_color="#64748b", hover_color="#475569"
+                    is_ok = os.path.isdir(os.path.join(self._repo.path, 'node_modules')) if is_frontend else os.path.isdir(os.path.join(self._repo.path, 'target'))
+                    if is_ok:
+                        self._install_btn.configure(
+                            text=success_text, fg_color="#334155", border_color="#64748b", hover_color="#475569"
                         )
                         if self._log:
-                            self._log(f"[{self._repo.name}] mvn install finalizado ✓")
+                            self._log(f"[{self._repo.name}] Instalación finalizada ✓")
                     else:
-                        self._mvn_install_btn.configure(
-                            text="🔧 mvn inst", fg_color="#7f1d1d", border_color="#b91c1c", hover_color="#991b1b"
+                        self._install_btn.configure(
+                            text=fail_text, fg_color="#7f1d1d", border_color="#b91c1c", hover_color="#991b1b"
                         )
                         if self._log:
-                            self._log(f"[{self._repo.name}] Fallo al empaquetar con Maven. target no encontrado.")
+                            self._log(f"[{self._repo.name}] Fallo al instalar. Archivos clave no encontrados.")
                     self._update_button_visibility()
                 self.after(0, _done)
             except Exception as e:
                 if self._log:
-                    self._log(f"Error mvn install: {e}")
+                    self._log(f"Error en instalación: {e}")
                 def _err():
                     self._is_installing = False
-                    self._mvn_install_btn.configure(text=MVN_INSTALL_FAIL, state="normal")
+                    self._install_btn.configure(text=fail_text, state="normal")
                     self._update_button_visibility()
                 self.after(0, _err)
 
@@ -1224,28 +1253,94 @@ class RepoCard(ctk.CTkFrame):
         return self._repo.run_command or ''
 
     def _start(self):
-        """Start the service."""
+        """Start the service using the config-driven run_command from the YAML definition."""
         repo = self._repo
 
-        if repo.repo_type == 'docker-infra':
+        if 'docker_checkboxes' in repo.features:
             self._start_docker_services()
             return
 
-        # Angular: auto-npm-ci if node_modules missing
-        if repo.repo_type == 'angular':
-            if not os.path.isdir(os.path.join(repo.path, 'node_modules')):
-                if self._log:
-                    self._log(f"[{repo.name}] ⚠ node_modules no encontrado, ejecutando npm ci primero...")
-                self._npm_ci_then_start()
-                return
-
-        # Check for custom command
+        # Check for custom command entered by user
         custom_cmd = self._get_start_command()
         if custom_cmd and custom_cmd != repo.run_command:
             self._start_custom(custom_cmd)
             return
 
-        self._do_start()
+        # --- Config-driven generic start ---
+        # run_command comes from the YAML (e.g. "npx nx serve cart", "mvnw.cmd spring-boot:run")
+        cmd = repo.run_command or ''
+        if not cmd:
+            if self._log:
+                self._log(f"[{repo.name}] ⚠ Sin comando de inicio definido en la configuración YAML.")
+            return
+
+        # Append profile flag if selected
+        profile = ''
+        if hasattr(self, '_profile_combo'):
+            profile = self._profile_combo.get()
+        elif hasattr(self, '_config_combos') and self._config_combos:
+            for _, combo in self._config_combos.items():
+                v = combo.get()
+                if v and v not in ('- Sin Seleccionar -', ''):
+                    profile = v
+                    break
+
+        if profile and repo.run_profile_flag:
+            cmd = f"{cmd} {repo.run_profile_flag}{profile}"
+
+        # Build env with Java if needed
+        java_home = ''
+        if hasattr(self, 'selected_java_var'):
+            java_choice = self.selected_java_var.get()
+            java_home = self._java_versions.get(java_choice, '')
+
+        env = None
+        if java_home:
+            try:
+                from core.java_manager import build_java_env
+                env = build_java_env(java_home)
+            except Exception:
+                pass
+
+        self._update_status(repo.name, 'starting')
+        if self._log:
+            self._log(f"[{repo.name}] ▶ {cmd}")
+
+        def _run():
+            try:
+                process = subprocess.Popen(
+                    cmd, cwd=repo.path, shell=True, env=env,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1,
+                    creationflags=(
+                        getattr(subprocess, 'CREATE_NO_WINDOW', 0) |
+                        getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+                    ) if os.name == 'nt' else 0
+                )
+                # Track process in legacy launcher so stop/restart work
+                from domain.models.running_service import RunningService
+                svc = RunningService(name=repo.name, repo_path=repo.path, port=0, profile=profile, status='running')
+                svc.process = process
+                self._launcher._services[repo.name] = svc
+
+                self.after(0, lambda: self._update_status(repo.name, 'running'))
+
+                for line in iter(process.stdout.readline, ''):
+                    if not line:
+                        break
+                    if self._log:
+                        self._log(line.strip())
+
+                process.wait()
+                self.after(0, lambda: self._update_status(repo.name, 'stopped'))
+                if self._log:
+                    self._log(f"[{repo.name}] ⏹ Proceso terminado (código {process.returncode})")
+            except Exception as e:
+                self.after(0, lambda: self._update_status(repo.name, 'error'))
+                if self._log:
+                    self._log(f"[{repo.name}] ✗ Error: {e}")
+
+        threading.Thread(target=_run, daemon=True, name=f'svc-{repo.name}').start()
 
     def _start_custom(self, cmd_str: str):
         """Start with a custom command."""
@@ -1280,80 +1375,6 @@ class RepoCard(ctk.CTkFrame):
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def _npm_ci_then_start(self):
-        """Run npm ci then start the service."""
-        repo = self._repo
-        if hasattr(self, '_npm_ci_btn'):
-            self._npm_ci_btn.configure(text=NPM_INSTALL_RUN, state="disabled") # Changed from NPM_CI_RUN
-        self._is_installing = True
-        self._update_button_visibility()
-
-        def _run():
-            try:
-                process = subprocess.Popen(
-                    ['npm', 'ci'], cwd=repo.path,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1, shell=True
-                )
-                for line in iter(process.stdout.readline, ''):
-                    if not line:
-                        break
-                    if self._log:
-                        self._log(line.strip())
-                process.wait()
-
-                def _after():
-                    self._is_installing = False
-                    self._update_button_visibility()
-                    if os.path.isdir(os.path.join(self._repo.path, 'node_modules')):
-                        self._npm_install_btn.configure(
-                            text="📦 npm i ✓", fg_color="#334155", border_color="#64748b", hover_color="#475569"
-                        )
-                        if self._log:
-                            self._log(f"[{self._repo.name}] npm install finalizado ✓")
-                        self._do_start()
-                    else:
-                            self._npm_ci_btn.configure(text=NPM_CI_FAIL, state="normal")
-                self.after(0, _after)
-            except Exception as e:
-                if self._log:
-                    self._log(f"Error: {e}")
-                def _err():
-                    self._is_installing = False
-                    self._update_button_visibility()
-                self.after(0, _err)
-
-        threading.Thread(target=_run, daemon=True).start()
-
-    def _do_start(self):
-        """Actually start the service."""
-        repo = self._repo
-
-        def _run():
-            profile = ''
-            if hasattr(self, '_profile_combo'):
-                profile = self._profile_combo.get()
-            elif hasattr(self, '_env_combo'):
-                profile = self._env_combo.get()
-
-            if repo.repo_type == 'spring-boot':
-                self._launcher.start_spring_boot(
-                    repo.name, repo.path, profile, repo.server_port,
-                    self._log, self._update_status
-                )
-            elif repo.repo_type == 'angular':
-                self._launcher.start_angular(
-                    repo.name, repo.path, profile,
-                    self._log, self._update_status
-                )
-            elif repo.repo_type == 'maven-lib':
-                self._launcher.start_maven_install(
-                    repo.name, repo.path,
-                    self._log, self._update_status
-                )
-
-        threading.Thread(target=_run, daemon=True).start()
-
     def _start_docker_services(self):
         """Start selected docker-compose services."""
         def _run():
@@ -1365,15 +1386,13 @@ class RepoCard(ctk.CTkFrame):
         threading.Thread(target=_run, daemon=True).start()
 
     def _stop(self):
-        """Stop the service."""
+        """Stop the service using the service launcher."""
         repo = self._repo
-        if repo.repo_type == 'docker-infra':
+        if 'docker_checkboxes' in repo.features:
             self._stop_docker_services()
             return
 
-        def _run():
-            self._launcher.stop_service(repo.name, self._log, self._update_status)
-        threading.Thread(target=_run, daemon=True).start()
+        self._launcher.stop_service(repo.name, self._log, self._update_status)
 
     def _stop_docker_services(self):
         """Stop selected docker-compose services."""
@@ -1386,9 +1405,9 @@ class RepoCard(ctk.CTkFrame):
         threading.Thread(target=_run, daemon=True).start()
 
     def _restart(self):
-        """Restart the service."""
+        """Restart the service using the service launcher."""
         repo = self._repo
-        if repo.repo_type == 'docker-infra':
+        if 'docker_checkboxes' in repo.features:
             self._stop_docker_services()
             self.after(2000, self._start_docker_services)
             return
@@ -1397,13 +1416,24 @@ class RepoCard(ctk.CTkFrame):
             profile = ''
             if hasattr(self, '_profile_combo'):
                 profile = self._profile_combo.get()
+            elif hasattr(self, '_config_combos') and self._config_combos:
+                for _, combo in self._config_combos.items():
+                    v = combo.get()
+                    if v and v not in ('- Sin Seleccionar -', ''):
+                        profile = v
+                        break
             elif hasattr(self, '_env_combo'):
                 profile = self._env_combo.get()
+
+            java_home = ''
+            if hasattr(self, 'selected_java_var'):
+                java_choice = self.selected_java_var.get()
+                java_home = self._java_versions.get(java_choice, '')
 
             self._launcher.restart_service(
                 repo.name, repo.path, repo.repo_type,
                 profile, repo.server_port,
-                self._log, self._update_status
+                self._log, self._update_status, java_home=java_home
             )
         threading.Thread(target=_run, daemon=True).start()
 
@@ -1477,6 +1507,13 @@ class RepoCard(ctk.CTkFrame):
                     if hasattr(self, '_config_combo'):
                         self._config_combo.set("- Sin Seleccionar -")
                         self._on_config_change("- Sin Seleccionar -")
+                    if hasattr(self, '_config_combos'):
+                        for target_file, combo in self._config_combos.items():
+                            combo.set("- Sin Seleccionar -")
+                            from core.config_manager import save_active_config
+                            save_active_config(self.get_config_key(target_file), "- Sin Seleccionar -")
+                            # We don't trigger self._on_config_change for all because clean reverting
+                            # the files makes git restore the originals automatically.
                     self._refresh_badge()
                     self._check_pull_status()
                 self.after(500, _restore)
@@ -1590,57 +1627,26 @@ class RepoCard(ctk.CTkFrame):
             self._db_combo.set(preset_name)
             self._on_db_change(preset_name)
 
-    def set_profile(self, profile: str):
+    def set_profile(self, profile):
         if hasattr(self, '_config_combo'):
-            self._config_combo.set(profile)
+            p = profile if isinstance(profile, str) else ''
+            self._config_combo.set(p if p else '- Sin Seleccionar -')
             self._update_header_hints()
-            self._on_config_change(profile)
+            self._on_config_change(p if p else '- Sin Seleccionar -')
+        elif hasattr(self, '_config_combos') and self._config_combos:
+            if isinstance(profile, dict):
+                for target_file, combo in self._config_combos.items():
+                    val = profile.get(target_file, '- Sin Seleccionar -')
+                    combo.set(val)
+                    self._update_header_hints()
+                    self._on_config_change(val, target_file, skip_log=True)
+            else:
+                p = profile if isinstance(profile, str) and profile else '- Sin Seleccionar -'
+                for target_file, combo in self._config_combos.items():
+                    combo.set(p)
+                    self._update_header_hints()
+                    self._on_config_change(p, target_file, skip_log=True)
 
-    def _start(self):
-        """Start the service."""
-        java_choice = self.selected_java_var.get()
-        java_home = self._java_versions.get(java_choice, "")
-        
-        if self._repo.repo_type == 'spring-boot':
-            profile = getattr(self, '_profile_combo', None)
-            active_profile = profile.get() if profile else 'default'
-            self._launcher.start_spring_boot(
-                self._repo.name, self._repo.path, active_profile,
-                self._repo.server_port, self._log, self._on_status_change, java_home=java_home
-            )
-        elif self._repo.repo_type == 'angular':
-            env = getattr(self, '_env_combo', None)
-            active_env = env.get() if env else ''
-            self._launcher.start_angular(
-                self._repo.name, self._repo.path, active_env,
-                self._log, self._on_status_change
-            )
-        elif self._repo.repo_type == 'maven-lib':
-            self._launcher.start_maven_install(
-                self._repo.name, self._repo.path, self._log, self._on_status_change, java_home=java_home
-            )
-        elif self._repo.repo_type == 'docker-infra':
-            pass # We don't have start for docker-infra directly yet
-
-    def _stop(self):
-        """Stop the service."""
-        self._launcher.stop_service(self._repo.name, self._log, self._on_status_change)
-
-    def _restart(self):
-        """Restart the service."""
-        java_choice = self.selected_java_var.get()
-        java_home = self._java_versions.get(java_choice, "")
-        
-        profile = ''
-        if getattr(self, '_profile_combo', None):
-            profile = self._profile_combo.get()
-        elif getattr(self, '_env_combo', None):
-            profile = self._env_combo.get()
-
-        self._launcher.restart_service(
-            self._repo.name, self._repo.path, self._repo.repo_type,
-            profile, self._repo.server_port, self._log, self._on_status_change, java_home=java_home
-        )
 
     def _on_status_change(self, name: str, status: str):
         """Callback from ServiceLauncher when status changes."""
@@ -1690,10 +1696,17 @@ class RepoCard(ctk.CTkFrame):
             return self._cmd_entry.get().strip()
         return ''
 
-    def get_current_profile(self) -> str:
+    def get_current_profile(self):
         if hasattr(self, '_config_combo'):
             val = self._config_combo.get()
             return val if val != "- Sin Seleccionar -" else ''
+        elif hasattr(self, '_config_combos') and self._config_combos:
+            res = {}
+            for tf, combo in self._config_combos.items():
+                v = combo.get()
+                if v and v not in ('- Sin Seleccionar -', ''):
+                    res[tf] = v
+            return res
         return ''
 
     def get_name(self) -> str:

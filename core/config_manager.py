@@ -274,7 +274,7 @@ def auto_import_configs(repo_path: str, repo_type: str, environment_files: list 
     """
     imported = {}
     
-    if repo_type == 'angular':
+    if repo_type in ('angular', 'nx-workspace'):
         files_to_scan = environment_files if environment_files else []
         for file_path in files_to_scan:
             if not os.path.isfile(file_path):
@@ -283,27 +283,66 @@ def auto_import_configs(repo_path: str, repo_type: str, environment_files: list 
             basename = os.path.basename(file_path)
             parts = basename.split('.')
             if len(parts) > 2:
-                name = parts[1]
-            
+                name = parts[1]  # e.g. environment.prod.ts -> 'prod'
+            elif basename.startswith('.env.'):
+                name = basename[5:]  # .env.local -> 'local'
+            elif basename == '.env':
+                name = 'default'
+
             content = read_config_file_raw(file_path)
             if content:
+                # Use path relative to repo as key prefix for nx multi-app repos
                 imported[name] = content
-                        
+
     elif repo_type == 'spring-boot':
         res_dir = os.path.join(repo_path, 'src', 'main', 'resources')
         if os.path.isdir(res_dir):
             for file in os.listdir(res_dir):
-                if (file.startswith('application') and 
+                if (file.startswith('application') and
                    (file.endswith('.yml') or file.endswith('.yaml') or file.endswith('.properties'))):
-                    
+
                     name = 'default'
                     # splitext removes extension, so we get 'application-dev'
                     base = os.path.splitext(file)[0]
                     if '-' in base:
                         name = base.split('-', 1)[1]
-                        
+
                     content = read_config_file_raw(os.path.join(res_dir, file))
                     if content:
                         imported[name] = content
-                        
+
     return imported
+
+
+def load_active_config(config_key: str, config_path: str = '') -> str:
+    """Load the active config name for a given config_key."""
+    if not config_path:
+        config_path = get_config_path()
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        active_configs = config.get('active_configs', {})
+        return active_configs.get(config_key, "- Sin Seleccionar -")
+    except Exception:
+        return "- Sin Seleccionar -"
+
+
+def save_active_config(config_key: str, active_name: str, config_path: str = ''):
+    """Save the active config name for a given config_key."""
+    if not config_path:
+        config_path = get_config_path()
+    try:
+        if os.path.isfile(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        else:
+            config = {}
+        
+        if 'active_configs' not in config:
+            config['active_configs'] = {}
+            
+        config['active_configs'][config_key] = active_name
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass

@@ -1,0 +1,29 @@
+# Docker Infrastructure Repository Definition
+type: "docker-infra"
+priority: 0
+icon: "🐳"
+color: "#3b82f6"
+
+detection:
+  required_files: []
+
+heuristics:
+  must_match_patterns:
+    - "docker-compose*.yml"
+    - "docker-compose*.yaml"
+
+# Docker infra is usually managed by the Global Panel directly (seeds, mysql, etc),
+# but defining standard commands allows for individual start/stop of the whole stack if needed.
+commands:
+  install_cmd: ""
+  start_cmd: "docker-compose up -d"
+  stop_cmd: "docker-compose down"
+  profile_flag: ""
+
+env_files:
+  patterns:
+    - ".env"
+  exclude_dirs: []
+
+features:
+  - "docker_checkboxes"
