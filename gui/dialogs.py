@@ -356,7 +356,7 @@ class ProfileDialog(ctk.CTkToplevel):
         self._refresh_list()
         
         if self._on_profiles_changed:
-            self._on_profiles_changed()
+            self._on_profiles_changed(name)
 
     def _load_profile(self):
         name = self._selected_profile.get()

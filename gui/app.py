@@ -486,13 +486,18 @@ class DevOpsManagerApp(ctk.CTk):
             on_profiles_changed=self._refresh_profile_dropdown
         )
 
-    def _refresh_profile_dropdown(self):
+    def _refresh_profile_dropdown(self, auto_select_name=None):
         """Reload profile options into topbar dropdown after creation/deletion."""
         from core.profile_manager import list_profiles
         profiles = [NO_PROFILE_TEXT] + list_profiles()
         if hasattr(self, '_profile_combo'):
             self._profile_combo.configure(values=profiles)
-            if self._current_profile_name in profiles:
+            
+            if auto_select_name and auto_select_name in profiles:
+                self._profile_combo.set(auto_select_name)
+                # Ensure the system selects and triggers it
+                self._on_profile_dropdown_change(auto_select_name)
+            elif self._current_profile_name in profiles:
                 self._profile_combo.set(self._current_profile_name)
             else:
                 self._profile_combo.set(NO_PROFILE_TEXT)

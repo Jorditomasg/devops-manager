@@ -26,5 +26,12 @@ env_files:
   patterns: []
   exclude_dirs: []
 
+ui:
+  install:
+    check_dirs: ["target"]
+    label_missing: "Install"
+    label_ok: "Reinstall ✓"
+    tooltip: "mvn verify // mvn install -DskipTests --batch-mode"
+
 features:
   - "java_version"

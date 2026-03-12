@@ -653,33 +653,34 @@ class RepoCard(ctk.CTkFrame):
         repo = self._repo
         path = repo.path
         
-        has_package_json = os.path.isfile(os.path.join(path, PACKAGE_JSON_FILE))
-        has_pom_xml = os.path.isfile(os.path.join(path, POM_XML_FILE))
-        
-        if not has_package_json and not has_pom_xml:
-            return  # Don't build install button if neither PACKAGE_JSON_FILE nor POM_XML_FILE exists
-
-        is_installed = False
-        default_tt = ""
-        
-        if has_package_json:
-            is_installed = os.path.isdir(os.path.join(path, 'node_modules'))
-            default_tt = repo.run_install_cmd or "npm install"
-            if not is_installed:
-                default_tt += "\n(node_modules no encontrado)"
-        elif has_pom_xml:
-            is_installed = os.path.isdir(os.path.join(path, 'target'))
-            default_tt = repo.run_install_cmd or "mvn install"
-            if not is_installed:
-                default_tt += "\n(carpeta target no encontrada)"
-        
-        # Load from config or fallback
         install_cfg = getattr(repo, 'ui_config', {}).get('install', {})
-        tooltip_text = install_cfg.get('tooltip', default_tt)
+        if not install_cfg and not repo.run_install_cmd:
+            return
+
+        check_dirs = install_cfg.get('check_dirs', [])
         
-        # Override tooltip with exact YAML command if missing
-        if is_installed and repo.run_install_cmd:
-            tooltip_text = repo.run_install_cmd
+        # If check_dirs exist, check them. If not, we assume it's not installed yet,
+        # or it can never be "installed" in a persistent folder sense.
+        is_installed = False
+        if check_dirs:
+            is_installed = True
+            for cd in check_dirs:
+                if not os.path.isdir(os.path.join(path, cd)):
+                    is_installed = False
+                    break
+        
+        # Exact command
+        if is_installed and repo.run_reinstall_cmd:
+            cmd_str = repo.run_reinstall_cmd
+        elif repo.run_install_cmd:
+            cmd_str = repo.run_install_cmd
+        else:
+            cmd_str = "" # Should never happen if 'install' config is present, but just in case
+            
+        if not cmd_str:
+            return
+
+        tooltip_text = cmd_str
         
         if is_installed:
             btn_text = install_cfg.get('label_ok', REINSTALL_LBL)
@@ -1143,36 +1144,32 @@ class RepoCard(ctk.CTkFrame):
     # ─── install_cmd ─────────────────────────────────────────────
 
     def _run_install_cmd(self, bypass_confirm=False):
-        """Run the appropriate install command (npm install or mvn install) depending on repo type."""
+        """Run the appropriate install command."""
         from tkinter import messagebox
         repo = self._repo
         path = repo.path
-        has_package_json = os.path.isfile(os.path.join(path, PACKAGE_JSON_FILE))
-        has_pom_xml = os.path.isfile(os.path.join(path, POM_XML_FILE))
         
-        is_frontend = has_package_json
-        
-        # Check if already installed
+        install_cfg = getattr(repo, 'ui_config', {}).get('install', {})
+        check_dirs = install_cfg.get('check_dirs', [])
         already_installed = False
-        if is_frontend:
-            already_installed = os.path.isdir(os.path.join(path, 'node_modules'))
-        elif has_pom_xml:
-            already_installed = os.path.isdir(os.path.join(path, 'target'))
+        
+        if check_dirs:
+            already_installed = True
+            for cd in check_dirs:
+                if not os.path.isdir(os.path.join(path, cd)):
+                    already_installed = False
+                    break
             
         if hasattr(self, '_install_btn') and already_installed and not bypass_confirm:
             if not messagebox.askyesno("Reinstalar", "¿Estás seguro de que deseas volver a instalar dependencias?"):
                 return
                 
-        # Build full tool-tip text on hover and use corresponding CMD
-        install_cfg = getattr(repo, 'ui_config', {}).get('install', {})
-        
         if already_installed and repo.run_reinstall_cmd:
             cmd_str = repo.run_reinstall_cmd
+        elif repo.run_install_cmd:
+            cmd_str = repo.run_install_cmd
         else:
-            if is_frontend:
-                cmd_str = repo.run_install_cmd or 'npm install --legacy-peer-deps'
-            else:
-                cmd_str = repo.run_install_cmd or 'mvn install -DskipTests --batch-mode'
+            return
                 
         running_text = "Installing..."
         success_text = install_cfg.get('label_ok', REINSTALL_LBL)
@@ -1185,9 +1182,8 @@ class RepoCard(ctk.CTkFrame):
         self._is_installing = True
         self._update_button_visibility()
 
-        # Build environment with specific JAVA_HOME for Java projects
         env = None
-        if not is_frontend:
+        if 'java_version' in repo.features:
             from core.java_manager import build_java_env
             java_choice = getattr(self, 'selected_java_var', None)
             if java_choice:

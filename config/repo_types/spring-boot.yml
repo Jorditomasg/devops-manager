@@ -38,6 +38,7 @@ ui:
   selectors:
     - label: "App:"
   install:
+    check_dirs: ["target"]
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "mvn verify // mvn install -DskipTests --batch-mode"
