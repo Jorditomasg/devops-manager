@@ -19,6 +19,8 @@ commands:
   reinstall_cmd: "rmdir /s /q node_modules & npm i"
   start_cmd: "npm start"
   profile_flag: ""
+  ready_pattern: "compiled successfully|Compiled|localhost:\\d+"
+  error_pattern: "Failed to compile"
 
 env_files:
   default_dir: "."

@@ -47,6 +47,13 @@ CARD_HOVER = "#1c1940"
 CARD_BORDER = "#3b3768"
 EXPAND_BG = "#120f28"
 
+PORT_REGEXES = [
+    re.compile(r"Tomcat (?:started on|initialized with) port.*?(\d+)", re.IGNORECASE),
+    re.compile(r"http://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])[:\s]+(\d+)", re.IGNORECASE),
+    re.compile(r"(?:listening on|bound to).*?port\s+(\d+)", re.IGNORECASE),
+    re.compile(r"Local:\s*http://localhost:(\d+)", re.IGNORECASE),
+]
+
 
 def _create_subprocess(cmd_str: str, cwd: str, env: dict = None, shell: bool = True) -> subprocess.Popen:
     """Helper to create a unified subprocess."""
@@ -77,15 +84,20 @@ class RepoCard(ctk.CTkFrame):
         self._on_edit_config = on_edit_config
         self._on_change_callback = on_change_callback
         self._status = 'stopped'
+        self._user_stopped = False
         self._branches_cache = []
         self._branch_load_id = None
         self._expanded = False
         self._is_installing = False
         self.selected_var = ctk.BooleanVar(value=True)
         self.selected_java_var = ctk.StringVar(value="Sistema (Por Defecto)")
+        
+        self._active_compose_files = set()
+        self._docker_compose_buttons = {}
+        self._compose_status_thread_running = False
 
-        self._build_header()
-        self._build_expand_panel()
+        self._build_ui()
+        self._update_header_hints()
         self._expand_panel.pack_forget()
 
         from domain.ports.event_bus import bus
@@ -167,6 +179,11 @@ class RepoCard(ctk.CTkFrame):
                 self._focus_bound = True
             except tk.TclError:
                 pass
+
+    def _build_ui(self):
+        """Build all UI elements for the card."""
+        self._build_header()
+        self._build_expand_panel()
 
     # ─── HEADER (always visible, compact) ────────────────────────
 
@@ -374,7 +391,7 @@ class RepoCard(ctk.CTkFrame):
     def install_dependencies(self, skip_if_installed=False):
         """Method to trigger dependency installation via YAML commands."""
         install_cfg = getattr(self._repo, 'ui_config', {}).get('install', {})
-        check_dirs = install_cfg.get('check_dirs', []) if install_cfg else []
+        check_dirs = install_cfg.get('check_dirs', [])
         
         if not self._repo.run_install_cmd:
             return
@@ -823,20 +840,40 @@ class RepoCard(ctk.CTkFrame):
                 self._db_combo.set(NO_DB_PRESET)
 
         if 'docker_checkboxes' in repo.features and repo.docker_compose_files:
-            self._docker_checkboxes = {}
             for dc_file in repo.docker_compose_files:
-                dc_name = os.path.basename(dc_file).replace('docker-compose.', '').replace('.yml', '')
+                dc_name = os.path.basename(dc_file)
+                if dc_name == 'docker-compose.yml':
+                    dc_name = 'docker-compose'
+                elif dc_name.startswith('docker-compose.'):
+                    dc_name = dc_name.replace('docker-compose.', '').replace('.yml', '')
+                    
                 if dc_name == 'all':
                     continue
                 has_row2 = True
-                var = ctk.BooleanVar(value=False)
-                self._docker_checkboxes[dc_file] = var
-                ctk.CTkCheckBox(
-                    row2, text=dc_name.title(),
-                    font=(FONT_FAMILY, 12), variable=var,
-                    checkbox_width=18, checkbox_height=18,
-                    text_color="#c7d2fe"
-                ).pack(side="left", padx=(0, 6))
+                
+                # Default assume stopped styling
+                btn_color = "#1e293b" if dc_file not in self._active_compose_files else "#0f172a"
+                border_color = "#334155" if dc_file not in self._active_compose_files else "#3b82f6"
+                
+                btn = ctk.CTkButton(
+                    row2, text=f"🐳 {dc_name.title()} [?/?]",
+                    font=(FONT_FAMILY, 11), height=26,
+                    fg_color=btn_color, hover_color="#334155",
+                    border_width=1, border_color=border_color,
+                    command=lambda f=dc_file: self._open_docker_compose_dialog(f)
+                )
+                btn.pack(side="left", padx=(0, 6))
+                self._docker_compose_buttons[dc_file] = btn
+                
+                if dc_file in self._active_compose_files:
+                    ToolTip(btn, "Haga clic para gestionar servicios (Activo en perfil)")
+                else:
+                    ToolTip(btn, "Haga clic para gestionar servicios")
+
+            # Start thread to update container counts if not running
+            if not self._compose_status_thread_running:
+                self._compose_status_thread_running = True
+                self._start_compose_status_thread()
 
         if has_row2:
             row2.pack(fill="x", pady=(4, 0))
@@ -1135,7 +1172,7 @@ class RepoCard(ctk.CTkFrame):
                 if curr not in opts:
                     self._config_combo.set("- Sin Seleccionar -")
                     self._update_header_hints()
-                    
+
         RepoConfigManagerDialog(
             self.winfo_toplevel(), 
             repo=self._repo, 
@@ -1262,6 +1299,38 @@ class RepoCard(ctk.CTkFrame):
 
     # ─── Start / Stop / Restart ──────────────────────────────────
 
+    def _detect_port_from_log(self, line: str):
+        """Dynamically detect and update the server port from log output."""
+        if self._repo.server_port:
+            return  # Port is already statically defined
+
+        for regex in PORT_REGEXES:
+            match = regex.search(line)
+            if match:
+                try:
+                    port = int(match.group(1))
+                    if self._repo.server_port != port:
+                        self._repo.server_port = port
+                        self.after(0, lambda: self._update_status(self._repo.name, self._status))
+                except ValueError:
+                    pass
+                break
+
+    def _detect_status_from_log(self, line: str):
+        """Detect service readiness or failure from log output using configurable patterns."""
+        if self._status != 'starting':
+            return
+
+        ready = self._repo.ready_pattern
+        error = self._repo.error_pattern
+
+        if error and re.search(error, line):
+            self.after(0, lambda: self._update_status(self._repo.name, 'error'))
+            return
+
+        if ready and re.search(ready, line):
+            self.after(0, lambda: self._update_status(self._repo.name, 'running'))
+
     def _get_start_command(self):
         """Get the start command — custom or default."""
         if hasattr(self, '_cmd_entry'):
@@ -1320,6 +1389,7 @@ class RepoCard(ctk.CTkFrame):
             except (ImportError, OSError):
                 pass
 
+        self._user_stopped = False
         self._update_status(repo.name, 'starting')
         if self._log:
             self._log(f"[{repo.name}] ▶ {cmd}")
@@ -1329,20 +1399,34 @@ class RepoCard(ctk.CTkFrame):
                 process = _create_subprocess(cmd, cwd=repo.path, env=env, shell=True)
                 # Track process in legacy launcher so stop/restart work
                 from domain.models.running_service import RunningService
-                svc = RunningService(name=repo.name, repo_path=repo.path, port=0, profile=profile, status='running')
+                svc = RunningService(name=repo.name, repo_path=repo.path, port=0, profile=profile, status='starting')
                 svc.process = process
                 self._launcher._services[repo.name] = svc
 
-                self.after(0, lambda: self._update_status(repo.name, 'running'))
+                # Stay in 'starting' — transition to 'running' is driven by ready_pattern
+                if not repo.ready_pattern:
+                    self.after(0, lambda: self._update_status(repo.name, 'running'))
 
                 for line in iter(process.stdout.readline, ''):
                     if not line:
                         break
+                    
+                    decoded_line = line.strip()
+                    self._detect_port_from_log(decoded_line)
+                    self._detect_status_from_log(decoded_line)
+                    
                     if self._log:
-                        self._log(line.strip())
+                        self._log(decoded_line)
 
                 process.wait()
-                self.after(0, lambda: self._update_status(repo.name, 'stopped'))
+                # If still 'starting' when process exits and user didn't stop it, it failed
+                if self._user_stopped:
+                    final_status = 'stopped'
+                elif self._status == 'starting':
+                    final_status = 'error'
+                else:
+                    final_status = 'stopped'
+                self.after(0, lambda s=final_status: self._update_status(repo.name, s))
                 if self._log:
                     self._log(f"[{repo.name}] ⏹ Proceso terminado (código {process.returncode})")
             except Exception as e:
@@ -1363,16 +1447,31 @@ class RepoCard(ctk.CTkFrame):
         def _run():
             try:
                 process = _create_subprocess(cmd_str, cwd=repo.path, env=None, shell=True)
-                self._update_status(repo.name, 'running')
+
+                # Stay in 'starting' — transition to 'running' is driven by ready_pattern
+                if not repo.ready_pattern:
+                    self._update_status(repo.name, 'running')
 
                 for line in iter(process.stdout.readline, ''):
                     if not line:
                         break
+                    
+                    decoded_line = line.strip()
+                    self._detect_port_from_log(decoded_line)
+                    self._detect_status_from_log(decoded_line)
+                    
                     if self._log:
-                        self._log(line.strip())
+                        self._log(decoded_line)
 
                 process.wait()
-                self._update_status(repo.name, 'stopped')
+                # If still 'starting' when process exits and user didn't stop it, it failed
+                if self._user_stopped:
+                    final_status = 'stopped'
+                elif self._status == 'starting':
+                    final_status = 'error'
+                else:
+                    final_status = 'stopped'
+                self._update_status(repo.name, final_status)
             except Exception as e:
                 self._update_status(repo.name, 'error')
                 if self._log:
@@ -1380,18 +1479,88 @@ class RepoCard(ctk.CTkFrame):
 
         threading.Thread(target=_run, daemon=True).start()
 
+    def _open_docker_compose_dialog(self, compose_file: str):
+        """Open the modal to manage services for a specific compose file."""
+        from gui.dialogs import DockerComposeDialog
+        DockerComposeDialog(
+            self.master.master if hasattr(self, 'master') and hasattr(self.master, 'master') else self,
+            compose_file=compose_file,
+            log_callback=self._log,
+            on_status_change=self._update_compose_counts_now
+        )
+
+    def _update_compose_counts_now(self):
+        """Immediate trigger for the background count updater."""
+        pass # Background thread polls every 4s, which is enough
+
+    def _start_compose_status_thread(self):
+        """Background thread to poll docker container status for active compose files."""
+        def _loop():
+            import time
+            from core.db_manager import parse_compose_services, get_compose_service_status
+            while self._compose_status_thread_running and self.winfo_exists():
+                total_running = 0
+                for dc_file, btn in self._docker_compose_buttons.items():
+                    try:
+                        services = parse_compose_services(dc_file)
+                        total = len(services)
+                        status_map = get_compose_service_status(dc_file)
+                        running = sum(1 for s in status_map.values() if s == "running")
+                        
+                        dc_name = os.path.basename(dc_file)
+                        if dc_name == 'docker-compose.yml':
+                            dc_name = 'docker-compose'
+                        elif dc_name.startswith('docker-compose.'):
+                            dc_name = dc_name.replace('docker-compose.', '').replace('.yml', '')
+                            
+                        text = f"🐳 {dc_name.title()} [{running}/{total}]"
+                        
+                        if dc_file in self._active_compose_files:
+                            total_running += running
+                            
+                        # Update button thread-safely
+                        def _update_btn(b=btn, t=text, r=running, f=dc_file):
+                            if not b.winfo_exists(): return
+                            b.configure(text=t)
+                            if r > 0:
+                                b.configure(border_color="#10b981") # Green if any running
+                            elif f in self._active_compose_files:
+                                b.configure(border_color="#3b82f6") # Blue if active but 0 running
+                            else:
+                                b.configure(border_color="#334155") # Gray
+                        
+                        self.after(0, _update_btn)
+                    except Exception:
+                        pass
+                
+                # Update global repo status
+                if self._active_compose_files:
+                    def _update_global_status(r=total_running):
+                        if not self.winfo_exists(): return
+                        if r > 0:
+                            self._status_label.configure(text="🔴", text_color="#10b981")
+                            self._status_text.configure(text=f"En ejecución ({r} servicios)", text_color="#10b981")
+                        else:
+                            self._status_label.configure(text="🔴", text_color="#ef4444")
+                            self._status_text.configure(text="Detenido", text_color="#888")
+                    self.after(0, _update_global_status)
+                        
+                time.sleep(4)
+                
+        threading.Thread(target=_loop, daemon=True).start()
+
     def _start_docker_services(self):
-        """Start selected docker-compose services."""
+        """Start active docker-compose services."""
         def _run():
             from core.db_manager import docker_compose_up
-            if hasattr(self, '_docker_checkboxes'):
-                for dc_file, var in self._docker_checkboxes.items():
-                    if var.get():
-                        docker_compose_up(dc_file, log=self._log)
+            for dc_file in self._active_compose_files:
+                docker_compose_up(dc_file, log=self._log)
+            self._update_compose_counts_now()
         threading.Thread(target=_run, daemon=True).start()
 
     def _stop(self):
         """Stop the service using the service launcher."""
+        self._user_stopped = True
         repo = self._repo
         if 'docker_checkboxes' in repo.features:
             self._stop_docker_services()
@@ -1400,13 +1569,12 @@ class RepoCard(ctk.CTkFrame):
         self._launcher.stop_service(repo.name, self._log, self._update_status)
 
     def _stop_docker_services(self):
-        """Stop selected docker-compose services."""
+        """Stop active docker-compose services."""
         def _run():
             from core.db_manager import docker_compose_down
-            if hasattr(self, '_docker_checkboxes'):
-                for dc_file, var in self._docker_checkboxes.items():
-                    if var.get():
-                        docker_compose_down(dc_file, log=self._log)
+            for dc_file in self._active_compose_files:
+                docker_compose_down(dc_file, log=self._log)
+            self._update_compose_counts_now()
         threading.Thread(target=_run, daemon=True).start()
 
     def _restart(self):
@@ -1694,6 +1862,44 @@ class RepoCard(ctk.CTkFrame):
 
     def get_repo_info(self):
         return self._repo
+
+    def get_docker_compose_active(self) -> list:
+        return list(self._active_compose_files)
+
+    def set_docker_compose_active(self, active_files: list):
+        """Apply active compose files from profile, modifying UI and stopping old ones."""
+        old_active = self._active_compose_files.copy()
+        
+        # We need absolute paths, profile might just save basenames if we want it robust,
+        # but here we expect full paths or we match by basename.
+        new_active = set()
+        for f in active_files:
+            # Map basename back to absolute path in repo.docker_compose_files
+            for repo_f in self._repo.docker_compose_files:
+                if repo_f == f or os.path.basename(repo_f) == f or os.path.basename(repo_f) == os.path.basename(f):
+                    new_active.add(repo_f)
+                    break
+                    
+        self._active_compose_files = new_active
+        
+        # Stop ones that are no longer active
+        to_stop = old_active - new_active
+        if to_stop:
+            def _stop_bg():
+                from core.db_manager import docker_compose_down
+                for f in to_stop:
+                    if self._log: self._log(f"Deteniendo compose inactivo: {os.path.basename(f)}")
+                    docker_compose_down(f, log=self._log)
+            threading.Thread(target=_stop_bg, daemon=True).start()
+            
+        # Update UI borders
+        for dc_file, btn in self._docker_compose_buttons.items():
+            if dc_file in new_active:
+                btn.configure(fg_color="#0f172a", border_color="#3b82f6")
+                ToolTip(btn, "Haga clic para gestionar servicios (Activo en perfil)")
+            else:
+                btn.configure(fg_color="#1e293b", border_color="#334155")
+                ToolTip(btn, "Haga clic para gestionar servicios")
 
     def do_pull(self):
         self._pull()

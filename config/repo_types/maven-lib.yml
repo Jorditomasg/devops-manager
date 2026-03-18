@@ -19,6 +19,8 @@ commands:
   windows_start_cmd: "mvnw.cmd clean install -DskipTests -B"
   unix_start_cmd: "./mvnw clean install -DskipTests -B"
   profile_flag: ""
+  ready_pattern: "BUILD SUCCESS"
+  error_pattern: "BUILD FAILURE"
 
 env_files:
   default_dir: "src/main/resources"

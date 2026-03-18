@@ -58,6 +58,112 @@ def get_running_containers(project_prefix: str = '') -> list[dict]:
     except (subprocess.SubprocessError, OSError):
         return []
 
+def parse_compose_services(compose_file: str) -> list[dict]:
+    """Parse a docker-compose file and return a list of defined services."""
+    try:
+        import yaml
+        with open(compose_file, 'r', encoding='utf-8') as f:
+            compose = yaml.safe_load(f) or {}
+
+        services_dict = compose.get('services', {})
+        services_list = []
+        for name, config in services_dict.items():
+            ports_raw = config.get('ports', [])
+            ports = [str(p) for p in ports_raw] if ports_raw else []
+
+            depends_on_raw = config.get('depends_on', [])
+            depends_on = []
+            if isinstance(depends_on_raw, list):
+                depends_on = depends_on_raw
+            elif isinstance(depends_on_raw, dict):
+                depends_on = list(depends_on_raw.keys())
+
+            services_list.append({
+                'name': name,
+                'image': config.get('image', config.get('build', 'unknown')),
+                'ports': ports,
+                'depends_on': depends_on
+            })
+        return services_list
+    except Exception as e:
+        print(f"Error parsing {compose_file}: {e}")
+        return []
+
+def get_compose_service_status(compose_file: str) -> dict:
+    """Get the status of all services in a docker-compose file."""
+    try:
+        fname = os.path.basename(compose_file)
+        cwd = os.path.dirname(compose_file)
+        
+        # Using docker-compose ps --services --filter "status=running" is cleaner 
+        # but --format json isn't well supported in older compose v1.
+        # So we'll parse standard ps output.
+        result = subprocess.run(
+            ['docker-compose', '-f', fname, 'ps'],
+            capture_output=True, text=True, timeout=10, cwd=cwd,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        
+        # Simple heuristic: map actual container names back to services later
+        # However, a more robust way for compose is asking specifically for services.
+        # Let's use `docker-compose -f fname ps --services` to see what is defined,
+        # then map running ones. Wait, `docker-compose config --services` gives defined ones.
+        # Let's extract status correctly by parsing the table.
+        status_map = {}
+        if result.returncode == 0:
+            lines = result.stdout.strip().splitlines()
+            # Standard compose v1 output table format: Name, Command, State, Ports
+            for line in lines[2:]:  # skip header and separator
+                if not line.strip(): continue
+                parts = line.split()
+                if not parts: continue
+                container_name = parts[0]
+                
+                # Guess the service name from container name (usually project_service_index)
+                # But docker-compose v1 puts the state in the 3rd or 4th column, usually "Up", "Exit..." 
+                state = "exited"
+                if "Up" in line or "running" in line.lower():
+                    state = "running"
+                status_map[container_name] = state
+                
+        # To map containers to services properly:
+        # We can ask for running containers for this specific project
+        running_srv_result = subprocess.run(
+           ['docker-compose', '-f', fname, 'ps', '--services', '--filter', 'status=running'],
+           capture_output=True, text=True, timeout=10, cwd=cwd,
+           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        
+        running_services = []
+        if running_srv_result.returncode == 0:
+            running_services = running_srv_result.stdout.strip().splitlines()
+            
+        # We return a dict {service_name: "running" | "stopped"}
+        # Services not in running_services are considered stopped.
+        all_services = [s['name'] for s in parse_compose_services(compose_file)]
+        final_map = {}
+        for srv in all_services:
+            final_map[srv] = "running" if srv in running_services else "stopped"
+            
+        return final_map
+    except Exception as e:
+        print(f"Error checking status for {compose_file}: {e}")
+        return {}
+
+def docker_compose_logs(compose_file: str, service_name: str, tail: int = 100) -> str:
+    """Get the tail logs for a specific service."""
+    try:
+        fname = os.path.basename(compose_file)
+        cwd = os.path.dirname(compose_file)
+        result = subprocess.run(
+            ['docker-compose', '-f', fname, 'logs', '--tail', str(tail), service_name],
+            capture_output=True, text=True, timeout=10, cwd=cwd,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        return result.stdout.strip() + "\n" + result.stderr.strip()
+    except Exception as e:
+        return f"Error retrieving logs: {e}"
+
 
 def docker_compose_up(compose_file: str, services: list = None,
                        log: LogCallback = None) -> tuple[bool, str]:

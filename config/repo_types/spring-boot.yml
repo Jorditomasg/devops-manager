@@ -21,6 +21,8 @@ commands:
   windows_start_cmd: "mvnw.cmd spring-boot:run"
   unix_start_cmd: "./mvnw spring-boot:run"
   profile_flag: "-Dspring-boot.run.profiles="
+  ready_pattern: "Started \\w+ in"
+  error_pattern: "Application run failed"
 
 env_files:
   default_dir: "src/main/resources"

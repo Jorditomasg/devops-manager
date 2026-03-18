@@ -47,6 +47,10 @@ class RepoInfo:
     server_port: Optional[int] = None
     context_path: Optional[str] = None
 
+    # Log-based status detection patterns (regex)
+    ready_pattern: Optional[str] = None
+    error_pattern: Optional[str] = None
+
     # Seeds / Flyway migrations
     has_seeds: bool = False
     seed_dirs: List[str] = field(default_factory=list)
