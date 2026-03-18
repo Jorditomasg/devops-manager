@@ -112,6 +112,11 @@ def checkout(repo_path: str, branch: str, log: LogCallback = None) -> tuple[bool
     """Checkout a branch. If it's a remote branch, create a tracking local branch."""
     name = os.path.basename(repo_path)
     try:
+        # Check current branch first to avoid unnecessary git commands and logging
+        current = get_current_branch(repo_path)
+        if current == branch:
+            return True, f"Already on '{branch}'"
+
         if log:
             log(f"[git] Checking out '{branch}' in {name}...")
 
@@ -144,6 +149,7 @@ def checkout(repo_path: str, branch: str, log: LogCallback = None) -> tuple[bool
         if log:
             log(f"[git] Checkout error: {e}")
         return False, str(e)
+
 
 
 def clone(url: str, dest: str, log: LogCallback = None,

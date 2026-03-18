@@ -51,7 +51,7 @@ class RepoCard(ctk.CTkFrame):
     """Accordion repo card — collapsed bar + expandable details."""
 
     def __init__(self, parent, repo_info, service_launcher, db_presets=None,
-                 java_versions=None, log_callback=None, on_edit_config=None, **kwargs):
+                 java_versions=None, log_callback=None, on_edit_config=None, on_change_callback=None, **kwargs):
         super().__init__(parent, corner_radius=10, border_width=1,
                          border_color=CARD_BORDER,
                          fg_color=CARD_BG, **kwargs)
@@ -63,6 +63,7 @@ class RepoCard(ctk.CTkFrame):
         self._log = self._repo_log
         self._global_log = log_callback
         self._on_edit_config = on_edit_config
+        self._on_change_callback = on_change_callback
         self._status = 'stopped'
         self._branches_cache = []
         self._branch_load_id = None
@@ -91,6 +92,13 @@ class RepoCard(ctk.CTkFrame):
         if event.get("name") == self._repo.name:
             self._update_status(self._repo.name, event.get("status"))
     
+    def _trigger_change_callback(self):
+        if hasattr(self, '_on_change_callback') and self._on_change_callback:
+            try:
+                self.after(0, self._on_change_callback)
+            except Exception:
+                pass
+
     def get_config_key(self, target_file: str) -> str:
         """Get the unique config key for a specific module's target file."""
         import os
@@ -887,7 +895,12 @@ class RepoCard(ctk.CTkFrame):
                 f"Por defecto: {repo.run_command or 'N/A'}")
 
         # Update header hints when command changes
-        self._cmd_entry.bind("<FocusOut>", lambda e: self._update_header_hints())
+        def _on_cmd_changed(e):
+            self._update_header_hints()
+            self._trigger_change_callback()
+        
+        self._cmd_entry.bind("<FocusOut>", _on_cmd_changed)
+        self._cmd_entry.bind("<Return>", _on_cmd_changed)
 
     # ─── Toggle expand ───────────────────────────────────────────
 
@@ -957,6 +970,7 @@ class RepoCard(ctk.CTkFrame):
                     self._update_header_hints()
                     self._check_pull_status()
                     self._refresh_badge()
+                    self._trigger_change_callback()
                 self.after(0, _update)
             else:
                 def _err():
@@ -972,7 +986,7 @@ class RepoCard(ctk.CTkFrame):
     def _on_config_change(self, config_name: str, target_file: str = None, skip_log: bool = False):
         """Handle env/app change and overwrite target config file."""
         from tkinter import messagebox
-        from core.config_manager import load_repo_configs, write_angular_environment_raw, write_config_file_raw, save_active_config
+        from core.config_manager import load_repo_configs, write_angular_environment_raw, write_config_file_raw, save_active_config, load_active_config
         
         repo = self._repo
         
@@ -989,18 +1003,23 @@ class RepoCard(ctk.CTkFrame):
                     target_file = os.path.join(repo.path, repo.env_default_dir, main_filename)
 
         config_key = self.get_config_key(target_file)
+        
+        active_before = load_active_config(config_key)
+        is_real_change = (active_before != config_name)
+        
         save_active_config(config_key, config_name)
         
         def _run_change():
             nonlocal target_file
             if config_name == "- Sin Seleccionar -":
-                if self._log and not skip_log:
+                if self._log and (not skip_log or is_real_change):
                     self._log(f"[{self._repo.name}] Configuración deseleccionada. Restaurando configuración original.")
                 if target_file and os.path.isfile(target_file):
                     import subprocess
                     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
                     subprocess.run(['git', 'checkout', '--', target_file], cwd=repo.path, capture_output=True, creationflags=flags)
                 self.after(0, self._update_header_hints)
+                self._trigger_change_callback()
                 return
 
             configs = load_repo_configs(config_key)
@@ -1014,7 +1033,7 @@ class RepoCard(ctk.CTkFrame):
             config_data = configs.get(config_name)
             
             if not config_data:
-                if self._log and not skip_log:
+                if self._log and (not skip_log or is_real_change):
                     self._log(f"[{self._repo.name}] La configuración '{config_name}' no se encontró.")
                 return
 
@@ -1062,13 +1081,14 @@ class RepoCard(ctk.CTkFrame):
                 res = write_config_file_raw(target_file, config_data)
 
             if res:
-                if self._log and not skip_log:
+                if self._log and (not skip_log or is_real_change):
                     self._log(f"[{self._repo.name}] Configuración '{config_name}' aplicada.")
             else:
-                if not skip_log:
+                if not skip_log or is_real_change:
                     self.after(0, lambda: messagebox.showerror("Error", f"No se pudo escribir en '{target_file}'"))
                 
             self.after(0, self._update_header_hints)
+            self._trigger_change_callback()
 
         import threading
         # Ensure we only start threading for git checkout if needed to avoid overhead, but since we have file ops, let's keep it threaded.

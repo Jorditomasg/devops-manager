@@ -8,7 +8,7 @@ detection:
     - "nx.json"
 
 commands:
-  install_cmd: "npm ci"
+  install_cmd: "npm i"
   reinstall_cmd: "rmdir /s /q node_modules & npm i"
   # This uses a variable `{main_app}` that will be resolved by the python script reading the 'apps' folder
   start_cmd: "npx nx serve {main_app}"
@@ -39,5 +39,5 @@ ui:
     check_dirs: ["node_modules"]
     label_missing: "Install"
     label_ok: "Reinstall ✓"
-    tooltip: "npm ci // npm install --yes --legacy-peer-deps"
+    tooltip: "npm i // npm install --yes --legacy-peer-deps"
     status_label_deps_missing: "❌ Faltan deps"

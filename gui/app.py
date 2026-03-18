@@ -182,7 +182,7 @@ class DevOpsManagerApp(ctk.CTk):
         )
         self._quick_save_btn.pack(side="left", padx=(0, 5))
         self._quick_save_btn.pack_forget() # Initially hidden
-        ToolTip(self._quick_save_btn, "Sobrescribir Perfil Actual (Rojo porque hay cambios)")
+        ToolTip(self._quick_save_btn, "💾 Guardar cambios en el perfil actual")
         
         # Profile Dropdown
         self._profile_combo = ctk.CTkComboBox(
@@ -442,7 +442,8 @@ class DevOpsManagerApp(ctk.CTk):
                 db_presets=self._db_presets,
                 java_versions=self._java_versions,
                 log_callback=self._log,
-                on_edit_config=self._open_config_editor
+                on_edit_config=self._open_config_editor,
+                on_change_callback=self._check_profile_changes
             )
             card.pack(fill="x", padx=4, pady=3)
             self._repo_cards.append(card)
@@ -586,7 +587,7 @@ class DevOpsManagerApp(ctk.CTk):
         
         if has_changed:
             if not self._quick_save_btn.winfo_ismapped():
-                self._quick_save_btn.configure(text="💾*", fg_color="#7f1d1d", hover_color="#991b1b", border_color="#b91c1c", text_color="#facc15")
+                self._quick_save_btn.configure(text="💾", fg_color="#7f1d1d", hover_color="#991b1b", border_color="#b91c1c", text_color="#facc15")
                 self._quick_save_btn.pack(side="left", padx=(0, 5), before=self._profile_combo)
         else:
             if self._quick_save_btn.winfo_ismapped():
