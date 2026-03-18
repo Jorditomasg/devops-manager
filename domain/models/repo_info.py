@@ -23,6 +23,7 @@ class RepoInfo:
 
     # Run command
     run_install_cmd: Optional[str] = None
+    run_reinstall_cmd: Optional[str] = None
     run_command: Optional[str] = None
     run_profile_flag: Optional[str] = None
 
@@ -57,10 +58,4 @@ class RepoInfo:
     detected_framework: str = "unknown"
 
 
-@dataclass
-class RunningService:
-    """Represents a currently running service instance."""
-    name: str
-    process: object  # subprocess.Popen — not typed to avoid circular imports
-    port: Optional[int] = None
-    pid: Optional[int] = None
+

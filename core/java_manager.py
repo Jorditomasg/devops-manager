@@ -79,7 +79,7 @@ def _get_java_version(java_exe: str) -> str:
             if ver.startswith('1.'):
                 return ver.split('.')[1]
             return ver.split('.')[0]
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         pass
     return ""
 

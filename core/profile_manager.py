@@ -50,7 +50,7 @@ def load_profile(profile_name: str) -> Optional[dict]:
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return None
 
 
@@ -74,7 +74,7 @@ def delete_profile(profile_name: str) -> bool:
     try:
         os.remove(filepath)
         return True
-    except Exception:
+    except OSError:
         return False
 
 
@@ -84,7 +84,7 @@ def export_profile_to_file(profile_data: dict, filepath_dest: str) -> bool:
         with open(filepath_dest, 'w', encoding='utf-8') as f:
             json.dump(profile_data, f, indent=2, ensure_ascii=False)
         return True
-    except Exception:
+    except (OSError, TypeError):
         return False
 
 
@@ -96,7 +96,7 @@ def import_profile_from_file(filepath: str) -> Optional[dict]:
         if 'repos' not in data:
             return None
         return data
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return None
 
 
@@ -135,23 +135,31 @@ def build_profile_data(repo_cards, db_presets=None,
 
     repos = {}
     for card in repo_cards:
-        repo = card.get_repo_info()
-        repo_data = {
-            'git_url': repo.git_remote_url or '',
-            'branch': get_current_branch(repo.path),
-            'type': repo.repo_type,
-            'profile': card.get_current_profile(),
-            'custom_command': card.get_custom_command(),
-            'java_version': card.selected_java_var.get() if hasattr(card, 'selected_java_var') else "Sistema (Por Defecto)",
-        }
-
-        if include_config_files:
-            repo_data['config_files'] = _capture_config_files(repo)
-
-        repos[repo.name] = repo_data
+        repo_name, repo_data = _build_single_repo_profile(card, include_config_files)
+        repos[repo_name] = repo_data
 
     profile['repos'] = repos
     return profile
+
+
+def _build_single_repo_profile(card, include_config_files: bool) -> tuple[str, dict]:
+    """Build profile dict for a single RepoCard."""
+    from core.git_manager import get_current_branch
+
+    repo = card.get_repo_info()
+    repo_data = {
+        'git_url': repo.git_remote_url or '',
+        'branch': get_current_branch(repo.path),
+        'type': repo.repo_type,
+        'profile': card.get_current_profile(),
+        'custom_command': card.get_custom_command(),
+        'java_version': card.selected_java_var.get() if hasattr(card, 'selected_java_var') else "Sistema (Por Defecto)",
+    }
+
+    if include_config_files:
+        repo_data['config_files'] = _capture_config_files(repo)
+
+    return repo.name, repo_data
 
 
 def _capture_config_files(repo) -> dict:
@@ -164,7 +172,7 @@ def _capture_config_files(repo) -> dict:
         try:
             with open(ef, 'r', encoding='utf-8') as fh:
                 files[fname] = fh.read()
-        except Exception:
+        except OSError:
             pass
     return files
 
@@ -174,23 +182,12 @@ def apply_config_files(repo_path: str, repo_type: str, config_files: dict):
     from core.config_manager import backup_file
 
     # Search for the original files in the repo to overwrite them
-    file_locations = {}
-    for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'dist', 'target')]
-        for fname in config_files.keys():
-            if fname in files:
-                file_locations[fname] = os.path.join(root, fname)
+    file_locations = _find_existing_config_files(repo_path, set(config_files.keys()))
 
     for fname, content in config_files.items():
         fpath = file_locations.get(fname)
         if not fpath:
-            # Fallback to the default directory defined in the repo's YAML configuration
-            default_dir = getattr(repo, 'env_default_dir', '')
-            if default_dir:
-                fpath = os.path.join(repo_path, default_dir, fname)
-                os.makedirs(os.path.dirname(fpath), exist_ok=True)
-            else:
-                fpath = os.path.join(repo_path, fname)
+            fpath = os.path.join(repo_path, fname)
 
         if os.path.isfile(fpath):
             backup_file(fpath)
@@ -198,5 +195,16 @@ def apply_config_files(repo_path: str, repo_type: str, config_files: dict):
         try:
             with open(fpath, 'w', encoding='utf-8') as f:
                 f.write(content)
-        except Exception:
+        except OSError:
             pass
+
+
+def _find_existing_config_files(repo_path: str, target_files: set) -> dict:
+    """Helper purely for walking the directory to find existing config files."""
+    file_locations = {}
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'dist', 'target')]
+        for fname in target_files:
+            if fname in files:
+                file_locations[fname] = os.path.join(root, fname)
+    return file_locations

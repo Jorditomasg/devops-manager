@@ -64,6 +64,7 @@ class ManageServicesUseCase:
         service = RunningService(
             name=name,
             repo_path=repo.path,
+            port=0,
             profile=profile
         )
 

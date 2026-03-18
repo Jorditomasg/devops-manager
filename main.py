@@ -12,6 +12,7 @@ sys.path.insert(0, project_root)
 
 
 import traceback
+import logging
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     """Global exception handler to ensure everything shuts down on fatal error."""
@@ -21,6 +22,9 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
     print("Fatal Error encountered. Shutting down services...", file=sys.stderr)
     traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stderr)
+
+    # Write to error.log
+    logging.critical("Fatal unhandled exception", exc_info=(exc_type, exc_value, exc_traceback))
     
     # Give it a last effort to kill from the imported service launcher fallback
     try:
@@ -33,6 +37,10 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 
 def main():
+    # Initialize error.log file logging
+    from core.logger import setup_logging
+    setup_logging()
+
     # Set Windows AppUserModelID early so custom icon is used in taskbar
     if sys.platform == 'win32':
         import ctypes

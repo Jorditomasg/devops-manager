@@ -5,6 +5,7 @@ Handles process creation, tracking, and clean process tree termination.
 import subprocess
 import os
 import signal
+import logging
 import threading
 import atexit
 import time
@@ -91,7 +92,8 @@ class ProcessManager:
             if log_callback:
                 log_callback(f"[sys] {service.name} process exited (code {process.returncode})")
 
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError) as e:
+            logging.error(f"Error in process {service.name}: {e}", exc_info=True)
             service.status = 'error'
             bus.publish("SERVICE_STATUS_CHANGED", {"name": service.name, "status": "error", "error": str(e)})
             if log_callback:
@@ -134,16 +136,18 @@ class ProcessManager:
             return True
             
         except subprocess.TimeoutExpired:
+            logging.error(f"Timeout stopping process {name}, force killing", exc_info=True)
             # Force kill if term failed or hung
             try:
                 svc.process.kill()
-            except Exception:
+            except OSError:
                 pass
             svc.status = 'error'
             bus.publish("SERVICE_STATUS_CHANGED", {"name": name, "status": "error", "error": "Force killed on timeout."})
             return False
             
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError) as e:
+            logging.error(f"Error stopping process {name}: {e}", exc_info=True)
             if log_callback:
                 log_callback(f"[sys] Error stopping {name}: {e}")
             svc.status = 'error'

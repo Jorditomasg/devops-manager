@@ -32,7 +32,7 @@ def load_db_presets(config_path: str = '') -> dict:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         return config.get('db_presets', {})
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {}
 
 
@@ -49,7 +49,7 @@ def save_db_presets(presets: dict, config_path: str = ''):
         config['db_presets'] = presets
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         pass
 
 
@@ -91,7 +91,7 @@ def read_spring_config(resources_dir: str, profile: str = 'default') -> dict:
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f) or {}
-    except Exception:
+    except (OSError, yaml.YAMLError):
         return {}
 
 
@@ -107,7 +107,7 @@ def write_spring_config(resources_dir: str, profile: str, config: dict) -> bool:
         with open(filepath, 'w', encoding='utf-8') as f:
             yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
-    except Exception:
+    except (OSError, yaml.YAMLError):
         return False
 
 
@@ -186,7 +186,7 @@ def read_angular_environment(env_file: str) -> dict:
             value = match.group(2)
             result[key] = value
         return result
-    except Exception:
+    except OSError:
         return {}
 
 
@@ -195,7 +195,7 @@ def read_angular_environment_raw(env_file: str) -> str:
     try:
         with open(env_file, 'r', encoding='utf-8') as f:
             return f.read()
-    except Exception:
+    except OSError:
         return ''
 
 
@@ -206,7 +206,7 @@ def write_angular_environment_raw(env_file: str, content: str) -> bool:
         with open(env_file, 'w', encoding='utf-8') as f:
             f.write(content)
         return True
-    except Exception:
+    except OSError:
         return False
 
 
@@ -215,7 +215,7 @@ def read_config_file_raw(filepath: str) -> str:
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return f.read()
-    except Exception:
+    except OSError:
         return ''
 
 
@@ -226,7 +226,7 @@ def write_config_file_raw(filepath: str, content: str) -> bool:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
         return True
-    except Exception:
+    except OSError:
         return False
 
 # ─── Repo Configs (Env/App) ─────────────────────────────────────────────────
@@ -243,7 +243,7 @@ def load_repo_configs(repo_name: str, config_path: str = '') -> dict:
             config = json.load(f)
         repo_configs = config.get('repo_configs', {})
         return repo_configs.get(repo_name, {})
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {}
 
 
@@ -264,7 +264,7 @@ def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = '')
         config['repo_configs'][repo_name] = configs_dict
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         pass
 
 
@@ -313,7 +313,7 @@ def load_active_config(config_key: str, config_path: str = '') -> str:
             config = json.load(f)
         active_configs = config.get('active_configs', {})
         return active_configs.get(config_key, "- Sin Seleccionar -")
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return "- Sin Seleccionar -"
 
 
@@ -334,5 +334,5 @@ def save_active_config(config_key: str, active_name: str, config_path: str = '')
         config['active_configs'][config_key] = active_name
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         pass

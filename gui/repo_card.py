@@ -4,6 +4,7 @@ Collapsed: compact bar with checkbox + name + branch/profile hint + status + act
 Expanded: reveals branch selector, profile/BD selectors, npm ci/mvn install, custom command.
 """
 import customtkinter as ctk
+import tkinter as tk
 import threading
 import webbrowser
 import os
@@ -45,6 +46,17 @@ CARD_BG = "#16132e"
 CARD_HOVER = "#1c1940"
 CARD_BORDER = "#3b3768"
 EXPAND_BG = "#120f28"
+
+
+def _create_subprocess(cmd_str: str, cwd: str, env: dict = None, shell: bool = True) -> subprocess.Popen:
+    """Helper to create a unified subprocess."""
+    creationflags = (getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
+    return subprocess.Popen(
+        cmd_str, cwd=cwd, env=env, shell=shell,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1,
+        creationflags=creationflags
+    )
 
 
 class RepoCard(ctk.CTkFrame):
@@ -96,7 +108,7 @@ class RepoCard(ctk.CTkFrame):
         if hasattr(self, '_on_change_callback') and self._on_change_callback:
             try:
                 self.after(0, self._on_change_callback)
-            except Exception:
+            except tk.TclError:
                 pass
 
     def get_config_key(self, target_file: str) -> str:
@@ -153,7 +165,7 @@ class RepoCard(ctk.CTkFrame):
             try:
                 self.winfo_toplevel().bind("<FocusIn>", self._refresh_badge, add="+")
                 self._focus_bound = True
-            except Exception:
+            except tk.TclError:
                 pass
 
     # ─── HEADER (always visible, compact) ────────────────────────
@@ -526,7 +538,7 @@ class RepoCard(ctk.CTkFrame):
 
         try:
             self.after(0, _insert)
-        except Exception:
+        except tk.TclError:
             pass
 
     def _flash_log_icon(self):
@@ -718,9 +730,7 @@ class RepoCard(ctk.CTkFrame):
                     # 1. Prefer .yml over .properties
                     # 2. Prefer environment.ts over specific like environment.prod.ts
                     current_file = env_dirs[parent]
-                    if current_file.endswith('.properties') and basename.endswith('.yml'):
-                        env_dirs[parent] = f
-                    elif basename == 'environment.ts':
+                    if (current_file.endswith('.properties') and basename.endswith('.yml')) or basename == 'environment.ts':
                         env_dirs[parent] = f
 
             target_files = sorted(list(env_dirs.values()))
@@ -983,115 +993,122 @@ class RepoCard(ctk.CTkFrame):
         import threading
         threading.Thread(target=_run, daemon=True).start()
 
+    def _resolve_target_file(self, repo, target_file: str) -> str:
+        """Resolve the target config file path."""
+        if target_file:
+            return target_file
+            
+        main_filename = getattr(repo, 'env_main_config_filename', '')
+        if not main_filename:
+            return target_file
+            
+        for ef in repo.environment_files:
+            if os.path.basename(ef) == main_filename:
+                return ef
+                
+        if hasattr(repo, 'env_default_dir'):
+            return os.path.join(repo.path, repo.env_default_dir, main_filename)
+            
+        return target_file
+
+    def _handle_unselect_config(self, target_file: str, skip_log: bool, is_real_change: bool):
+        """Restore original config when unselected."""
+        should_log = not skip_log or is_real_change
+        if self._log and should_log:
+            self._log(f"[{self._repo.name}] Configuración deseleccionada. Restaurando configuración original.")
+            
+        if target_file and os.path.isfile(target_file):
+            import subprocess
+            flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+            subprocess.run(['git', 'checkout', '--', target_file], cwd=self._repo.path, capture_output=True, creationflags=flags)
+        
+        self.after(0, self._update_header_hints)
+        self._trigger_change_callback()
+
+    def _write_spring_config(self, repo, target_file: str, config_data) -> tuple[bool, str]:
+        """Write Spring Boot specific configuration."""
+        from core.config_manager import write_config_file_raw
+        config_str = str(config_data)
+        
+        is_props = "=" in config_str.split("\n", 3)[0] or "=" in config_str
+        if is_props and not config_str.startswith("spring:") and not config_str.startswith("server:"):
+            target_file = target_file.replace('.yml', '.properties')
+        else:
+            target_file = target_file.replace('.properties', '.yml')
+            
+        opposite_file = target_file.replace('.properties', '.yml') if target_file.endswith('.properties') else target_file.replace('.yml', '.properties')
+        
+        if os.path.exists(opposite_file):
+            try:
+                os.remove(opposite_file)
+            except OSError:
+                pass
+                
+        target_classes_file = os.path.join(repo.path, 'target', 'classes', os.path.basename(opposite_file))
+        if os.path.exists(target_classes_file):
+            try:
+                os.remove(target_classes_file)
+            except OSError:
+                pass
+                
+        return write_config_file_raw(target_file, config_data), target_file
+
+    def _apply_config_data(self, target_file: str, config_name: str, config_data, skip_log: bool, is_real_change: bool):
+        """Write config data to the target file."""
+        from core.config_manager import write_angular_environment_raw, write_config_file_raw
+        from tkinter import messagebox
+        import json
+        
+        should_log = not skip_log or is_real_change
+        
+        if not config_data:
+            if self._log and should_log:
+                self._log(f"[{self._repo.name}] La configuración '{config_name}' no se encontró.")
+            return
+
+        writer_type = getattr(self._repo, 'env_config_writer_type', 'raw')
+        
+        if writer_type == 'angular':
+            content = "\n".join([f"export const environment = {json.dumps(config_data, indent=2)};", ""]) if isinstance(config_data, dict) else str(config_data)
+            res = write_angular_environment_raw(target_file, content)
+        elif writer_type == 'spring':
+            res, target_file = self._write_spring_config(self._repo, target_file, config_data)
+        else:
+            res = write_config_file_raw(target_file, config_data)
+
+        if res:
+            if self._log and should_log:
+                self._log(f"[{self._repo.name}] Configuración '{config_name}' aplicada.")
+        elif should_log:
+            self.after(0, lambda tf=target_file: messagebox.showerror("Error", f"No se pudo escribir en '{tf}'"))
+            
+        self.after(0, self._update_header_hints)
+        self._trigger_change_callback()
+
     def _on_config_change(self, config_name: str, target_file: str = None, skip_log: bool = False):
         """Handle env/app change and overwrite target config file."""
-        from tkinter import messagebox
-        from core.config_manager import load_repo_configs, write_angular_environment_raw, write_config_file_raw, save_active_config, load_active_config
+        from core.config_manager import load_repo_configs, save_active_config, load_active_config
         
         repo = self._repo
-        
-        if not target_file:
-            main_filename = getattr(repo, 'env_main_config_filename', '')
-            if main_filename:
-                # Search for it in already detected files
-                for ef in repo.environment_files:
-                    if os.path.basename(ef) == main_filename:
-                        target_file = ef
-                        break
-                # If not found, use the default directory
-                if not target_file and hasattr(repo, 'env_default_dir'):
-                    target_file = os.path.join(repo.path, repo.env_default_dir, main_filename)
-
+        target_file = self._resolve_target_file(repo, target_file)
         config_key = self.get_config_key(target_file)
         
         active_before = load_active_config(config_key)
         is_real_change = (active_before != config_name)
-        
         save_active_config(config_key, config_name)
         
         def _run_change():
-            nonlocal target_file
             if config_name == "- Sin Seleccionar -":
-                if self._log and (not skip_log or is_real_change):
-                    self._log(f"[{self._repo.name}] Configuración deseleccionada. Restaurando configuración original.")
-                if target_file and os.path.isfile(target_file):
-                    import subprocess
-                    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-                    subprocess.run(['git', 'checkout', '--', target_file], cwd=repo.path, capture_output=True, creationflags=flags)
-                self.after(0, self._update_header_hints)
-                self._trigger_change_callback()
+                self._handle_unselect_config(target_file, skip_log, is_real_change)
                 return
 
             configs = load_repo_configs(config_key)
-            
-            # Check legacy keys
             if not configs:
-                legacy_configs = load_repo_configs(repo.name)
-                if legacy_configs:
-                    configs = legacy_configs
-                    
-            config_data = configs.get(config_name)
-            
-            if not config_data:
-                if self._log and (not skip_log or is_real_change):
-                    self._log(f"[{self._repo.name}] La configuración '{config_name}' no se encontró.")
-                return
-
-            res = False
-            writer_type = getattr(repo, 'env_config_writer_type', 'raw')
-            
-            if writer_type == 'angular':
-                import json
-                if isinstance(config_data, dict):
-                    content = "\n".join([f"export const environment = {json.dumps(config_data, indent=2)};", ""])
-                else:
-                    content = str(config_data)
-                res = write_angular_environment_raw(target_file, content)
+                configs = load_repo_configs(repo.name) or {}
                 
-            elif writer_type == 'spring':
-                config_str = str(config_data)
-                # Detect if it's properties or yaml based on first few lines
-                is_props = "=" in config_str.split("\n", 3)[0] or "=" in config_str
-                if is_props and not config_str.startswith("spring:") and not config_str.startswith("server:"):
-                    target_file = target_file.replace('.yml', '.properties')
-                else:
-                    target_file = target_file.replace('.properties', '.yml')
-                    
-                # Remove the opposite file to avoid Spring Boot loading both and conflicting
-                opposite_file = target_file.replace('.properties', '.yml') if target_file.endswith('.properties') else target_file.replace('.yml', '.properties')
-                if os.path.exists(opposite_file):
-                    try:
-                        os.remove(opposite_file)
-                    except Exception:
-                        pass
-                
-                # Also clean up the opposite file from target/classes if it exists
-                target_classes_dir = os.path.join(repo.path, 'target', 'classes')
-                opposite_basename = os.path.basename(opposite_file)
-                target_classes_file = os.path.join(target_classes_dir, opposite_basename)
-                if os.path.exists(target_classes_file):
-                    try:
-                        os.remove(target_classes_file)
-                    except Exception:
-                        pass
-                        
-                res = write_config_file_raw(target_file, config_data)
-                
-            else: # raw fallback
-                res = write_config_file_raw(target_file, config_data)
-
-            if res:
-                if self._log and (not skip_log or is_real_change):
-                    self._log(f"[{self._repo.name}] Configuración '{config_name}' aplicada.")
-            else:
-                if not skip_log or is_real_change:
-                    self.after(0, lambda: messagebox.showerror("Error", f"No se pudo escribir en '{target_file}'"))
-                
-            self.after(0, self._update_header_hints)
-            self._trigger_change_callback()
+            self._apply_config_data(target_file, config_name, configs.get(config_name), skip_log, is_real_change)
 
         import threading
-        # Ensure we only start threading for git checkout if needed to avoid overhead, but since we have file ops, let's keep it threaded.
         threading.Thread(target=_run_change, daemon=True).start()
 
     def _open_config_manager(self, target_file: str = None):
@@ -1202,13 +1219,7 @@ class RepoCard(ctk.CTkFrame):
             try:
                 # Use shell=True for all config-driven commands, allowing &&, &, and shell features.
                 use_shell = True
-                process = subprocess.Popen(
-                    cmd_str, 
-                    cwd=repo.path, env=env, shell=use_shell,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1,
-                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
-                )
+                process = _create_subprocess(cmd_str, cwd=repo.path, env=env, shell=use_shell)
                 for line in iter(process.stdout.readline, ''):
                     if not line:
                         break
@@ -1306,7 +1317,7 @@ class RepoCard(ctk.CTkFrame):
             try:
                 from core.java_manager import build_java_env
                 env = build_java_env(java_home)
-            except Exception:
+            except (ImportError, OSError):
                 pass
 
         self._update_status(repo.name, 'starting')
@@ -1315,15 +1326,7 @@ class RepoCard(ctk.CTkFrame):
 
         def _run():
             try:
-                process = subprocess.Popen(
-                    cmd, cwd=repo.path, shell=True, env=env,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1,
-                    creationflags=(
-                        getattr(subprocess, 'CREATE_NO_WINDOW', 0) |
-                        getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
-                    ) if os.name == 'nt' else 0
-                )
+                process = _create_subprocess(cmd, cwd=repo.path, env=env, shell=True)
                 # Track process in legacy launcher so stop/restart work
                 from domain.models.running_service import RunningService
                 svc = RunningService(name=repo.name, repo_path=repo.path, port=0, profile=profile, status='running')
@@ -1359,12 +1362,7 @@ class RepoCard(ctk.CTkFrame):
 
         def _run():
             try:
-                process = subprocess.Popen(
-                    cmd_str, cwd=repo.path, shell=True,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1,
-                    creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
-                )
+                process = _create_subprocess(cmd_str, cwd=repo.path, env=None, shell=True)
                 self._update_status(repo.name, 'running')
 
                 for line in iter(process.stdout.readline, ''):
@@ -1586,7 +1584,7 @@ class RepoCard(ctk.CTkFrame):
 
         try:
             self.after(0, _update)
-        except Exception:
+        except tk.TclError:
             pass
 
     # ─── Public API ──────────────────────────────────────────────
@@ -1655,7 +1653,7 @@ class RepoCard(ctk.CTkFrame):
             
         try:
             self.after(0, _update)
-        except Exception:
+        except tk.TclError:
             pass
 
     def update_db_presets(self, presets: dict):

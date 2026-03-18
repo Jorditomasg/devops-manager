@@ -16,7 +16,7 @@ def is_docker_available() -> bool:
                                 capture_output=True, text=True, timeout=10,
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         return result.returncode == 0
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return False
 
 
@@ -29,7 +29,7 @@ def is_container_running(container_name: str) -> bool:
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         return container_name in result.stdout
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return False
 
 
@@ -55,7 +55,7 @@ def get_running_containers(project_prefix: str = '') -> list[dict]:
                         'ports': parts[2] if len(parts) > 2 else '',
                     })
         return containers
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return []
 
 
@@ -86,9 +86,13 @@ def docker_compose_up(compose_file: str, services: list = None,
                 log(f"[docker] {fname}: FAILED - {msg}")
 
         return result.returncode == 0, msg.strip()
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
         if log:
             log(f"[docker] Error: {e}")
+        return False, str(e)
+    except Exception as e:
+        if log:
+            log(f"[docker] Unexpected error: {e}")
         return False, str(e)
 
 
@@ -112,9 +116,13 @@ def docker_compose_down(compose_file: str, log: LogCallback = None) -> tuple[boo
             log(f"[docker] {fname}: Services stopped")
 
         return result.returncode == 0, msg.strip()
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
         if log:
             log(f"[docker] Error: {e}")
+        return False, str(e)
+    except Exception as e:
+        if log:
+            log(f"[docker] Unexpected error: {e}")
         return False, str(e)
 
 
@@ -154,7 +162,7 @@ def _detect_flyway_services(compose_file: str) -> list[str]:
             compose = yaml.safe_load(f) or {}
         services = compose.get('services', {}) or {}
         return [name for name in services if 'flyway' in name.lower()]
-    except Exception:
+    except (OSError, yaml.YAMLError):
         return []
 
 
@@ -211,7 +219,13 @@ def stop_service_compose(compose_file: str, service_name: str = None,
                                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             msg = result.stdout.strip() + '\n' + result.stderr.strip()
             return result.returncode == 0, msg.strip()
+        except (subprocess.SubprocessError, OSError) as e:
+            if log:
+                log(f"[docker] Error stopping {service_name}: {e}")
+            return False, str(e)
         except Exception as e:
+            if log:
+                log(f"[docker] Unexpected error stopping {service_name}: {e}")
             return False, str(e)
     else:
         return docker_compose_down(compose_file, log)

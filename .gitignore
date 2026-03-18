@@ -11,6 +11,10 @@ venv/
 .devops-profiles/
 devops_manager_config.json
 
+# Logs
+error.log
+error.log.*
+
 # IDEs
 .vscode/
 .idea/

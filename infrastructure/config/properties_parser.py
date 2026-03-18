@@ -21,7 +21,7 @@ class PropertiesParser:
                     key, val = line.split('=', 1)
                     props[key.strip()] = val.strip()
             return props
-        except Exception:
+        except OSError:
             return None
 
 class JsonStore:
@@ -34,7 +34,7 @@ class JsonStore:
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             return {}
             
     @staticmethod
@@ -43,5 +43,5 @@ class JsonStore:
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
             return True
-        except Exception:
+        except OSError:
             return False

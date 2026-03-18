@@ -75,62 +75,68 @@ class ProjectAnalyzerService:
 
     def _matches_definition(self, r_type: Dict[str, Any], files_in_root: set, path: str) -> bool:
         """Checks if a path matches the given repository type definition rules."""
-        import fnmatch
         detection = r_type.get('detection', {})
         repo_type_name = r_type.get('type', '')
 
-        # Docker-infra can exist without .git; all others must have it
-        has_git = os.path.isdir(os.path.join(path, '.git'))
-        if repo_type_name != 'docker-infra' and not has_git:
+        if not self._check_git_requirements(path, repo_type_name):
             return False
 
-        # 1. Required Files
-        required_files = detection.get('required_files', [])
-        for req in required_files:
-            if req not in files_in_root:
-                return False
+        if not self._check_required_files(detection.get('required_files', []), files_in_root):
+            return False
 
-        # 2. Excluded files
-        exclude_files = detection.get('exclude_files', [])
-        for excl in exclude_files:
-            if excl in files_in_root:
-                return False
+        if not self._check_exclude_files(detection.get('exclude_files', []), files_in_root):
+            return False
 
-        # 3. Heuristics
         heuristics = r_type.get('heuristics', {})
+        if not self._check_directory_heuristics(path, heuristics):
+            return False
 
-        must_have_dirs = heuristics.get('must_have_directories', [])
-        for d in must_have_dirs:
-            if not os.path.isdir(os.path.join(path, d)):
-                return False
+        if not self._check_pattern_heuristics(path, repo_type_name, files_in_root, heuristics):
+            return False
 
-        must_not_have_dirs = heuristics.get('must_not_have_directories', [])
-        for d in must_not_have_dirs:
-            if os.path.isdir(os.path.join(path, d)):
-                return False
+        return True
 
-        # 4. must_match_patterns — at least ONE file in root matches ANY pattern
+    def _check_git_requirements(self, path: str, repo_type_name: str) -> bool:
+        has_git = os.path.isdir(os.path.join(path, '.git'))
+        return repo_type_name == 'docker-infra' or has_git
+
+    def _check_required_files(self, required: List[str], files_in_root: set) -> bool:
+        return all(req in files_in_root for req in required)
+
+    def _check_exclude_files(self, excluded: List[str], files_in_root: set) -> bool:
+        return not any(excl in files_in_root for excl in excluded)
+
+    def _check_directory_heuristics(self, path: str, heuristics: Dict[str, Any]) -> bool:
+        must_have = heuristics.get('must_have_directories', [])
+        if any(not os.path.isdir(os.path.join(path, d)) for d in must_have):
+            return False
+            
+        must_not_have = heuristics.get('must_not_have_directories', [])
+        if any(os.path.isdir(os.path.join(path, d)) for d in must_not_have):
+            return False
+            
+        return True
+
+    def _check_pattern_heuristics(self, path: str, type_name: str, files_in_root: set, heuristics: Dict[str, Any]) -> bool:
+        import fnmatch
         must_match = heuristics.get('must_match_patterns', [])
         if must_match:
             matched = any(
                 any(fnmatch.fnmatch(f, pattern) for pattern in must_match)
                 for f in files_in_root
             )
+            if not matched and type_name == 'spring-boot':
+                resources = os.path.join(path, 'src', 'main', 'resources')
+                if os.path.isdir(resources):
+                    matched = any(
+                        any(fnmatch.fnmatch(f, p) for p in must_match)
+                        for f in os.listdir(resources)
+                        if os.path.isfile(os.path.join(resources, f))
+                    )
             if not matched:
-                # Also search recursively in src/main/resources for Spring Boot patterns
-                if repo_type_name == 'spring-boot':
-                    resources = os.path.join(path, 'src', 'main', 'resources')
-                    if os.path.isdir(resources):
-                        matched = any(
-                            any(fnmatch.fnmatch(f, p) for p in must_match)
-                            for f in os.listdir(resources)
-                            if os.path.isfile(os.path.join(resources, f))
-                        )
-                if not matched:
-                    return False
+                return False
 
-        # 5. For docker-infra: must have at least one docker-compose file
-        if repo_type_name == 'docker-infra':
+        if type_name == 'docker-infra':
             dc_patterns = heuristics.get('must_match_patterns', ['docker-compose*.yml', 'docker-compose*.yaml'])
             has_dc = any(
                 any(fnmatch.fnmatch(f, p) for p in dc_patterns)

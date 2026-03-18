@@ -2,6 +2,7 @@
 dialogs.py — Dialog windows for clone, settings, config editor, saved configurations.
 """
 import customtkinter as ctk
+import tkinter as tk
 from tkinter import filedialog, messagebox
 import threading
 import os
@@ -88,7 +89,7 @@ class CloneDialog(ctk.CTkToplevel):
             def update_progress(pct):
                 try:
                     self._progress.set(pct / 100)
-                except Exception:
+                except tk.TclError:
                     pass
 
             success, msg = clone(url, dest, self._log, update_progress)
@@ -815,7 +816,7 @@ class ImportOptionsDialog(ctk.CTkToplevel):
                         self._progress.set(pct),
                         self._progress_label.configure(text=text)
                     ))
-                except Exception:
+                except tk.TclError:
                     pass
 
             # 1) Clone missing repos
@@ -1314,12 +1315,6 @@ class PresetEditorDialog(ctk.CTkToplevel):
         if self._on_save:
             self._on_save(name, data)
         self.destroy()
-
-
-    def _accept(self):
-        self.destroy()
-        if self._on_accept:
-            self._on_accept()
 
 class JavaVersionEditorDialog(ctk.CTkToplevel):
     """Dialog for adding/editing a Java version configuration."""

@@ -14,7 +14,7 @@ class YamlParser:
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
-        except Exception:
+        except (yaml.YAMLError, OSError):
             # Here we could log using an injected logger
             return None
             
@@ -25,5 +25,5 @@ class YamlParser:
             with open(filepath, 'w', encoding='utf-8') as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             return True
-        except Exception:
+        except (yaml.YAMLError, OSError):
             return False

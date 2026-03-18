@@ -3,6 +3,7 @@ tooltip.py — Tooltip widget for customtkinter.
 Displays a styled tooltip popup on hover with a configurable delay.
 """
 import customtkinter as ctk
+import tkinter as tk
 
 
 class ToolTip:
@@ -32,7 +33,10 @@ class ToolTip:
 
     def _cancel(self, event=None):
         if self._after_id:
-            self._widget.after_cancel(self._after_id)
+            try:
+                self._widget.after_cancel(self._after_id)
+            except tk.TclError:
+                pass
             self._after_id = None
         self._hide()
 
@@ -40,9 +44,12 @@ class ToolTip:
         if self._tip_window:
             return
 
-        # Position: below and slightly right of the widget
-        x = self._widget.winfo_rootx() + 12
-        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        try:
+            # Position: below and slightly right of the widget
+            x = self._widget.winfo_rootx() + 12
+            y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        except tk.TclError:
+            return
 
         self._tip_window = tw = ctk.CTkToplevel(self._widget)
         tw.withdraw()

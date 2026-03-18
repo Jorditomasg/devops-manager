@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import os
 import signal
+import logging
 import threading
 import atexit
 from domain.models.running_service import RunningService
@@ -94,7 +95,15 @@ class ServiceLauncher:
                         log(f"[svc] ✅ {name} installed successfully")
                     else:
                         log(f"[svc] {name} installation finished with exit code: {process.returncode}")
+            except (subprocess.SubprocessError, OSError) as e:
+                logging.error(f"System error starting service {name}: {e}", exc_info=True)
+                svc.status = 'error'
+                if status_callback:
+                    status_callback(name, 'error')
+                if log:
+                    log(f"[svc] {name} system error: {e}")
             except Exception as e:
+                logging.error(f"Unexpected error starting service {name}: {e}", exc_info=True)
                 svc.status = 'error'
                 if status_callback:
                     status_callback(name, 'error')
@@ -136,11 +145,12 @@ class ServiceLauncher:
             if log:
                 log(f"[svc] {name} stopped")
             return True
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError) as e:
+            logging.error(f"System error stopping service {name}: {e}", exc_info=True)
             # Force kill
             try:
                 svc.process.kill()
-            except Exception:
+            except OSError:
                 pass
             svc.status = 'stopped'
             if status_callback:
@@ -151,7 +161,7 @@ class ServiceLauncher:
 
 
     def stop_all(self, log: LogCallback = None,
-                 status_callback: Callable = None):
+                 status_callback: Callable = None) -> None:
         """Stop all running services."""
         for name in list(self._services.keys()):
             if self.is_running(name):

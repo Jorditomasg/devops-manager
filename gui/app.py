@@ -2,9 +2,11 @@
 app.py — Main application window for DevOps Manager.
 """
 import customtkinter as ctk
+import tkinter as tk
 import os
 import json
 import sys
+import logging
 import threading
 import pystray
 import re
@@ -61,7 +63,7 @@ class DevOpsManagerApp(ctk.CTk):
             if sys.platform == "win32":
                 myappid = 'boa.devopsmanager.app.1'
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-        except Exception:
+        except (AttributeError, OSError):
             pass
 
         # Determine workspace directory
@@ -113,7 +115,6 @@ class DevOpsManagerApp(ctk.CTk):
         # Start background check loop for tray icon status and profile changes
         self._check_tray_status()
         self._check_profile_changes_loop()
-        self._check_tray_status()
 
     def _build_ui(self):
         """Build the main UI layout."""
@@ -177,7 +178,7 @@ class DevOpsManagerApp(ctk.CTk):
             font=(FONT_FAMILY, 16),
             fg_color="#7f1d1d", hover_color="#991b1b",
             border_width=1, border_color="#b91c1c",
-            text_color="#facc15",
+            text_color="#ffffff",
             corner_radius=6, command=self._save_current_profile
         )
         self._quick_save_btn.pack(side="left", padx=(0, 5))
@@ -351,6 +352,7 @@ class DevOpsManagerApp(ctk.CTk):
                 import subprocess
                 subprocess.Popen(['xdg-open', self._workspace_dir])
         except Exception as e:
+            logging.error(f"Error al abrir carpeta: {e}", exc_info=True)
             self._log(f"Error al abrir carpeta: {e}")
 
     def _setup_global_log_redirect(self):
@@ -375,7 +377,7 @@ class DevOpsManagerApp(ctk.CTk):
 
         try:
             self.after(0, _insert)
-        except Exception:
+        except tk.TclError:
             pass
 
     def _insert_log_into_textbox(self, textbox, text: str, max_lines: int):
@@ -587,7 +589,7 @@ class DevOpsManagerApp(ctk.CTk):
         
         if has_changed:
             if not self._quick_save_btn.winfo_ismapped():
-                self._quick_save_btn.configure(text="💾", fg_color="#7f1d1d", hover_color="#991b1b", border_color="#b91c1c", text_color="#facc15")
+                self._quick_save_btn.configure(text="💾", fg_color="#7f1d1d", hover_color="#991b1b", border_color="#b91c1c")
                 self._quick_save_btn.pack(side="left", padx=(0, 5), before=self._profile_combo)
         else:
             if self._quick_save_btn.winfo_ismapped():
@@ -667,7 +669,7 @@ class DevOpsManagerApp(ctk.CTk):
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         return {
@@ -695,6 +697,7 @@ class DevOpsManagerApp(ctk.CTk):
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(existing, f, indent=2, ensure_ascii=False)
         except Exception as e:
+            logging.error(f"Error guardando config: {e}", exc_info=True)
             self._log(f"Error guardando config: {e}")
 
         self._propagate_settings_to_cards(settings)
@@ -794,12 +797,12 @@ class DevOpsManagerApp(ctk.CTk):
             if self.state() != 'iconic':
                 try:
                     self.iconbitmap(icon_path)
-                except Exception:
+                except tk.TclError:
                     pass
             if self._tray_icon:
                 try:
                     self._tray_icon.icon = Image.open(icon_path)
-                except Exception:
+                except (OSError, ValueError):
                     pass
         self.after(2000, self._check_tray_status)
 
@@ -814,7 +817,7 @@ class DevOpsManagerApp(ctk.CTk):
             if hasattr(self, '_tray_icon') and self._tray_icon is not None:
                 try:
                     self._tray_icon.stop()
-                except Exception:
+                except (RuntimeError, AttributeError):
                     pass
 
             if hasattr(self, '_service_launcher'):
@@ -822,8 +825,8 @@ class DevOpsManagerApp(ctk.CTk):
                 
             self._save_repo_state()
             self._save_settings(self._settings)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Error durante el cierre de la aplicación: {e}", exc_info=True)
         finally:
             self.destroy()
             os._exit(0)
