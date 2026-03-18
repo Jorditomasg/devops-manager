@@ -118,11 +118,20 @@ def docker_compose_down(compose_file: str, log: LogCallback = None) -> tuple[boo
         return False, str(e)
 
 
+def _get_compose_file(infra_path: str) -> str:
+    import glob
+    files = glob.glob(os.path.join(infra_path, 'docker-compose*.yml')) + \
+            glob.glob(os.path.join(infra_path, 'docker-compose*.yaml'))
+    if not files:
+        return ""
+    # Prefer mysql one if multiple exist, else first
+    return next((f for f in files if 'mysql' in f), files[0])
+
 def start_mysql(infra_path: str, log: LogCallback = None) -> tuple[bool, str]:
-    """Start MySQL using docker-compose.mysql.yml from the infra repo."""
-    compose_file = os.path.join(infra_path, 'docker-compose.mysql.yml')
-    if not os.path.isfile(compose_file):
-        msg = f"docker-compose.mysql.yml not found in {infra_path}"
+    """Start MySQL using a docker-compose file from the infra repo."""
+    compose_file = _get_compose_file(infra_path)
+    if not compose_file:
+        msg = f"No docker-compose file found in {infra_path}"
         if log:
             log(f"[db] {msg}")
         return False, msg
@@ -131,9 +140,9 @@ def start_mysql(infra_path: str, log: LogCallback = None) -> tuple[bool, str]:
 
 def stop_mysql(infra_path: str, log: LogCallback = None) -> tuple[bool, str]:
     """Stop MySQL container."""
-    compose_file = os.path.join(infra_path, 'docker-compose.mysql.yml')
-    if not os.path.isfile(compose_file):
-        return False, "docker-compose.mysql.yml not found"
+    compose_file = _get_compose_file(infra_path)
+    if not compose_file:
+        return False, "No docker-compose file found"
     return docker_compose_down(compose_file, log)
 
 
@@ -150,10 +159,10 @@ def _detect_flyway_services(compose_file: str) -> list[str]:
 
 
 def run_flyway_seeds(infra_path: str, log: LogCallback = None) -> tuple[bool, str]:
-    """Run all Flyway migration services from docker-compose.mysql.yml."""
-    compose_file = os.path.join(infra_path, 'docker-compose.mysql.yml')
-    if not os.path.isfile(compose_file):
-        msg = "docker-compose.mysql.yml not found"
+    """Run all Flyway migration services from the docker-compose file."""
+    compose_file = _get_compose_file(infra_path)
+    if not compose_file:
+        msg = "No docker-compose file found"
         if log:
             log(f"[db] {msg}")
         return False, msg

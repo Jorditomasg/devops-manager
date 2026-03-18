@@ -1,8 +1,6 @@
 # Nx Monorepo Repository Definition
 type: "nx-workspace"
 priority: 50
-icon: "🅰"
-color: "#ef4444"
 
 detection:
   required_files:
@@ -17,6 +15,12 @@ commands:
   profile_flag: "--configuration="
 
 env_files:
+  default_dir: "apps/default/src/environments"
+  config_writer_type: "angular"
+  pull_ignore_patterns:
+    - "environment*.ts"
+    - ".env*"
+  main_config_filename: "environment.ts"
   patterns:
     - "environment*.ts"
     - ".env"
@@ -27,6 +31,8 @@ env_files:
     - "dist"
 
 ui:
+  icon: "🅰"
+  color: "#ef4444"
   selectors:
     - label: "Env:"
   install:
@@ -34,3 +40,4 @@ ui:
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "npm ci // npm install --yes --legacy-peer-deps"
+    status_label_deps_missing: "❌ Faltan deps"

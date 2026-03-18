@@ -1,8 +1,6 @@
 # Docker Infrastructure Repository Definition
 type: "docker-infra"
 priority: 0
-icon: "🐳"
-color: "#3b82f6"
 
 detection:
   required_files: []
@@ -21,9 +19,18 @@ commands:
   profile_flag: ""
 
 env_files:
+  default_dir: "."
+  config_writer_type: "raw"
+  pull_ignore_patterns:
+    - ".env*"
+  main_config_filename: ".env"
   patterns:
     - ".env"
   exclude_dirs: []
+
+ui:
+  icon: "🐳"
+  color: "#3b82f6"
 
 features:
   - "docker_checkboxes"

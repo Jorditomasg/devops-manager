@@ -1,7 +1,5 @@
 # React Repository Definition (Example of scalability without code changes)
 type: "react"
-icon: "⚛\ufe0f"
-color: "#61dafb"
 
 detection:
   required_files:
@@ -23,6 +21,11 @@ commands:
   profile_flag: ""
 
 env_files:
+  default_dir: "."
+  config_writer_type: "raw"
+  pull_ignore_patterns:
+    - ".env*"
+  main_config_filename: ".env"
   patterns:
     - ".env*"
   exclude_dirs:
@@ -30,6 +33,8 @@ env_files:
     - ".git"
 
 ui:
+  icon: "⚛\ufe0f"
+  color: "#61dafb"
   selectors:
     - label: "Env:"
   install:
@@ -37,3 +42,4 @@ ui:
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "npm install"
+    status_label_deps_missing: "❌ Faltan deps"

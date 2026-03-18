@@ -315,7 +315,7 @@ class GlobalPanel(ctk.CTkFrame):
         def _run():
             for card in self._cards:
                 repo = card.get_repo_info()
-                if repo.has_seeds or (repo.repo_type == 'docker-infra' and repo.has_database):
+                if repo.has_seeds or ('docker_checkboxes' in repo.features and repo.has_database):
                     from core.db_manager import run_flyway_seeds
                     run_flyway_seeds(repo.path, self._log)
 

@@ -44,240 +44,61 @@ def detect_repos(workspace_dir: str) -> list[RepoInfo]:
 
 
 def _classify_repo(name: str, path: str) -> Optional[RepoInfo]:
-    """Classify a repo based on its contents."""
-    has_pom = os.path.isfile(os.path.join(path, 'pom.xml'))
-    has_package_json = os.path.isfile(os.path.join(path, 'package.json'))
-    has_nx = os.path.isfile(os.path.join(path, 'nx.json'))
-    has_angular = os.path.isfile(os.path.join(path, 'angular.json'))
-    dc_files = _find_docker_compose_files(path)
-
-    repo = None
-
-    # Angular / Nx project
-    if has_package_json and (has_nx or has_angular):
-            repo = _build_angular_repo(name, path)
-            if has_nx:
-                 repo.repo_type = 'nx-workspace'
-
-    # Spring Boot project
-    elif has_pom:
-        resources_dir = os.path.join(path, 'src', 'main', 'resources')
-        app_yml = os.path.join(resources_dir, 'application.yml')
-        app_yaml = os.path.join(resources_dir, 'application.yaml')
-        app_properties = os.path.join(resources_dir, 'application.properties')
-        
-        main_config_file = None
-        if os.path.isfile(app_yml):
-            main_config_file = app_yml
-        elif os.path.isfile(app_yaml):
-            main_config_file = app_yaml
-        elif os.path.isfile(app_properties):
-            main_config_file = app_properties
+    """Classify a repo based on its contents using YAML configs."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_dir = os.path.join(base_dir, 'config')
+    
+    from application.services.project_analyzer import ProjectAnalyzerService
+    analyzer = ProjectAnalyzerService(config_dir=config_dir)
+    
+    files_in_root = set()
+    for item in os.listdir(path):
+        if os.path.isfile(os.path.join(path, item)):
+            files_in_root.add(item)
             
-        if main_config_file:
-            repo = _build_spring_boot_repo(name, path, resources_dir, main_config_file)
-        else:
-            # Maven library (no application config with server config)
-            repo = _build_maven_lib_repo(name, path)
+    matched_repo = None
+    for r_type in analyzer.repo_types:
+        if analyzer._matches_definition(r_type, files_in_root, path):
+            matched_repo = analyzer._build_repo_info(name, path, r_type)
+            break
+            
+    if not matched_repo:
+        return None
 
-    # Docker infra project (has docker-compose but no pom/package.json)
-    elif dc_files:
-        repo = _build_docker_infra_repo(name, path, dc_files)
-
-    # Inyectar ui_config desde el YAML correspondiente
-    if repo:
+    # Ahora hacemos extracciones específicas si corresponde
+    repo = matched_repo
+    
+    # Extracciones configurables basadas en características (features)
+    if 'java_version' in repo.features:
+        repo.java_version = _extract_java_version_from_pom(path)
+        
+    main_spring_config = next((f for f in repo.environment_files if os.path.basename(f) in ['application.yml', 'application.yaml', 'application.properties']), None)
+    if main_spring_config:
+        # Extraer perfiles de Spring si hay un directorio por defecto
+        default_env_dir = getattr(repo, 'env_default_dir', '')
+        if default_env_dir:
+            resources_dir = os.path.join(path, default_env_dir)
+            if not repo.profiles:  
+                repo.profiles = _detect_spring_profiles(resources_dir)
+                
         try:
-            # Asumimos que la carpeta config está a nivel de src (arriba de core)
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            config_file = os.path.join(base_dir, 'config', 'repo_types', f"{repo.repo_type}.yml")
-            if os.path.isfile(config_file):
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    yml_data = yaml.safe_load(f) or {}
-                    if 'ui' in yml_data:
-                        repo.ui_config = yml_data['ui']
-                        
-                    if 'features' in yml_data:
-                        repo.features = yml_data['features']
-                        
-                    if 'commands' in yml_data:
-                        cmds = yml_data['commands']
-                        repo.run_install_cmd = cmds.get('install_cmd')
-                        repo.run_reinstall_cmd = cmds.get('reinstall_cmd')
-                        
-                        cmd = cmds.get('start_cmd')
-                        
-                        if os.name == 'nt' and 'windows_start_cmd' in cmds:
-                            if os.path.isfile(os.path.join(path, MVNW_CMD_WINDOWS)) or MVNW_CMD_WINDOWS not in cmds['windows_start_cmd']:
-                                cmd = cmds['windows_start_cmd']
-                        elif os.name != 'nt' and 'unix_start_cmd' in cmds:
-                            if os.path.isfile(os.path.join(path, 'mvnw')) or './mvnw' not in cmds['unix_start_cmd']:
-                                cmd = cmds['unix_start_cmd']
-                                
-                        if cmd:
-                            if '{main_app}' in cmd and repo.repo_type == 'nx-workspace':
-                                apps_dir = os.path.join(path, 'apps')
-                                main_app = ''
-                                if os.path.isdir(apps_dir):
-                                    app_names = [d for d in os.listdir(apps_dir) if os.path.isdir(os.path.join(apps_dir, d)) and not d.startswith('.')]
-                                    if app_names:
-                                        main_app = app_names[0]
-                                if main_app:
-                                    cmd = cmd.replace('{main_app}', main_app)
-                                else:
-                                    cmd = cmd.replace(' {main_app}', '')
-                            repo.run_command = cmd.strip()
-
-                        if 'profile_flag' in cmds:
-                            repo.run_profile_flag = cmds['profile_flag']
+            if main_spring_config.endswith('.properties'):
+                _extract_spring_info_from_props(repo, main_spring_config)
+            else:
+                with open(main_spring_config, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f) or {}
+                _extract_spring_db_info(repo, config)
+                _extract_spring_server_info(repo, config)
         except Exception:
-            # Fallback seguro: ignora si no puede cargar
             pass
 
-    return repo
-
-
-def _build_spring_boot_repo(name: str, path: str, resources_dir: str, main_config_file: str) -> RepoInfo:
-    """Build RepoInfo for a Spring Boot project."""
-    repo = RepoInfo(name=name, path=path, repo_type='spring-boot')
-
-    # Detect profiles
-    repo.profiles = _detect_spring_profiles(resources_dir)
-
-    # Detect environment files
-    env_files = []
-    for root, dirs, files in os.walk(path):
-        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'target')]
-        for f in files:
-            if f.startswith('application') and f.endswith(('.yml', '.yaml', '.properties')):
-                env_files.append(os.path.join(root, f))
-    repo.environment_files = env_files
-
-    # Parse main config for DB and port info
-    try:
-        if main_config_file.endswith('.properties'):
-            _extract_spring_info_from_props(repo, main_config_file)
-        else:
-            with open(main_config_file, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f) or {}
-            _extract_spring_db_info(repo, config)
-            _extract_spring_server_info(repo, config)
-    except Exception:
-        pass
-
-    # Detect seeds (flyway dirs)
-    repo.has_seeds, repo.seed_dirs = _detect_seeds(path)
-
-    # Docker compose files
-    repo.docker_compose_files = _find_docker_compose_files(path)
-
-    # Git remote
-    repo.git_remote_url = _get_git_remote(path)
-
-    # Run command fallback
-    mvnw = MVNW_CMD_WINDOWS if os.name == 'nt' else './mvnw'
-    if os.path.isfile(os.path.join(path, MVNW_CMD_WINDOWS if os.name == 'nt' else 'mvnw')):
-        repo.run_command = f'{mvnw} spring-boot:run'
-        repo.run_profile_flag = '-Dspring-boot.run.profiles='
-    else:
-        repo.run_command = 'mvn spring-boot:run'
-        repo.run_profile_flag = '-Dspring-boot.run.profiles='
-
-    repo.java_version = _extract_java_version_from_pom(path)
+    if 'docker_checkboxes' in repo.features:
+        dc_files = _find_docker_compose_files(path)
+        if dc_files:
+            repo.docker_compose_files = dc_files
 
     return repo
 
-
-def _build_angular_repo(name: str, path: str) -> RepoInfo:
-    """Build RepoInfo for an Angular/Nx project."""
-    repo = RepoInfo(name=name, path=path, repo_type='angular')
-
-    # Detect environment files
-    env_files = []
-    for root, dirs, files in os.walk(path):
-        # Skip node_modules
-        dirs[:] = [d for d in dirs if d != 'node_modules' and d != '.git']
-        for f in files:
-            if f.startswith('environment') and f.endswith('.ts'):
-                env_files.append(os.path.join(root, f))
-    repo.environment_files = env_files
-
-    # Extract profile names from environment files
-    profiles = []
-    for ef in env_files:
-        fname = os.path.basename(ef)
-        # environment.local.ts -> local, environment.ts -> default
-        match = re.match(r'environment\.?(.*)\.ts', fname)
-        if match:
-            prof = match.group(1)
-            prof = prof if prof else 'default'
-            if prof not in profiles:
-                profiles.append(prof)
-    repo.profiles = profiles
-
-    # Git remote
-    repo.git_remote_url = _get_git_remote(path)
-
-    # Detect if Nx monorepo
-    has_nx = os.path.isfile(os.path.join(path, 'nx.json'))
-    if has_nx:
-        # Try to find the main app name from nx.json or apps/
-        apps_dir = os.path.join(path, 'apps')
-        if os.path.isdir(apps_dir):
-            app_names = [d for d in os.listdir(apps_dir)
-                         if os.path.isdir(os.path.join(apps_dir, d)) and not d.startswith('.')]
-            if app_names:
-                main_app = app_names[0]
-                repo.run_command = f'npx nx serve {main_app}'
-                repo.run_profile_flag = CONFIG_FLAG
-            else:
-                repo.run_command = 'npx nx serve'
-                repo.run_profile_flag = CONFIG_FLAG
-        else:
-            repo.run_command = 'npx nx serve'
-            repo.run_profile_flag = CONFIG_FLAG
-    else:
-        repo.run_command = 'ng serve'
-        repo.run_profile_flag = CONFIG_FLAG
-
-    return repo
-
-
-def _build_maven_lib_repo(name: str, path: str) -> RepoInfo:
-    """Build RepoInfo for a Maven library (no runnable server)."""
-    repo = RepoInfo(name=name, path=path, repo_type='maven-lib')
-    repo.git_remote_url = _get_git_remote(path)
-
-    mvnw = MVNW_CMD_WINDOWS if os.name == 'nt' else './mvnw'
-    if os.path.isfile(os.path.join(path, MVNW_CMD_WINDOWS if os.name == 'nt' else 'mvnw')):
-        repo.run_command = f'{mvnw} clean install -DskipTests -B'
-    else:
-        repo.run_command = 'mvn clean install -DskipTests -B'
-
-    # Detect profiles (may have application-local.yml for tests)
-    resources_dir = os.path.join(path, 'src', 'main', 'resources')
-    if os.path.isdir(resources_dir):
-        repo.profiles = _detect_spring_profiles(resources_dir)
-
-    repo.java_version = _extract_java_version_from_pom(path)
-
-    return repo
-
-
-def _build_docker_infra_repo(name: str, path: str, dc_files: list) -> RepoInfo:
-    """Build RepoInfo for a Docker infrastructure project."""
-    repo = RepoInfo(name=name, path=path, repo_type='docker-infra')
-    repo.docker_compose_files = dc_files
-    repo.git_remote_url = _get_git_remote(path)
-
-    # Detect seeds
-    repo.has_seeds, repo.seed_dirs = _detect_seeds(path)
-
-    # Check for init.sql or flyway
-    db_dir = os.path.join(path, 'db')
-    if os.path.isdir(db_dir):
-        repo.has_database = True
-
-    return repo
 
 
 def _detect_spring_profiles(resources_dir: str) -> list:

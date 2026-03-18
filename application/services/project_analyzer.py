@@ -164,6 +164,10 @@ class ProjectAnalyzerService:
         
         repo.environment_files = env_files
         repo.profiles = profiles
+        repo.env_default_dir = env_files_conf.get('default_dir', '')
+        repo.env_config_writer_type = env_files_conf.get('config_writer_type', 'raw')
+        repo.env_pull_ignore_patterns = env_files_conf.get('pull_ignore_patterns', [])
+        repo.env_main_config_filename = env_files_conf.get('main_config_filename', '')
         
         return repo
 

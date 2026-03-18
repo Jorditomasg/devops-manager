@@ -28,6 +28,10 @@ class RepoInfo:
 
     # Config/environment files
     environment_files: List[str] = field(default_factory=list)
+    env_default_dir: str = ""
+    env_config_writer_type: str = "raw"
+    env_pull_ignore_patterns: List[str] = field(default_factory=list)
+    env_main_config_filename: str = ""
 
     # UI configuration mapped from yaml
     ui_config: dict = field(default_factory=dict)

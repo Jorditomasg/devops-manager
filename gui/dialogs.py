@@ -670,7 +670,7 @@ class ImportOptionsDialog(ctk.CTkToplevel):
                             command=self._update_preview, checkbox_width=20, checkbox_height=20
                             ).pack(anchor="w", padx=10, pady=(5, 2))
 
-            ctk.CTkCheckBox(options_frame, text="📦 Instalar dependencias (npm/mvn)", variable=self._install_var,
+            ctk.CTkCheckBox(options_frame, text="📦 Instalar dependencias", variable=self._install_var,
                             command=self._update_preview, checkbox_width=20, checkbox_height=20
                             ).pack(anchor="w", padx=10, pady=(2, 10))
 
@@ -838,20 +838,21 @@ class ImportOptionsDialog(ctk.CTkToplevel):
             if self._install_var.get() and self._missing:
                 app_instance = self.master if hasattr(self, 'master') else None
                 launcher = getattr(app_instance, '_launcher', None)
-                if launcher:
+                analyzer = getattr(app_instance, '_analyzer', None)
+                if launcher and analyzer:
                     for m in self._missing:
                         dest = os.path.join(self._workspace_dir, m['name'])
                         repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
                         rtype = repo_cfg.get('type', '')
                         java_ver = repo_cfg.get('java_version', '')
-                        
-                        # Iniciar la instalación usando el service launcher para que se vea en el log de cada card y no bloquee
-                        if rtype == 'angular':
-                            _update_progress(f"Iniciando instalación npm para {m['name']}...")
-                            launcher.start_angular_install(m['name'], dest, log=self._log)
-                        elif rtype in ('spring-boot', 'maven-lib'):
-                            _update_progress(f"Iniciando instalación mvn para {m['name']}...")
-                            launcher.start_maven_install(m['name'], dest, log=self._log, java_home="")
+
+                        r_def = next((t for t in analyzer.repo_types if t.get('type') == rtype), {})
+                        cmd_str = r_def.get('commands', {}).get('install_cmd')
+
+                        if cmd_str:
+                            _update_progress(f"Iniciando instalación para {m['name']}...")
+                            # Start install in background
+                            launcher.start_generic_install(m['name'], dest, cmd_str, log=self._log, java_home=java_ver)
                         else:
                             _update_progress(f"⏭ {m['name']}: sin instalación")
                 else:

@@ -1,8 +1,6 @@
 # Spring Boot Repository Definition
 type: "spring-boot"
 priority: 60
-icon: "🍃"
-color: "#22c55e"
 
 detection:
   required_files:
@@ -25,6 +23,13 @@ commands:
   profile_flag: "-Dspring-boot.run.profiles="
 
 env_files:
+  default_dir: "src/main/resources"
+  config_writer_type: "spring"
+  pull_ignore_patterns:
+    - "application*.yml"
+    - "application*.yaml"
+    - "application*.properties"
+  main_config_filename: "application.yml"
   patterns:
     - "application*.yml"
     - "application*.yaml"
@@ -35,6 +40,8 @@ env_files:
     - "target"
 
 ui:
+  icon: "🍃"
+  color: "#22c55e"
   selectors:
     - label: "App:"
   install:
@@ -42,6 +49,7 @@ ui:
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "mvn verify // mvn install -DskipTests --batch-mode"
+    status_label_deps_missing: "❌ Faltan deps"
 
 features:
   - "java_version"

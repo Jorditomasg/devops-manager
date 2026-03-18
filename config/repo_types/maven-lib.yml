@@ -1,8 +1,6 @@
 # Maven Library Repository Definition
 type: "maven-lib"
 priority: 20
-icon: "📦"
-color: "#f97316"
 
 detection:
   required_files:
@@ -23,15 +21,22 @@ commands:
   profile_flag: ""
 
 env_files:
+  default_dir: "src/main/resources"
+  config_writer_type: "spring"
+  pull_ignore_patterns: []
+  main_config_filename: ""
   patterns: []
   exclude_dirs: []
 
 ui:
+  icon: "📦"
+  color: "#f97316"
   install:
     check_dirs: ["target"]
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "mvn verify // mvn install -DskipTests --batch-mode"
+    status_label_deps_missing: "❌ Faltan deps"
 
 features:
   - "java_version"

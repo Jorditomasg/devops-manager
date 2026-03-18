@@ -274,42 +274,32 @@ def auto_import_configs(repo_path: str, repo_type: str, environment_files: list 
     """
     imported = {}
     
-    if repo_type in ('angular', 'nx-workspace'):
-        files_to_scan = environment_files if environment_files else []
-        for file_path in files_to_scan:
-            if not os.path.isfile(file_path):
-                continue
-            name = 'default'
-            basename = os.path.basename(file_path)
+    if not environment_files:
+        return imported
+
+    for file_path in environment_files:
+        if not os.path.isfile(file_path):
+            continue
+            
+        name = 'default'
+        basename = os.path.basename(file_path)
+        
+        if 'environment' in basename:
             parts = basename.split('.')
             if len(parts) > 2:
-                name = parts[1]  # e.g. environment.prod.ts -> 'prod'
-            elif basename.startswith('.env.'):
-                name = basename[5:]  # .env.local -> 'local'
-            elif basename == '.env':
-                name = 'default'
+                name = parts[1]
+        elif 'application' in basename:
+            base = os.path.splitext(basename)[0]
+            if '-' in base:
+                name = base.split('-', 1)[1]
+        elif basename.startswith('.env.'):
+            name = basename[5:]
+        elif basename == '.env':
+            name = 'default'
 
-            content = read_config_file_raw(file_path)
-            if content:
-                # Use path relative to repo as key prefix for nx multi-app repos
-                imported[name] = content
-
-    elif repo_type == 'spring-boot':
-        res_dir = os.path.join(repo_path, 'src', 'main', 'resources')
-        if os.path.isdir(res_dir):
-            for file in os.listdir(res_dir):
-                if (file.startswith('application') and
-                   (file.endswith('.yml') or file.endswith('.yaml') or file.endswith('.properties'))):
-
-                    name = 'default'
-                    # splitext removes extension, so we get 'application-dev'
-                    base = os.path.splitext(file)[0]
-                    if '-' in base:
-                        name = base.split('-', 1)[1]
-
-                    content = read_config_file_raw(os.path.join(res_dir, file))
-                    if content:
-                        imported[name] = content
+        content = read_config_file_raw(file_path)
+        if content:
+            imported[name] = content
 
     return imported
 

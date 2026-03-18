@@ -21,16 +21,6 @@ FONT_MONO = "Consolas"
 # ── String constants ────────────────────────────────────────────
 NO_DB_PRESET = "- Ninguna (Local) -"
 REINSTALL_LBL = "Reinstall ✓"
-NPM_INSTALL_OK = "📦 npm install ✓"
-NPM_INSTALL_FAIL = "📦 npm install ✗"
-NPM_INSTALL_RUN = "⏳ Instalando..."
-
-PACKAGE_JSON_FILE = 'package.json'
-POM_XML_FILE = 'pom.xml'
-
-MVN_INSTALL_OK = "🔧 mvn install ✓"
-MVN_INSTALL_FAIL = "🔧 mvn install ✗"
-MVN_INSTALL_RUN = "⏳ Compilando..."
 BTN_CLICK = "<Button-1>"
 BTN_CONFIG_TEXT = "⚙ Config"
 BTN_CONFIG_TOOLTIP = "Editar configuración"
@@ -40,17 +30,6 @@ COLORS = {
     'starting': '#f59e0b',
     'stopped': '#6b7280',
     'error': '#ef4444',
-    'spring-boot': '#22c55e',
-    'angular': '#ef4444',
-    'docker-infra': '#3b82f6',
-    'maven-lib': '#a855f7',
-}
-
-TYPE_ICONS = {
-    'spring-boot': '🍃',
-    'angular': '🅰',
-    'docker-infra': '🐳',
-    'maven-lib': '📦',
 }
 
 STATUS_ICONS = {
@@ -174,7 +153,7 @@ class RepoCard(ctk.CTkFrame):
     def _build_header(self):
         """Build the collapsed header bar."""
         repo = self._repo
-        type_color = COLORS.get(repo.repo_type, '#888')
+        type_color = repo.ui_config.get('color', '#888')
 
         self._header = ctk.CTkFrame(self, fg_color="transparent", cursor="hand2")
         self._header.pack(fill="x", padx=6, pady=4)
@@ -206,7 +185,7 @@ class RepoCard(ctk.CTkFrame):
 
         # Name
         name_label = ctk.CTkLabel(
-            self._header, text=f"{TYPE_ICONS.get(repo.repo_type, '📁')} {repo.name}",
+            self._header, text=f"{repo.ui_config.get('icon', '📁')} {repo.name}",
             font=(FONT_FAMILY, 14, "bold"), anchor="w",
             text_color="#e0e7ff"
         )
@@ -321,17 +300,11 @@ class RepoCard(ctk.CTkFrame):
                 self._start_btn.configure(state="normal")
 
         is_running = self._status in ('running', 'starting')
-        if hasattr(self, '_npm_install_btn'):
+        if hasattr(self, '_install_btn'):
             if is_running:
-                self._npm_install_btn.configure(state="disabled")
+                self._install_btn.configure(state="disabled")
             elif not is_installing:
-                self._npm_install_btn.configure(state="normal")
-                
-        if hasattr(self, '_mvn_install_btn'):
-            if is_running:
-                self._mvn_install_btn.configure(state="disabled")
-            elif not is_installing:
-                self._mvn_install_btn.configure(state="normal")
+                self._install_btn.configure(state="normal")
 
     def _update_header_hints(self):
         """Update the branch + profile hint text in the header."""
@@ -363,31 +336,38 @@ class RepoCard(ctk.CTkFrame):
             parts.append(f"$ {self._repo.run_command}")
 
         is_installed = True
-        has_package_json = os.path.isfile(os.path.join(self._repo.path, PACKAGE_JSON_FILE))
-        has_pom_xml = os.path.isfile(os.path.join(self._repo.path, POM_XML_FILE))
-        if has_package_json:
-            is_installed = os.path.isdir(os.path.join(self._repo.path, 'node_modules'))
-        elif has_pom_xml:
-            is_installed = os.path.isdir(os.path.join(self._repo.path, 'target'))
-
-        if not is_installed:
-            parts.insert(0, "❌ Faltan deps")
+        install_cfg = getattr(self._repo, 'ui_config', {}).get('install', {})
+        check_dirs = install_cfg.get('check_dirs', []) if install_cfg else []
+        
+        if check_dirs:
+            for cd in check_dirs:
+                if not os.path.isdir(os.path.join(self._repo.path, cd)):
+                    is_installed = False
+                    break
+                    
+        if not is_installed and self._repo.run_install_cmd:
+            deps_text = install_cfg.get('status_label_deps_missing', '❌ Faltan deps')
+            parts.insert(0, deps_text)
 
         self._branch_hint.configure(text="   ".join(parts))
 
     def install_dependencies(self, skip_if_installed=False):
-        """Method to trigger dependency installation (NPM or Maven)."""
-        path = repo.path
-        has_package_json = os.path.isfile(os.path.join(path, 'package.json'))
-        has_pom_xml = os.path.isfile(os.path.join(path, 'pom.xml'))
+        """Method to trigger dependency installation via YAML commands."""
+        install_cfg = getattr(self._repo, 'ui_config', {}).get('install', {})
+        check_dirs = install_cfg.get('check_dirs', []) if install_cfg else []
         
-        is_installed = False
-        if has_package_json:
-            is_installed = os.path.isdir(os.path.join(path, 'node_modules'))
-        elif has_pom_xml:
-            is_installed = os.path.isdir(os.path.join(path, 'target'))
-        else:
+        if not self._repo.run_install_cmd:
             return
+            
+        is_installed = False
+        if check_dirs:
+            is_installed = True
+            for cd in check_dirs:
+                if not os.path.isdir(os.path.join(self._repo.path, cd)):
+                    is_installed = False
+                    break
+        else:
+            is_installed = True
             
         if skip_if_installed and is_installed:
             return
@@ -858,7 +838,7 @@ class RepoCard(ctk.CTkFrame):
             self._java_combo.pack(side="left", padx=(6, 12))
 
             if getattr(repo, 'java_version', None):
-                self._java_hint_label = ctk.CTkLabel(row_java, text=f"Recomendado (pom.xml): Java {repo.java_version}", font=(FONT_FAMILY, 11), text_color="#6b7280")
+                self._java_hint_label = ctk.CTkLabel(row_java, text=f"Recomendado: Java {repo.java_version}", font=(FONT_FAMILY, 11), text_color="#6b7280")
                 self._java_hint_label.pack(side="left", padx=(0, 10))
 
                 def _on_java_change(*args):
@@ -997,16 +977,16 @@ class RepoCard(ctk.CTkFrame):
         repo = self._repo
         
         if not target_file:
-            if repo.repo_type == 'angular':
-                # Search for environment.ts
+            main_filename = getattr(repo, 'env_main_config_filename', '')
+            if main_filename:
+                # Search for it in already detected files
                 for ef in repo.environment_files:
-                    if os.path.basename(ef) == 'environment.ts':
+                    if os.path.basename(ef) == main_filename:
                         target_file = ef
                         break
-                if not target_file and repo.environment_files:
-                    target_file = os.path.join(os.path.dirname(repo.environment_files[0]), 'environment.ts')
-            elif repo.repo_type == 'spring-boot':
-                target_file = os.path.join(repo.path, 'src', 'main', 'resources', 'application.yml')
+                # If not found, use the default directory
+                if not target_file and hasattr(repo, 'env_default_dir'):
+                    target_file = os.path.join(repo.path, repo.env_default_dir, main_filename)
 
         config_key = self.get_config_key(target_file)
         save_active_config(config_key, config_name)
@@ -1039,14 +1019,17 @@ class RepoCard(ctk.CTkFrame):
                 return
 
             res = False
-            if repo.repo_type in ('angular', 'nx-workspace'):
+            writer_type = getattr(repo, 'env_config_writer_type', 'raw')
+            
+            if writer_type == 'angular':
                 import json
                 if isinstance(config_data, dict):
                     content = "\n".join([f"export const environment = {json.dumps(config_data, indent=2)};", ""])
                 else:
                     content = str(config_data)
                 res = write_angular_environment_raw(target_file, content)
-            elif repo.repo_type == 'spring-boot':
+                
+            elif writer_type == 'spring':
                 config_str = str(config_data)
                 # Detect if it's properties or yaml based on first few lines
                 is_props = "=" in config_str.split("\n", 3)[0] or "=" in config_str
@@ -1073,6 +1056,9 @@ class RepoCard(ctk.CTkFrame):
                     except Exception:
                         pass
                         
+                res = write_config_file_raw(target_file, config_data)
+                
+            else: # raw fallback
                 res = write_config_file_raw(target_file, config_data)
 
             if res:
@@ -1133,7 +1119,7 @@ class RepoCard(ctk.CTkFrame):
             from core.config_manager import set_spring_db_preset
             profile = getattr(self, '_profile_combo', None)
             active_profile = profile.get() if profile else 'default'
-            resources_dir = os.path.join(self._repo.path, 'src', 'main', 'resources')
+            resources_dir = os.path.join(self._repo.path, getattr(self._repo, 'env_default_dir', 'src/main/resources'))
             success = set_spring_db_preset(resources_dir, active_profile, preset)
             if self._log:
                 msg = f"BD cambiada a: {preset_name}" if success else "Error al cambiar BD"
@@ -1212,7 +1198,12 @@ class RepoCard(ctk.CTkFrame):
 
                 def _done():
                     self._is_installing = False
-                    is_ok = os.path.isdir(os.path.join(self._repo.path, 'node_modules')) if is_frontend else os.path.isdir(os.path.join(self._repo.path, 'target'))
+                    is_ok = True
+                    if check_dirs:
+                        for cd in check_dirs:
+                            if not os.path.isdir(os.path.join(self._repo.path, cd)):
+                                is_ok = False
+                                break
                     if is_ok:
                         self._install_btn.configure(
                             text=success_text, fg_color="#334155", border_color="#64748b", hover_color="#475569"
@@ -1409,28 +1400,11 @@ class RepoCard(ctk.CTkFrame):
             return
 
         def _run():
-            profile = ''
-            if hasattr(self, '_profile_combo'):
-                profile = self._profile_combo.get()
-            elif hasattr(self, '_config_combos') and self._config_combos:
-                for _, combo in self._config_combos.items():
-                    v = combo.get()
-                    if v and v not in ('- Sin Seleccionar -', ''):
-                        profile = v
-                        break
-            elif hasattr(self, '_env_combo'):
-                profile = self._env_combo.get()
-
-            java_home = ''
-            if hasattr(self, 'selected_java_var'):
-                java_choice = self.selected_java_var.get()
-                java_home = self._java_versions.get(java_choice, '')
-
-            self._launcher.restart_service(
-                repo.name, repo.path, repo.repo_type,
-                profile, repo.server_port,
-                self._log, self._update_status, java_home=java_home
-            )
+            self._stop()
+            import time
+            time.sleep(1.5)
+            self.after(0, self._start)
+            
         threading.Thread(target=_run, daemon=True).start()
 
     def _pull(self):
@@ -1439,7 +1413,7 @@ class RepoCard(ctk.CTkFrame):
             from core.git_manager import get_local_changes, get_commits_behind, get_current_branch, pull
             from tkinter import messagebox
             
-            ignore = ['application.yml', 'environment.ts']
+            ignore = getattr(self._repo, 'env_pull_ignore_patterns', [])
             
             changes = get_local_changes(self._repo.path, ignore_files=ignore)
             if changes:
@@ -1537,17 +1511,9 @@ class RepoCard(ctk.CTkFrame):
 
     def _get_config_files(self, repo):
         """Collect config files for the repo type."""
-        files = []
-        if repo.repo_type in ('spring-boot', 'maven-lib'):
-            resources_dir = os.path.join(repo.path, 'src', 'main', 'resources')
-            if os.path.isdir(resources_dir):
-                for f in sorted(os.listdir(resources_dir)):
-                    if f.startswith('application') and f.endswith('.yml'):
-                        files.append(os.path.join(resources_dir, f))
-        elif repo.repo_type == 'angular':
-            files = repo.environment_files
-        elif repo.repo_type == 'docker-infra':
-            files = repo.docker_compose_files
+        files = list(repo.environment_files) if repo.environment_files else []
+        if getattr(repo, 'docker_compose_files', None):
+            files.extend(repo.docker_compose_files)
         return files
 
     def _show_file_selector(self, files: list):

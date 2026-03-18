@@ -157,28 +157,15 @@ def build_profile_data(repo_cards, db_presets=None,
 def _capture_config_files(repo) -> dict:
     """Read and capture the content of all config files for a repo."""
     files = {}
-
-    if repo.repo_type in ('spring-boot', 'maven-lib'):
-        resources_dir = os.path.join(repo.path, 'src', 'main', 'resources')
-        if os.path.isdir(resources_dir):
-            for f in os.listdir(resources_dir):
-                if f.startswith('application') and f.endswith('.yml'):
-                    fpath = os.path.join(resources_dir, f)
-                    try:
-                        with open(fpath, 'r', encoding='utf-8') as fh:
-                            files[f] = fh.read()
-                    except Exception:
-                        pass
-
-    elif repo.repo_type == 'angular':
-        for ef in getattr(repo, 'environment_files', []):
-            fname = os.path.basename(ef)
-            try:
-                with open(ef, 'r', encoding='utf-8') as fh:
-                    files[fname] = fh.read()
-            except Exception:
-                pass
-
+    for ef in getattr(repo, 'environment_files', []):
+        if not os.path.isfile(ef):
+            continue
+        fname = os.path.basename(ef)
+        try:
+            with open(ef, 'r', encoding='utf-8') as fh:
+                files[fname] = fh.read()
+        except Exception:
+            pass
     return files
 
 
@@ -186,33 +173,30 @@ def apply_config_files(repo_path: str, repo_type: str, config_files: dict):
     """Overwrite config files in a repo from saved profile data."""
     from core.config_manager import backup_file
 
-    if repo_type in ('spring-boot', 'maven-lib'):
-        resources_dir = os.path.join(repo_path, 'src', 'main', 'resources')
-        os.makedirs(resources_dir, exist_ok=True)
-        for fname, content in config_files.items():
-            fpath = os.path.join(resources_dir, fname)
-            if os.path.isfile(fpath):
-                backup_file(fpath)
+    # Search for the original files in the repo to overwrite them
+    file_locations = {}
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'dist', 'target')]
+        for fname in config_files.keys():
+            if fname in files:
+                file_locations[fname] = os.path.join(root, fname)
+
+    for fname, content in config_files.items():
+        fpath = file_locations.get(fname)
+        if not fpath:
+            # Fallback to the default directory defined in the repo's YAML configuration
+            default_dir = getattr(repo, 'env_default_dir', '')
+            if default_dir:
+                fpath = os.path.join(repo_path, default_dir, fname)
+                os.makedirs(os.path.dirname(fpath), exist_ok=True)
+            else:
+                fpath = os.path.join(repo_path, fname)
+
+        if os.path.isfile(fpath):
+            backup_file(fpath)
+            
+        try:
             with open(fpath, 'w', encoding='utf-8') as f:
                 f.write(content)
-
-    elif repo_type == 'angular':
-        # Find the environments dir
-        env_dir = _find_environments_dir(repo_path)
-        if env_dir:
-            for fname, content in config_files.items():
-                fpath = os.path.join(env_dir, fname)
-                if os.path.isfile(fpath):
-                    backup_file(fpath)
-                with open(fpath, 'w', encoding='utf-8') as f:
-                    f.write(content)
-
-
-def _find_environments_dir(repo_path: str) -> Optional[str]:
-    """Find the environments directory in an Angular project."""
-    for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'dist')]
-        for f in files:
-            if f.startswith('environment') and f.endswith('.ts'):
-                return root
-    return None
+        except Exception:
+            pass
