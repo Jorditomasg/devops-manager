@@ -84,7 +84,6 @@ class RepoCard(ctk.CTkFrame):
         self._on_edit_config = on_edit_config
         self._on_change_callback = on_change_callback
         self._status = 'stopped'
-        self._user_stopped = False
         self._branches_cache = []
         self._branch_load_id = None
         self._expanded = False
@@ -1389,7 +1388,6 @@ class RepoCard(ctk.CTkFrame):
             except (ImportError, OSError):
                 pass
 
-        self._user_stopped = False
         self._update_status(repo.name, 'starting')
         if self._log:
             self._log(f"[{repo.name}] ▶ {cmd}")
@@ -1419,13 +1417,13 @@ class RepoCard(ctk.CTkFrame):
                         self._log(decoded_line)
 
                 process.wait()
-                # If still 'starting' when process exits and user didn't stop it, it failed
-                if self._user_stopped:
+                # If still 'starting' when process exits, it failed (unless stopped manually)
+                if getattr(self, '_is_stopping_manually', False):
                     final_status = 'stopped'
-                elif self._status == 'starting':
-                    final_status = 'error'
+                    self._is_stopping_manually = False
                 else:
-                    final_status = 'stopped'
+                    final_status = 'error' if self._status == 'starting' else 'stopped'
+                
                 self.after(0, lambda s=final_status: self._update_status(repo.name, s))
                 if self._log:
                     self._log(f"[{repo.name}] ⏹ Proceso terminado (código {process.returncode})")
@@ -1464,13 +1462,13 @@ class RepoCard(ctk.CTkFrame):
                         self._log(decoded_line)
 
                 process.wait()
-                # If still 'starting' when process exits and user didn't stop it, it failed
-                if self._user_stopped:
+                # If still 'starting' when process exits, it failed (unless stopped manually)
+                if getattr(self, '_is_stopping_manually', False):
                     final_status = 'stopped'
-                elif self._status == 'starting':
-                    final_status = 'error'
+                    self._is_stopping_manually = False
                 else:
-                    final_status = 'stopped'
+                    final_status = 'error' if self._status == 'starting' else 'stopped'
+                
                 self._update_status(repo.name, final_status)
             except Exception as e:
                 self._update_status(repo.name, 'error')
@@ -1560,12 +1558,12 @@ class RepoCard(ctk.CTkFrame):
 
     def _stop(self):
         """Stop the service using the service launcher."""
-        self._user_stopped = True
         repo = self._repo
         if 'docker_checkboxes' in repo.features:
             self._stop_docker_services()
             return
 
+        self._is_stopping_manually = True
         self._launcher.stop_service(repo.name, self._log, self._update_status)
 
     def _stop_docker_services(self):
