@@ -144,12 +144,10 @@ def build_profile_data(repo_cards, db_presets=None,
 
 def _build_single_repo_profile(card, include_config_files: bool) -> tuple[str, dict]:
     """Build profile dict for a single RepoCard."""
-    from core.git_manager import get_current_branch
-
     repo = card.get_repo_info()
     repo_data = {
         'git_url': repo.git_remote_url or '',
-        'branch': get_current_branch(repo.path),
+        'branch': card.get_branch(),
         'type': repo.repo_type,
         'profile': card.get_current_profile(),
         'custom_command': card.get_custom_command(),

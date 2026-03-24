@@ -466,7 +466,7 @@ class DevOpsManagerApp(ctk.CTk):
             # Stagger branch loading
             if card._branch_load_id:
                 card.after_cancel(card._branch_load_id)
-            card._branch_load_id = card.after(300 * idx, card._refresh_branch)
+            card._branch_load_id = card.after(30 * idx, card._refresh_branch)
 
         # Update global panel
         self._global_panel.set_cards(self._repo_cards)
@@ -569,7 +569,7 @@ class DevOpsManagerApp(ctk.CTk):
         self._log(f"✅ Perfil '{self._current_profile_name}' guardado correctamente")
 
     def _check_profile_changes(self):
-        """Debounced: schedule the actual check 300 ms out, cancelling any pending one.
+        """Debounced: schedule the actual check 10 ms out, cancelling any pending one.
         Skipped entirely while _apply_config is running (it calls _do_check_profile_changes directly)."""
         if self._applying_profile:
             return
@@ -578,7 +578,7 @@ class DevOpsManagerApp(ctk.CTk):
                 self.after_cancel(self._pending_profile_check)
             except Exception:
                 pass
-        self._pending_profile_check = self.after(300, self._do_check_profile_changes)
+        self._pending_profile_check = self.after(10, self._do_check_profile_changes)
 
     def _do_check_profile_changes(self):
         """Actual profile-change detection — runs at most once per 300 ms burst."""
@@ -651,6 +651,9 @@ class DevOpsManagerApp(ctk.CTk):
         Suppresses per-card change callbacks during the loop; runs one check at the end."""
         self._applying_profile = True
         try:
+            if hasattr(self, '_quick_save_btn') and self._quick_save_btn.winfo_ismapped():
+                self._quick_save_btn.pack_forget()
+
             repos_config = profile_data.get('repos', {})
             for card in self._repo_cards:
                 name = card.get_name()

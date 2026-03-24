@@ -88,6 +88,7 @@ class RepoCard(ctk.CTkFrame):
         self._on_change_callback = on_change_callback
         self._status = 'stopped'
         self._branches_cache = []
+        self._current_branch = ''
         self._branch_load_id = None
         self._expanded = False
         self._is_installing = False
@@ -613,13 +614,16 @@ class RepoCard(ctk.CTkFrame):
         ctk.CTkLabel(row1, text="Rama:", font=(FONT_FAMILY, 13),
                      text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
 
+        initial_branches = self._branches_cache if getattr(self, '_branches_cache', None) else ["cargando..."]
         self._branch_combo = ctk.CTkComboBox(
-            row1, values=["cargando..."],
+            row1, values=initial_branches,
             width=180, height=28, font=(FONT_FAMILY, 12),
             corner_radius=6, fg_color="#1e1b4b",
             border_color="#4338ca", button_color="#4338ca",
             command=self._on_branch_change
         )
+        if getattr(self, '_current_branch', None):
+            self._branch_combo.set(self._current_branch)
         self._branch_combo.pack(side="left", padx=(6, 4))
 
         def _on_branch_type(event):
@@ -1001,6 +1005,7 @@ class RepoCard(ctk.CTkFrame):
             self._branches_cache = branches
 
             def _update():
+                self._current_branch = current
                 if branches:
                     if hasattr(self, '_branch_combo'):
                         self._branch_combo.configure(values=branches)
@@ -1041,6 +1046,7 @@ class RepoCard(ctk.CTkFrame):
             
             if success and actual_branch == branch:
                 def _update():
+                    self._current_branch = branch
                     if hasattr(self, '_branch_combo'):
                         self._branch_combo.set(branch)
                     self._update_header_hints()
@@ -1909,6 +1915,9 @@ class RepoCard(ctk.CTkFrame):
                     res[tf] = v
             return res
         return ''
+
+    def get_branch(self) -> str:
+        return getattr(self, '_current_branch', '')
 
     def get_name(self) -> str:
         return self._repo.name
