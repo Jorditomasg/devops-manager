@@ -822,10 +822,12 @@ class ImportOptionsDialog(ctk.CTkToplevel):
             # 1) Clone missing repos
             if self._clone_var.get() and self._missing:
                 from core.git_manager import clone, checkout
-                for m in self._missing:
+                from concurrent.futures import ThreadPoolExecutor
+                
+                def _clone_repo(m):
                     if not m['git_url']:
                         _update_progress(f"⚠ {m['name']}: sin URL")
-                        continue
+                        return
                     dest = os.path.join(self._workspace_dir, m['name'])
                     if self._log:
                         self._log(f"[import] Clonando {m['name']}...")
@@ -834,6 +836,10 @@ class ImportOptionsDialog(ctk.CTkToplevel):
                         checkout(dest, m['branch'], self._log)
                     _update_progress(f"✅ Clonado: {m['name']}")
                     self._did_clone = True
+
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    for m in self._missing:
+                        executor.submit(_clone_repo, m)
 
             # 2) Install dependencies in background
             if self._install_var.get() and self._missing:
@@ -887,15 +893,30 @@ class ImportOptionsDialog(ctk.CTkToplevel):
             # 4) Overwrite config files
             if self._overwrite_configs_var.get():
                 from core.profile_manager import apply_config_files
-                for repo_name, repo_cfg in self._profile_data.get('repos', {}).items():
+                from concurrent.futures import ThreadPoolExecutor
+                
+                def _apply_repo_configs(repo_name, repo_cfg):
                     cf = repo_cfg.get('config_files', {})
                     if not cf:
-                        continue
+                        return
                     repo_path = os.path.join(self._workspace_dir, repo_name)
                     if os.path.isdir(repo_path):
-                        apply_config_files(repo_path, repo_cfg.get('type', ''), cf)
+                        # Ensure we handle the target_env correctly by passing it if expected
+                        target_env = repo_cfg.get('profile')
+                        try:
+                            # Apply config, checking if apply_config_files accepts target_env
+                            apply_config_files(repo_path, repo_cfg.get('type', ''), cf, target_env=target_env)
+                        except TypeError:
+                            # Fallback if target_env is not supported
+                            apply_config_files(repo_path, repo_cfg.get('type', ''), cf)
+                        
                         if self._log:
                             self._log(f"[import] Config files aplicados: {repo_name}")
+                
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    for repo_name, repo_cfg in self._profile_data.get('repos', {}).items():
+                        executor.submit(_apply_repo_configs, repo_name, repo_cfg)
+                        
                 _update_progress("📝 Config files aplicados")
 
             # Done

@@ -165,39 +165,82 @@ def _build_single_repo_profile(card, include_config_files: bool) -> tuple[str, d
 
 def _capture_config_files(repo) -> dict:
     """Read and capture the content of all config files for a repo."""
-    files = {}
+    files_by_dir = {}
     for ef in getattr(repo, 'environment_files', []):
         if not os.path.isfile(ef):
             continue
         fname = os.path.basename(ef)
         try:
+            if hasattr(repo, 'path') and repo.path:
+                rel_dir = os.path.relpath(os.path.dirname(ef), repo.path)
+                rel_dir = rel_dir.replace(os.sep, '/')
+                if rel_dir == '.':
+                    rel_dir = ""
+            else:
+                rel_dir = ""
+        except ValueError:
+            rel_dir = ""
+
+        try:
             with open(ef, 'r', encoding='utf-8') as fh:
-                files[fname] = fh.read()
+                if rel_dir not in files_by_dir:
+                    files_by_dir[rel_dir] = {}
+                files_by_dir[rel_dir][fname] = fh.read()
         except OSError:
             pass
-    return files
+    return files_by_dir
 
 
-def apply_config_files(repo_path: str, repo_type: str, config_files: dict):
+def apply_config_files(repo_path: str, repo_type: str, config_files: dict, target_env=None):
     """Overwrite config files in a repo from saved profile data."""
     from core.config_manager import backup_file
 
-    # Search for the original files in the repo to overwrite them
-    file_locations = _find_existing_config_files(repo_path, set(config_files.keys()))
+    if not config_files:
+        return
 
-    for fname, content in config_files.items():
-        fpath = file_locations.get(fname)
-        if not fpath:
-            fpath = os.path.join(repo_path, fname)
+    # Check if this uses the new directory-based format (dict of dicts)
+    is_new_format = any(isinstance(v, dict) for v in config_files.values())
 
-        if os.path.isfile(fpath):
-            backup_file(fpath)
-            
-        try:
-            with open(fpath, 'w', encoding='utf-8') as f:
-                f.write(content)
-        except OSError:
-            pass
+    if is_new_format:
+        for rel_dir, files in config_files.items():
+            if not isinstance(files, dict):
+                continue
+
+            dir_path = os.path.join(repo_path, os.path.normpath(rel_dir)) if rel_dir else repo_path
+            os.makedirs(dir_path, exist_ok=True)
+
+            for fname, content in files.items():
+                fpath = os.path.join(dir_path, fname)
+                if os.path.isfile(fpath):
+                    backup_file(fpath)
+                try:
+                    with open(fpath, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                except OSError:
+                    pass
+    else:
+        # Legacy flat structural support
+        basenames = {os.path.basename(k) for k in config_files.keys()}
+        file_locations = _find_existing_config_files(repo_path, basenames)
+
+        for path_key, content in config_files.items():
+            local_path_key = os.path.normpath(path_key)
+            fpath = os.path.join(repo_path, local_path_key)
+
+            if not os.path.isfile(fpath):
+                basename = os.path.basename(path_key)
+                if basename in file_locations:
+                    fpath = file_locations[basename]
+
+            if os.path.isfile(fpath):
+                backup_file(fpath)
+
+            try:
+                os.makedirs(os.path.dirname(fpath), exist_ok=True)
+                with open(fpath, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            except OSError:
+                pass
 
 
 def _find_existing_config_files(repo_path: str, target_files: set) -> dict:

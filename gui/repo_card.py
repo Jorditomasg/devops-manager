@@ -1823,11 +1823,13 @@ class RepoCard(ctk.CTkFrame):
         self.selected_var.set(value)
 
     def set_branch(self, branch: str) -> bool:
-        from core.git_manager import has_branch
-        if has_branch(self._repo.path, branch):
-            self._on_branch_change(branch)
-            return True
-        return False
+        def _run():
+            from core.git_manager import has_branch
+            if has_branch(self._repo.path, branch):
+                self._on_branch_change(branch)
+        import threading
+        threading.Thread(target=_run, daemon=True).start()
+        return True
 
     def set_db_preset(self, preset_name: str):
         if hasattr(self, '_db_combo'):
