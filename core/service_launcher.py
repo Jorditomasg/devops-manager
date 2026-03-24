@@ -86,7 +86,16 @@ class ServiceLauncher:
                     if log:
                         log(line)
 
-                process.wait()
+                try:
+                    process.wait(timeout=600)
+                except subprocess.TimeoutExpired:
+                    if log:
+                        log(f"[svc] ⚠️ {name} install timed out after 10 min, killing process")
+                    try:
+                        process.kill()
+                        process.wait(timeout=5)
+                    except OSError:
+                        pass
                 svc.status = 'stopped'
                 if status_callback:
                     status_callback(name, 'stopped')

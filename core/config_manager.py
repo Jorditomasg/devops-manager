@@ -11,6 +11,35 @@ from datetime import datetime
 from typing import Optional
 
 
+# ─── JSON config in-memory cache (mtime-based invalidation) ─────────────────
+
+_CONFIG_CACHE: dict = {}
+_CONFIG_CACHE_MTIME: dict = {}
+
+
+def _load_config_cached(config_path: str) -> dict:
+    """Return the parsed JSON for config_path, using a cached copy when the file
+    has not changed since last read."""
+    try:
+        mtime = os.path.getmtime(config_path)
+        if (config_path in _CONFIG_CACHE
+                and _CONFIG_CACHE_MTIME.get(config_path) == mtime):
+            return _CONFIG_CACHE[config_path]
+        with open(config_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        _CONFIG_CACHE[config_path] = data
+        _CONFIG_CACHE_MTIME[config_path] = mtime
+        return data
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _invalidate_config_cache(config_path: str) -> None:
+    """Bust the cache entry after a write so the next read goes to disk."""
+    _CONFIG_CACHE.pop(config_path, None)
+    _CONFIG_CACHE_MTIME.pop(config_path, None)
+
+
 # ─── DB Preset Management ───────────────────────────────────────────────────
 
 def get_config_path() -> str:
@@ -28,12 +57,7 @@ def load_db_presets(config_path: str = '') -> dict:
     """
     if not config_path:
         config_path = get_config_path()
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        return config.get('db_presets', {})
-    except (OSError, json.JSONDecodeError):
-        return {}
+    return _load_config_cached(config_path).get('db_presets', {})
 
 
 def save_db_presets(presets: dict, config_path: str = ''):
@@ -49,6 +73,7 @@ def save_db_presets(presets: dict, config_path: str = ''):
         config['db_presets'] = presets
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+        _invalidate_config_cache(config_path)
     except (OSError, json.JSONDecodeError):
         pass
 
@@ -238,13 +263,7 @@ def load_repo_configs(repo_name: str, config_path: str = '') -> dict:
     """
     if not config_path:
         config_path = get_config_path()
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        repo_configs = config.get('repo_configs', {})
-        return repo_configs.get(repo_name, {})
-    except (OSError, json.JSONDecodeError):
-        return {}
+    return _load_config_cached(config_path).get('repo_configs', {}).get(repo_name, {})
 
 
 def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = ''):
@@ -257,13 +276,14 @@ def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = '')
                 config = json.load(f)
         else:
             config = {}
-        
+
         if 'repo_configs' not in config:
             config['repo_configs'] = {}
-            
+
         config['repo_configs'][repo_name] = configs_dict
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+        _invalidate_config_cache(config_path)
     except (OSError, json.JSONDecodeError):
         pass
 
@@ -308,13 +328,7 @@ def load_active_config(config_key: str, config_path: str = '') -> str:
     """Load the active config name for a given config_key."""
     if not config_path:
         config_path = get_config_path()
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        active_configs = config.get('active_configs', {})
-        return active_configs.get(config_key, "- Sin Seleccionar -")
-    except (OSError, json.JSONDecodeError):
-        return "- Sin Seleccionar -"
+    return _load_config_cached(config_path).get('active_configs', {}).get(config_key, "- Sin Seleccionar -")
 
 
 def save_active_config(config_key: str, active_name: str, config_path: str = ''):
@@ -327,12 +341,13 @@ def save_active_config(config_key: str, active_name: str, config_path: str = '')
                 config = json.load(f)
         else:
             config = {}
-        
+
         if 'active_configs' not in config:
             config['active_configs'] = {}
-            
+
         config['active_configs'][config_key] = active_name
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+        _invalidate_config_cache(config_path)
     except (OSError, json.JSONDecodeError):
         pass

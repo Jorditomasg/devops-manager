@@ -54,6 +54,9 @@ PORT_REGEXES = [
     re.compile(r"Local:\s*http://localhost:(\d+)", re.IGNORECASE),
 ]
 
+# Limit concurrent git-status badge refreshes to avoid subprocess spam
+_GIT_BADGE_SEMAPHORE = threading.Semaphore(3)
+
 
 def _create_subprocess(cmd_str: str, cwd: str, env: dict = None, shell: bool = True) -> subprocess.Popen:
     """Helper to create a unified subprocess."""
@@ -94,10 +97,14 @@ class RepoCard(ctk.CTkFrame):
         self._active_compose_files = set()
         self._docker_compose_buttons = {}
         self._compose_status_thread_running = False
+        self._compose_stop_event = threading.Event()
+        self._badge_timer = None
+        self._log_line_count = 0
+        self._detached_log_line_count = 0
+        self._expand_panel_built = False
 
         self._build_ui()
         self._update_header_hints()
-        self._expand_panel.pack_forget()
 
         from domain.ports.event_bus import bus
         bus.subscribe("SERVICE_STATUS_CHANGED", self._on_bus_status_changed)
@@ -111,10 +118,31 @@ class RepoCard(ctk.CTkFrame):
         self._branch_load_id = self.after(200, self._refresh_branch)
         self._badge_timer = self.after(3000, self._refresh_badge_loop)
         
+    def destroy(self):
+        """Cancel pending timers and stop background threads before destroying."""
+        self._compose_stop_event.set()
+        self._compose_status_thread_running = False
+        if self._badge_timer:
+            try:
+                self.after_cancel(self._badge_timer)
+            except Exception:
+                pass
+        if self._branch_load_id:
+            try:
+                self.after_cancel(self._branch_load_id)
+            except Exception:
+                pass
+        from domain.ports.event_bus import bus
+        try:
+            bus.unsubscribe("SERVICE_STATUS_CHANGED", self._on_bus_status_changed)
+        except Exception:
+            pass
+        super().destroy()
+
     def _on_bus_status_changed(self, event: dict):
         if event.get("name") == self._repo.name:
             self._update_status(self._repo.name, event.get("status"))
-    
+
     def _trigger_change_callback(self):
         if hasattr(self, '_on_change_callback') and self._on_change_callback:
             try:
@@ -144,24 +172,28 @@ class RepoCard(ctk.CTkFrame):
         """Periodically refresh the unsigned changes badge."""
         self._refresh_badge()
         if self.winfo_exists():
-            self._badge_timer = self.after(10000, self._refresh_badge_loop)
+            self._badge_timer = self.after(30000, self._refresh_badge_loop)
 
     def _refresh_badge(self, event=None):
         """Count modified files and update the badge label."""
         def _run():
-            from core.git_manager import count_modified_files
-            count = count_modified_files(self._repo.path)
-            if count > 0:
-                def _update():
-                    if hasattr(self, '_changes_count_label'):
-                        self._changes_count_label.configure(text=f"📝 {count}")
-                self.after(0, _update)
-            else:
-                def _update():
-                    if hasattr(self, '_changes_count_label'):
-                        self._changes_count_label.configure(text="")
-                self.after(0, _update)
-        import threading
+            if not _GIT_BADGE_SEMAPHORE.acquire(blocking=False):
+                return  # Too many concurrent git calls — skip this cycle
+            try:
+                from core.git_manager import count_modified_files
+                count = count_modified_files(self._repo.path)
+                if count > 0:
+                    def _update():
+                        if hasattr(self, '_changes_count_label'):
+                            self._changes_count_label.configure(text=f"📝 {count}")
+                    self.after(0, _update)
+                else:
+                    def _update():
+                        if hasattr(self, '_changes_count_label'):
+                            self._changes_count_label.configure(text="")
+                    self.after(0, _update)
+            finally:
+                _GIT_BADGE_SEMAPHORE.release()
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_hover_enter(self, event=None):
@@ -182,7 +214,7 @@ class RepoCard(ctk.CTkFrame):
     def _build_ui(self):
         """Build all UI elements for the card."""
         self._build_header()
-        self._build_expand_panel()
+        # Expand panel is built lazily on first _toggle_expand call
 
     # ─── HEADER (always visible, compact) ────────────────────────
 
@@ -526,27 +558,22 @@ class RepoCard(ctk.CTkFrame):
             if hasattr(self, '_log_textbox'):
                 self._log_textbox.configure(state="normal")
                 self._log_textbox.insert("end", line)
-
-                # Trim old lines
-                content = self._log_textbox.get("1.0", "end")
-                lines = content.splitlines()
-                if len(lines) > 500:
-                    excess = len(lines) - 500
+                self._log_line_count += 1
+                if self._log_line_count > 500:
+                    excess = self._log_line_count - 500
                     self._log_textbox.delete("1.0", f"{excess + 1}.0")
-
+                    self._log_line_count = 500
                 self._log_textbox.see("end")
                 self._log_textbox.configure(state="disabled")
-                
+
             if getattr(self, '_detached_log_textbox', None) and self._detached_log_textbox.winfo_exists():
                 self._detached_log_textbox.configure(state="normal")
                 self._detached_log_textbox.insert("end", line)
-                
-                content = self._detached_log_textbox.get("1.0", "end")
-                lines = content.splitlines()
-                if len(lines) > 500:
-                    excess = len(lines) - 500
+                self._detached_log_line_count += 1
+                if self._detached_log_line_count > 500:
+                    excess = self._detached_log_line_count - 500
                     self._detached_log_textbox.delete("1.0", f"{excess + 1}.0")
-                    
+                    self._detached_log_line_count = 500
                 self._detached_log_textbox.see("end")
                 self._detached_log_textbox.configure(state="disabled")
             
@@ -951,9 +978,12 @@ class RepoCard(ctk.CTkFrame):
     # ─── Toggle expand ───────────────────────────────────────────
 
     def _toggle_expand(self, event=None):
-        """Toggle expanded/collapsed state."""
+        """Toggle expanded/collapsed state. Builds the panel lazily on first open."""
         self._expanded = not self._expanded
         if self._expanded:
+            if not self._expand_panel_built:
+                self._build_expand_panel()
+                self._expand_panel_built = True
             self._expand_panel.pack(fill="x", padx=3, pady=(0, 2), after=self._header)
             self._toggle_btn.configure(text="▲")
         else:
@@ -1261,7 +1291,16 @@ class RepoCard(ctk.CTkFrame):
                         break
                     if self._log:
                         self._log(line.strip())
-                process.wait()
+                try:
+                    process.wait(timeout=600)
+                except subprocess.TimeoutExpired:
+                    if self._log:
+                        self._log(f"[{self._repo.name}] ⚠️ Instalación superó 10 min, proceso terminado")
+                    try:
+                        process.kill()
+                        process.wait(timeout=5)
+                    except OSError:
+                        pass
 
                 def _done():
                     self._is_installing = False
@@ -1416,14 +1455,21 @@ class RepoCard(ctk.CTkFrame):
                     if self._log:
                         self._log(decoded_line)
 
-                process.wait()
+                try:
+                    process.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                        process.wait(timeout=5)
+                    except OSError:
+                        pass
                 # If still 'starting' when process exits, it failed (unless stopped manually)
                 if getattr(self, '_is_stopping_manually', False):
                     final_status = 'stopped'
                     self._is_stopping_manually = False
                 else:
                     final_status = 'error' if self._status == 'starting' else 'stopped'
-                
+
                 self.after(0, lambda s=final_status: self._update_status(repo.name, s))
                 if self._log:
                     self._log(f"[{repo.name}] ⏹ Proceso terminado (código {process.returncode})")
@@ -1461,14 +1507,21 @@ class RepoCard(ctk.CTkFrame):
                     if self._log:
                         self._log(decoded_line)
 
-                process.wait()
+                try:
+                    process.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                        process.wait(timeout=5)
+                    except OSError:
+                        pass
                 # If still 'starting' when process exits, it failed (unless stopped manually)
                 if getattr(self, '_is_stopping_manually', False):
                     final_status = 'stopped'
                     self._is_stopping_manually = False
                 else:
                     final_status = 'error' if self._status == 'starting' else 'stopped'
-                
+
                 self._update_status(repo.name, final_status)
             except Exception as e:
                 self._update_status(repo.name, 'error')
@@ -1543,8 +1596,10 @@ class RepoCard(ctk.CTkFrame):
                             self._status_text.configure(text="Detenido", text_color="#888")
                     self.after(0, _update_global_status)
                         
-                time.sleep(4)
-                
+                self._compose_stop_event.wait(timeout=15)
+                if self._compose_stop_event.is_set():
+                    break
+
         threading.Thread(target=_loop, daemon=True).start()
 
     def _start_docker_services(self):
@@ -1586,7 +1641,7 @@ class RepoCard(ctk.CTkFrame):
         def _run():
             self._stop()
             import time
-            time.sleep(1.5)
+            time.sleep(0.3)
             self.after(0, self._start)
             
         threading.Thread(target=_run, daemon=True).start()

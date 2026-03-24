@@ -86,6 +86,8 @@ class DevOpsManagerApp(ctk.CTk):
         self._repos = []
         self._current_profile_name = self._settings.get('last_profile', "")
         self._current_profile_data = {}
+        self._pending_profile_check = None
+        self._applying_profile = False
 
         # Window config
         self.title("DevOps Manager")
@@ -112,9 +114,9 @@ class DevOpsManagerApp(ctk.CTk):
         self._scan_repos()
         self._load_initial_profile_data()
 
-        # Start background check loop for tray icon status and profile changes
+        # Start background check loop for tray icon status
         self._check_tray_status()
-        self._check_profile_changes_loop()
+        # Profile changes are detected reactively via on_change_callback on each card
 
     def _build_ui(self):
         """Build the main UI layout."""
@@ -285,6 +287,7 @@ class DevOpsManagerApp(ctk.CTk):
             text_color="#e0e7ff", state="disabled"
         )
         self._global_log_textbox.pack(fill="both", expand=True, padx=10, pady=5)
+        self._log_line_counts: dict = {}
 
     def _log(self, message: str):
         """Central log function."""
@@ -386,11 +389,12 @@ class DevOpsManagerApp(ctk.CTk):
             return
         textbox.configure(state="normal")
         textbox.insert("end", text)
-        content = textbox.get("1.0", "end")
-        lines = content.splitlines()
-        if len(lines) > max_lines:
-            excess = len(lines) - max_lines
+        count = self._log_line_counts.get(id(textbox), 0) + 1
+        if count > max_lines:
+            excess = count - max_lines
             textbox.delete("1.0", f"{excess + 1}.0")
+            count = max_lines
+        self._log_line_counts[id(textbox)] = count
         textbox.see("end")
         textbox.configure(state="disabled")
 
@@ -564,20 +568,29 @@ class DevOpsManagerApp(ctk.CTk):
         )
         self._log(f"✅ Perfil '{self._current_profile_name}' guardado correctamente")
 
-    def _check_profile_changes_loop(self):
-        """Loop to detect unsaved changes in current profile periodically."""
-        self._check_profile_changes()
-        self.after(3000, self._check_profile_changes_loop)
-
     def _check_profile_changes(self):
-        """Compares UI state vs loaded profile data to highlight the profile btn."""
-        if not hasattr(self, '_save_profile_btn'): return
-        
+        """Debounced: schedule the actual check 300 ms out, cancelling any pending one.
+        Skipped entirely while _apply_config is running (it calls _do_check_profile_changes directly)."""
+        if self._applying_profile:
+            return
+        if self._pending_profile_check:
+            try:
+                self.after_cancel(self._pending_profile_check)
+            except Exception:
+                pass
+        self._pending_profile_check = self.after(300, self._do_check_profile_changes)
+
+    def _do_check_profile_changes(self):
+        """Actual profile-change detection — runs at most once per 300 ms burst."""
+        self._pending_profile_check = None
+        if not hasattr(self, '_save_profile_btn'):
+            return
+
         if not self._current_profile_name or self._current_profile_name == NO_PROFILE_TEXT:
             # No profile selected
             if self._save_profile_btn.cget("text") != "👤":
                 self._save_profile_btn.configure(
-                    text="👤", fg_color="#1e293b", hover_color="#475569", 
+                    text="👤", fg_color="#1e293b", hover_color="#475569",
                     border_color="#64748b", text_color="#e0e7ff"
                 )
             if self._quick_save_btn.winfo_ismapped():
@@ -586,14 +599,14 @@ class DevOpsManagerApp(ctk.CTk):
 
         # Check if changed
         has_changed = self._detect_unsaved_profile_changes()
-        
+
         if has_changed:
             if not self._quick_save_btn.winfo_ismapped():
                 self._quick_save_btn.configure(text="💾", fg_color="#7f1d1d", hover_color="#991b1b", border_color="#b91c1c")
                 self._quick_save_btn.pack(side="left", padx=(0, 5), before=self._profile_combo)
         else:
             if self._quick_save_btn.winfo_ismapped():
-                 self._quick_save_btn.pack_forget()
+                self._quick_save_btn.pack_forget()
 
     def _detect_unsaved_profile_changes(self) -> bool:
         """Returns True if current repo cards deviate from _current_profile_data."""
@@ -634,13 +647,19 @@ class DevOpsManagerApp(ctk.CTk):
 
 
     def _apply_config(self, profile_data: dict):
-        """Apply a loaded configuration to all repos."""
-        repos_config = profile_data.get('repos', {})
-        for card in self._repo_cards:
-            name = card.get_name()
-            if name in repos_config:
-                self._apply_config_to_card(card, repos_config[name])
-        self._log("[config] Configuración aplicada a todos los repos")
+        """Apply a loaded configuration to all repos.
+        Suppresses per-card change callbacks during the loop; runs one check at the end."""
+        self._applying_profile = True
+        try:
+            repos_config = profile_data.get('repos', {})
+            for card in self._repo_cards:
+                name = card.get_name()
+                if name in repos_config:
+                    self._apply_config_to_card(card, repos_config[name])
+            self._log("[config] Configuración aplicada a todos los repos")
+        finally:
+            self._applying_profile = False
+            self._do_check_profile_changes()
 
     def _apply_config_to_card(self, card, config: dict):
         """Apply a single repo config to a card."""
@@ -730,6 +749,14 @@ class DevOpsManagerApp(ctk.CTk):
 
     def _init_tray(self):
         self._tray_icon = None
+        self._tray_icon_images = {}
+        for color in ("red", "green"):
+            icon_path = os.path.join(self._app_dir, f"icon_{color}.ico")
+            try:
+                img = Image.open(icon_path) if os.path.exists(icon_path) else Image.new('RGB', (64, 64), color=color)
+            except Exception:
+                img = Image.new('RGB', (64, 64), color=color)
+            self._tray_icon_images[color] = img
 
     def _on_window_unmap(self, event):
         # Only handle events from the main window itself, intercept minimize
@@ -747,15 +774,7 @@ class DevOpsManagerApp(ctk.CTk):
                     break
                     
             color = "green" if any_running else "red"
-            icon_path = os.path.join(self._app_dir, f"icon_{color}.ico")
-            
-            if os.path.exists(icon_path):
-                try:
-                    image = Image.open(icon_path)
-                except Exception:
-                    image = Image.new('RGB', (64, 64), color='red')
-            else:
-                image = Image.new('RGB', (64, 64), color='red')
+            image = self._tray_icon_images.get(color, Image.new('RGB', (64, 64), color='red'))
 
             menu = pystray.Menu(
                 item('Mostrar', self._restore_window, default=True),
@@ -793,18 +812,19 @@ class DevOpsManagerApp(ctk.CTk):
         )
         color = "green" if any_running else "red"
         icon_path = os.path.join(self._app_dir, f"icon_{color}.ico")
-        if os.path.exists(icon_path):
-            if self.state() != 'iconic':
+        if os.path.exists(icon_path) and self.state() != 'iconic':
+            try:
+                self.iconbitmap(icon_path)
+            except tk.TclError:
+                pass
+        if self._tray_icon:
+            img = self._tray_icon_images.get(color)
+            if img:
                 try:
-                    self.iconbitmap(icon_path)
-                except tk.TclError:
-                    pass
-            if self._tray_icon:
-                try:
-                    self._tray_icon.icon = Image.open(icon_path)
+                    self._tray_icon.icon = img
                 except (OSError, ValueError):
                     pass
-        self.after(2000, self._check_tray_status)
+        self.after(5000, self._check_tray_status)
 
     def _on_close(self):
         """Handle window close."""
