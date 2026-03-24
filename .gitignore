@@ -18,3 +18,7 @@ error.log.*
 # IDEs
 .vscode/
 .idea/
+
+#IA generated files
+.agents/
+skills-lock.json
