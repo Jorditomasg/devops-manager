@@ -49,15 +49,15 @@ class GlobalPanel(ctk.CTkFrame):
             command=self._toggle_select_all
         ).pack(side="right", padx=(10, 0))
 
-        # ─── Row 1: Branch ───
-        row1 = ctk.CTkFrame(self, fg_color="transparent")
-        row1.pack(fill="x", padx=15, pady=(0, 4))
+        # ─── Row: Branch (left) + Action buttons (right) ───
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x", padx=15, pady=(0, 8))
 
-        ctk.CTkLabel(row1, text="Rama:", font=theme.font("base"),
+        ctk.CTkLabel(row, text="Rama:", font=theme.font("base"),
                      text_color=theme.C.text_secondary, width=45).pack(side="left")
 
         self._branch_entry = ctk.CTkEntry(
-            row1, width=180, height=theme.G.btn_height_md, font=theme.font("base"),
+            row, width=180, height=theme.G.btn_height_md, font=theme.font("base"),
             corner_radius=theme.G.corner_btn,
             fg_color=theme.C.section,
             border_color=theme.C.default_border,
@@ -66,56 +66,54 @@ class GlobalPanel(ctk.CTkFrame):
         self._branch_entry.pack(side="left", padx=(4, 4))
 
         apply_branch_btn = ctk.CTkButton(
-            row1, text="Aplicar", width=70,
+            row, text="Aplicar", width=70,
             command=self._apply_branch_all,
             **theme.btn_style("blue")
         )
-        apply_branch_btn.pack(side="left", padx=(0, 10))
+        apply_branch_btn.pack(side="left", padx=(0, 0))
         ToolTip(apply_branch_btn, "Aplicar esta rama a todos los repos seleccionados")
 
-        # ─── Row 2: Action buttons ───
-        row2 = ctk.CTkFrame(self, fg_color="transparent")
-        row2.pack(fill="x", padx=15, pady=(0, 8))
-
         pull_btn = ctk.CTkButton(
-            row2, text="⬇ Pull All", width=90,
+            row, text="⬇ Pull All", width=90,
             command=self._pull_all,
             **theme.btn_style("blue", font_size="md")
         )
-        pull_btn.pack(side="left", padx=(0, 3))
+        pull_btn.pack(side="left", padx=(3, 0))
         ToolTip(pull_btn, "Descargar cambios de todos los repos seleccionados")
 
         install_btn = ctk.CTkButton(
-            row2, text="📦 Install All", width=95,
+            row, text="📦 Install All", width=95,
             command=self._install_all,
             **theme.btn_style("neutral_alt", font_size="md")
         )
-        install_btn.pack(side="left", padx=(0, 3))
+        install_btn.pack(side="left", padx=(3, 0))
         ToolTip(install_btn, "Instalar dependencias de todos los proyectos seleccionados")
 
-        start_btn = ctk.CTkButton(
-            row2, text="▶ Start", width=80,
-            command=self._start_selected,
-            **theme.btn_style("start", font_size="md")
-        )
-        start_btn.pack(side="left", padx=(0, 3))
-        ToolTip(start_btn, "Iniciar todos los servicios seleccionados")
-
-        stop_btn = ctk.CTkButton(
-            row2, text="⬛ Stop", width=80,
-            command=self._stop_selected,
-            **theme.btn_style("danger", font_size="md")
-        )
-        stop_btn.pack(side="left", padx=(0, 3))
-        ToolTip(stop_btn, "Detener todos los servicios seleccionados")
-
+        # Action buttons — right-aligned
         restart_btn = ctk.CTkButton(
-            row2, text="🔄 Restart", width=90,
+            row, text="🔄 Restart", width=90,
             command=self._restart_selected,
             **theme.btn_style("warning", font_size="md")
         )
-        restart_btn.pack(side="left", padx=(0, 3))
+        restart_btn.pack(side="right", padx=(3, 0))
         ToolTip(restart_btn, "Reiniciar todos los servicios seleccionados")
+
+        stop_btn = ctk.CTkButton(
+            row, text="⬛ Stop", width=80,
+            command=self._stop_selected,
+            **theme.btn_style("danger", font_size="md")
+        )
+        stop_btn.pack(side="right", padx=(3, 0))
+        ToolTip(stop_btn, "Detener todos los servicios seleccionados")
+
+        start_btn = ctk.CTkButton(
+            row, text="▶ Start", width=80,
+            command=self._start_selected,
+            **theme.btn_style("start", font_size="md")
+        )
+        start_btn.pack(side="right", padx=(3, 0))
+        ToolTip(start_btn, "Iniciar todos los servicios seleccionados")
+
 
     def _toggle_select_all(self):
         """Toggle all repo card checkboxes."""

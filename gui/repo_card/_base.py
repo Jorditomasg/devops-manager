@@ -65,6 +65,8 @@ class RepoCard(
         self._log_line_count = 0
         self._detached_log_line_count = 0
         self._expand_panel_built = False
+        self._pending_profile = None    # profile value set before expand panel exists
+        self._pending_custom_command = ''  # custom command set before expand panel exists
 
         self._build_ui()
         self._update_header_hints()
@@ -130,6 +132,7 @@ class RepoCard(
         return True
 
     def set_profile(self, profile):
+        self._pending_profile = profile  # always persist regardless of widget state
         if hasattr(self, '_config_combo'):
             p = profile if isinstance(profile, str) else ''
             self._config_combo.set(p if p else '- Sin Seleccionar -')
@@ -151,6 +154,7 @@ class RepoCard(
 
     def set_custom_command(self, cmd: str):
         """Set custom command (from persisted settings)."""
+        self._pending_custom_command = cmd  # always persist regardless of widget state
         if hasattr(self, '_cmd_entry') and cmd:
             self._cmd_entry.delete(0, "end")
             self._cmd_entry.insert(0, cmd)
@@ -160,7 +164,7 @@ class RepoCard(
         """Get custom command if set."""
         if hasattr(self, '_cmd_entry'):
             return self._cmd_entry.get().strip()
-        return ''
+        return self._pending_custom_command
 
     def get_current_profile(self):
         if hasattr(self, '_config_combo'):
@@ -173,7 +177,8 @@ class RepoCard(
                 if v and v not in ('- Sin Seleccionar -', ''):
                     res[tf] = v
             return res
-        return ''
+        # Expand panel not built yet — return the pending value set by set_profile()
+        return self._pending_profile if self._pending_profile is not None else ''
 
     def get_branch(self) -> str:
         return getattr(self, '_current_branch', '')

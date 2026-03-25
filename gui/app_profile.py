@@ -7,16 +7,22 @@ from gui import theme
 class ProfileManagerMixin:
     """Mixin providing profile load/save/detect/apply for DevOpsManagerApp."""
 
+    def _profile_dropdown_values(self) -> list:
+        """Returns dropdown values: includes NO_PROFILE_TEXT only when no profile is active."""
+        from core.profile_manager import list_profiles
+        names = list_profiles()
+        if self._current_profile_name and self._current_profile_name != NO_PROFILE_TEXT:
+            return names
+        return [NO_PROFILE_TEXT] + names
+
     def _refresh_profile_dropdown(self, auto_select_name=None):
         """Reload profile options into topbar dropdown after creation/deletion."""
-        from core.profile_manager import list_profiles
-        profiles = [NO_PROFILE_TEXT] + list_profiles()
+        profiles = self._profile_dropdown_values()
         if hasattr(self, '_profile_combo'):
             self._profile_combo.configure(values=profiles)
 
             if auto_select_name and auto_select_name in profiles:
                 self._profile_combo.set(auto_select_name)
-                # Ensure the system selects and triggers it
                 self._on_profile_dropdown_change(auto_select_name)
             elif self._current_profile_name in profiles:
                 self._profile_combo.set(self._current_profile_name)
@@ -41,6 +47,9 @@ class ProfileManagerMixin:
             # Limpiar perfiles en cards
             for card in self._repo_cards:
                 card.set_profile('- Sin Seleccionar -')
+
+            # Restore full list (now that no profile is active, show NO_PROFILE_TEXT again)
+            self._refresh_profile_dropdown()
             return
 
         from core.profile_manager import load_profile
@@ -54,6 +63,9 @@ class ProfileManagerMixin:
         self._current_profile_data = data
         self._settings['last_profile'] = selected_profile
         self._save_settings(self._settings)
+
+        # Hide NO_PROFILE_TEXT from dropdown now that a profile is active
+        self._refresh_profile_dropdown()
 
         self._apply_config(data)
 
@@ -94,12 +106,16 @@ class ProfileManagerMixin:
         if dirty:
             self._profile_combo.configure(
                 text_color=theme.C.status_logging,
+                button_color=theme.C.profile_accent,
+                button_hover_color=theme.C.profile_accent,
                 font=theme.font("base") + ("italic",),
             )
-            self._profile_combo.set(f"* {self._current_profile_name}")
+            self._profile_combo.set(f"{self._current_profile_name}*")
         else:
             self._profile_combo.configure(
                 text_color=theme.C.text_primary,
+                button_color=theme.C.profile_accent,
+                button_hover_color=theme.C.profile_accent,
                 font=theme.font("base"),
             )
             self._profile_combo.set(self._current_profile_name or NO_PROFILE_TEXT)
@@ -122,29 +138,26 @@ class ProfileManagerMixin:
         if not self._current_profile_data:
             return False
 
-        from core.profile_manager import build_profile_data
-        current_data = build_profile_data(
-            self._repo_cards,
-            include_config_files=False  # Heavy to compare, rely on memory branches/profiles
-        )
-
-        # Compare repos
         target_repos = self._current_profile_data.get('repos', {})
-        current_repos = current_data.get('repos', {})
 
-        # Check counts
-        if len(target_repos) != len(current_repos):
-             return True
+        # Build a name→card map for O(1) lookup
+        card_by_name = {card.get_name(): card for card in self._repo_cards}
+
+        if len(target_repos) != len(card_by_name):
+            return True
 
         for r_name, t_cfg in target_repos.items():
-            if r_name not in current_repos:
+            if r_name not in card_by_name:
                 return True
-            c_cfg = current_repos[r_name]
+            card = card_by_name[r_name]
 
-            # Compare key fields
-            if c_cfg.get('branch') != t_cfg.get('branch'): return True
-            if c_cfg.get('profile') != t_cfg.get('profile'): return True
-            if c_cfg.get('custom_command') != t_cfg.get('custom_command'): return True
+            if card.get_branch() != t_cfg.get('branch'):
+                return True
+
+            if card.get_current_profile() != t_cfg.get('profile'):
+                return True
+            if card.get_custom_command() != t_cfg.get('custom_command', ''):
+                return True
 
         return False
 

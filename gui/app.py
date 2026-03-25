@@ -168,9 +168,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             ("📜",         38, "neutral", self._detach_global_log,    "Abrir Log Global en Ventana"),
         ]
 
-        from core.profile_manager import list_profiles
-
-        profiles = [NO_PROFILE_TEXT] + list_profiles()
+        profiles = self._profile_dropdown_values()
 
         # Profile Dropdown
         combo_kw = theme.combo_style(height="lg")

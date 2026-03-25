@@ -246,10 +246,18 @@ class ExpandPanelMixin:
         combo.pack(side="left", padx=(6, 4))
 
         active_config = load_active_config(config_key)
-        if active_config in opts:
-            combo.set(active_config)
-            # Force application of the active config just in case it was lost
-            self.after(500, self._on_config_change, active_config, target_file, True)
+
+        # Prefer pending profile value (set by _apply_config before panel was built)
+        pending = getattr(self, '_pending_profile', None)
+        if pending is not None:
+            pending_val = pending.get(target_file, None) if isinstance(pending, dict) else pending
+        else:
+            pending_val = None
+
+        chosen = pending_val if (pending_val and pending_val in opts) else (active_config if active_config in opts else None)
+        if chosen:
+            combo.set(chosen)
+            self.after(500, self._on_config_change, chosen, target_file, True)
         else:
             combo.set("- Sin Seleccionar -")
 
@@ -344,6 +352,9 @@ class ExpandPanelMixin:
             placeholder_text=repo.run_command or "comando de inicio"
         )
         self._cmd_entry.pack(side="left", padx=(6, 4), fill="x", expand=True)
+        pending_cmd = getattr(self, '_pending_custom_command', '')
+        if pending_cmd:
+            self._cmd_entry.insert(0, pending_cmd)
         ToolTip(self._cmd_entry,
                 "Comando de inicio personalizado. Dejar vacío para usar el por defecto.\n"
                 f"Por defecto: {repo.run_command or 'N/A'}")

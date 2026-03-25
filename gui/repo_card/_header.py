@@ -99,12 +99,20 @@ class HeaderMixin:
         self._changes_count_label.pack(side="left", padx=(4, 4))
         ToolTip(self._changes_count_label, "Ficheros modificados sin guardar en el directorio vinculados al repo.")
 
+        # Warning badge (yellow, shown only when deps missing)
+        self._branch_hint_warn = ctk.CTkLabel(
+            frame, text="",
+            font=theme.font("xs", mono=True), text_color=theme.C.text_warning_badge, anchor="w"
+        )
+        self._branch_hint_warn.pack(side="left", padx=(6, 0))
+        self._branch_hint_warn.bind(BTN_CLICK, self._toggle_expand)
+
         # Branch + profile hints (grey, right of name)
         self._branch_hint = ctk.CTkLabel(
             frame, text="",
             font=theme.font("xs", mono=True), text_color=theme.C.text_faint, anchor="w"
         )
-        self._branch_hint.pack(side="left", padx=(6, 0), fill="x", expand=True)
+        self._branch_hint.pack(side="left", padx=(0, 0), fill="x", expand=True)
         self._branch_hint.bind(BTN_CLICK, self._toggle_expand)
 
     def _build_header_right(self, frame):
@@ -260,7 +268,9 @@ class HeaderMixin:
 
         if not is_installed and self._repo.run_install_cmd:
             deps_text = install_cfg.get('status_label_deps_missing', '⚠ Falta instalar')
-            parts.insert(0, deps_text)
-            self._branch_hint.configure(text="   ".join(parts), text_color=theme.C.text_warning_badge)
+            self._branch_hint_warn.configure(text=deps_text)
+            hint_text = ("   " + "   ".join(parts)) if parts else ""
+            self._branch_hint.configure(text=hint_text)
         else:
-            self._branch_hint.configure(text="   ".join(parts), text_color=theme.C.text_faint)
+            self._branch_hint_warn.configure(text="")
+            self._branch_hint.configure(text="   ".join(parts))
