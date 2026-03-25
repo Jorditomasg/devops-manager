@@ -23,4 +23,5 @@ if %errorlevel% neq 0 (
 echo [3/3] Instalacion completada exitosamente.
 echo.
 echo Puedes iniciar la aplicacion ejecutando 'run.bat'
+echo Para compilar con Nuitka (mas rapido), ejecuta 'compile.bat' (opcional).
 echo.
