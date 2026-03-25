@@ -1538,6 +1538,22 @@ class RepoCard(ctk.CTkFrame):
     def _on_docker_profile_change(self, compose_file: str, services: list):
         """Called by DockerComposeDialog when the user toggles profile checkboxes."""
         self._docker_profile_services[compose_file] = services
+        
+        # Auto-manage active state based on selected services
+        if services:
+            self._active_compose_files.add(compose_file)
+        else:
+            self._active_compose_files.discard(compose_file)
+            
+        # Update UI border if initialized
+        if hasattr(self, '_docker_compose_buttons') and compose_file in self._docker_compose_buttons:
+            btn = self._docker_compose_buttons[compose_file]
+            if compose_file in self._active_compose_files:
+                btn.configure(fg_color=theme.C.docker_active_fg, border_color=theme.C.docker_border_active)
+            else:
+                btn.configure(fg_color=theme.C.docker_stopped_fg, border_color=theme.C.docker_border_stopped)
+                
+        self._trigger_change_callback()
 
     def _update_compose_counts_now(self):
         """Immediate trigger for the background count updater."""
@@ -1590,9 +1606,13 @@ class RepoCard(ctk.CTkFrame):
                         if r > 0:
                             self._status_label.configure(text="🔴", text_color=theme.C.docker_border_running)
                             self._status_text.configure(text=f"En ejecución ({r} servicios)", text_color=theme.C.docker_border_running)
+                            self._status = "running"
                         else:
                             self._status_label.configure(text="🔴", text_color=theme.C.status_error)
                             self._status_text.configure(text="Detenido", text_color=theme.C.text_placeholder)
+                            self._status = "stopped"
+                            
+                        self._update_button_visibility()
                     self.after(0, _update_global_status)
                         
                 self._compose_stop_event.wait(timeout=15)
@@ -1606,7 +1626,11 @@ class RepoCard(ctk.CTkFrame):
         def _run():
             from core.db_manager import docker_compose_up
             for dc_file in self._active_compose_files:
-                docker_compose_up(dc_file, log=self._log)
+                svcs = self._docker_profile_services.get(dc_file, [])
+                if svcs:
+                    docker_compose_up(dc_file, services=svcs, log=self._log)
+                else:
+                    docker_compose_up(dc_file, log=self._log)
             self._update_compose_counts_now()
         threading.Thread(target=_run, daemon=True).start()
 

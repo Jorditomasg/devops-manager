@@ -1047,14 +1047,12 @@ class SettingsDialog(ctk.CTkToplevel):
 
             ctk.CTkButton(
                 row, text="✏", width=28,
-                font=theme.font("md"),
                 command=lambda n=name: self._edit_preset(n),
                 **theme.btn_style("warning", height="sm")
             ).pack(side="right", padx=(2, 0))
 
             ctk.CTkButton(
                 row, text="🗑", width=28,
-                font=theme.font("md"),
                 command=lambda n=name: self._delete_preset(n),
                 **theme.btn_style("danger_deep", height="sm")
             ).pack(side="right")
