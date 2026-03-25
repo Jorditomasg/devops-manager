@@ -35,7 +35,6 @@ from gui import theme
 from gui.app_profile import ProfileManagerMixin
 from core.repo_detector import detect_repos
 from core.service_launcher import ServiceLauncher
-from core.config_manager import load_db_presets
 
 
 CONFIG_FILE = 'devops_manager_config.json'
@@ -81,7 +80,6 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._settings['workspace_dir'] = self._workspace_dir
 
         self._service_launcher = ServiceLauncher()
-        self._db_presets = self._settings.get('db_presets', {})
         self._repo_cards = []
         self._repos = []
         self._current_profile_name = self._settings.get('last_profile', "")
@@ -122,7 +120,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         """Build the main UI layout."""
         self._build_topbar()
         self._global_panel = GlobalPanel(
-            self, db_presets=self._db_presets, log_callback=self._log
+            self, log_callback=self._log
         )
         self._global_panel.pack(fill="x", padx=10, pady=(10, 6))
         self._setup_cards_scroll()
@@ -435,7 +433,6 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             card = RepoCard(
                 self._cards_scroll, repo,
                 self._service_launcher,
-                db_presets=self._db_presets,
                 java_versions=self._java_versions,
                 log_callback=self._log,
                 on_edit_config=self._open_config_editor,
@@ -476,7 +473,6 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             workspace_dir=self._workspace_dir,
             repos=self._repos,
             repo_cards=self._repo_cards,
-            db_presets=self._db_presets,
             log_callback=self._log,
             on_profile_loaded=self._apply_config,
             on_rescan=self._scan_repos,
@@ -524,9 +520,6 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 settings['active_configs'] = existing['active_configs']
             if 'repo_configs' in existing:
                 settings['repo_configs'] = existing['repo_configs']
-            if 'db_presets' in existing:
-                settings['db_presets'] = existing['db_presets']
-            
             existing.update(settings)
             
             with open(config_path, 'w', encoding='utf-8') as f:
@@ -542,11 +535,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             self._scan_repos()
 
     def _propagate_settings_to_cards(self, settings: dict):
-        """Propagate updated settings (DB presets, Java versions) to all repo cards."""
-        self._db_presets = settings.get('db_presets', {})
-        self._global_panel.update_db_presets(self._db_presets)
-        for card in self._repo_cards:
-            card.update_db_presets(self._db_presets)
+        """Propagate updated settings (Java versions) to all repo cards."""
         self._java_versions = settings.get('java_versions', {})
         for card in self._repo_cards:
             if hasattr(card, "update_java_versions"):

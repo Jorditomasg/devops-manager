@@ -8,14 +8,14 @@ import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
 from gui import theme
-from gui.constants import NO_PROFILE_TEXT, PROFILE_DIRTY_SUFFIX, NO_DB_PRESET
+from gui.constants import NO_PROFILE_TEXT, PROFILE_DIRTY_SUFFIX
 
 
 class ProfileDialog(BaseDialog):
     """Dialog for managing profiles: save, load, import, export."""
 
     def __init__(self, parent, workspace_dir: str, repos: list,
-                 repo_cards: list = None, db_presets: dict = None,
+                 repo_cards: list = None,
                  log_callback=None, on_profile_loaded=None,
                  on_rescan=None, on_profiles_changed=None):
         super().__init__(parent, "Configuraciones Guardadas", 580, 520)
@@ -23,7 +23,6 @@ class ProfileDialog(BaseDialog):
         self._workspace_dir = workspace_dir
         self._repos = repos
         self._repo_cards = repo_cards or []
-        self._db_presets = db_presets or {}
         self._log = log_callback
         self._on_profile_loaded = on_profile_loaded
         self._on_rescan = on_rescan
@@ -68,13 +67,6 @@ class ProfileDialog(BaseDialog):
 
         opts_row = ctk.CTkFrame(save_frame, fg_color="transparent")
         opts_row.pack(fill="x", padx=10, pady=(0, 10))
-
-        self._include_db_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(
-            opts_row, text="Incluir presets de BD", variable=self._include_db_var,
-            font=theme.font("md"),
-            checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size
-        ).pack(side="left", padx=(0, 15))
 
         self._include_files_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
@@ -145,25 +137,17 @@ class ProfileDialog(BaseDialog):
             if not messagebox.askyesno("Sobrescribir", f"El perfil '{name}' ya existe.\n¿Deseas sobrescribirlo con los cambios actuales?"):
                 return
 
-        include_db = self._include_db_var.get()
         include_files = self._include_files_var.get()
 
         profile_data = build_profile_data(
             self._repo_cards,
-            db_presets=self._db_presets,
-            include_db_presets=include_db,
             include_config_files=include_files
         )
 
         save_profile(name, profile_data)
 
         if self._log:
-            extras = []
-            if include_db:
-                extras.append("BD presets")
-            if include_files:
-                extras.append("config files")
-            extra_str = f" (con {', '.join(extras)})" if extras else ""
+            extra_str = " (con config files)" if include_files else ""
             self._log(f"Configuración guardada: {name}{extra_str}")
 
         messagebox.showinfo("Guardado", f"Configuración '{name}' guardada correctamente")
@@ -197,7 +181,6 @@ class ProfileDialog(BaseDialog):
         else:
             from core.profile_manager import get_missing_repos
             missing = get_missing_repos(self._workspace_dir, data)
-            has_db = bool(data.get('db_presets'))
             has_files = any(
                 r.get('config_files') for r in data.get('repos', {}).values()
             )
@@ -206,7 +189,6 @@ class ProfileDialog(BaseDialog):
                 self, data,
                 changes_text=changes_text,
                 missing_repos=missing,
-                has_db_presets=has_db,
                 has_config_files=has_files,
                 workspace_dir=self._workspace_dir,
                 log_callback=self._log,
@@ -238,12 +220,6 @@ class ProfileDialog(BaseDialog):
                 if repo_changes:
                     changes.append(f"🔄 {repo_name}:\n    " + "\n    ".join(repo_changes))
 
-    def _describe_profile_changes(self, changes: list, data: dict):
-        """Append DB preset import line to changes if present."""
-        if data.get('db_presets'):
-            names = ", ".join(data.get('db_presets').keys())
-            changes.append(f"🗄 Importar presets de BD: {names}")
-
     def _describe_command_changes(self, changes: list, target_repos: dict):
         """Append config files overwrite line to changes if present."""
         n_files = sum(len(r.get('config_files', {})) for r in target_repos.values())
@@ -255,8 +231,6 @@ class ProfileDialog(BaseDialog):
         from core.profile_manager import build_profile_data, get_missing_repos
         current_data = build_profile_data(
             self._repo_cards,
-            db_presets=self._db_presets,
-            include_db_presets=False,
             include_config_files=False
         )
 
@@ -406,13 +380,12 @@ class ProfileDialog(BaseDialog):
 
 class ImportOptionsDialog(BaseDialog):
     """Interactive dialog shown when loading/importing a profile.
-    Lets the user choose: clone repos, install deps, apply BD, overwrite configs.
+    Lets the user choose: clone repos, install deps, overwrite configs.
     """
 
     def __init__(self, parent, profile_data: dict,
                  changes_text: str = "",
                  missing_repos: list = None,
-                 has_db_presets: bool = False,
                  has_config_files: bool = False,
                  workspace_dir: str = '',
                  log_callback=None,
@@ -443,7 +416,7 @@ class ImportOptionsDialog(BaseDialog):
         options_frame = ctk.CTkFrame(main_scroll, corner_radius=8)
         options_frame.pack(fill="x", padx=10, pady=(0, 15))
 
-        self._build_checkboxes_section(options_frame, has_db_presets, has_config_files, profile_data)
+        self._build_checkboxes_section(options_frame, has_config_files, profile_data)
         self._build_java_mappings_section(options_frame, profile_data)
         self._build_preview_section(main_scroll)
 
@@ -487,9 +460,8 @@ class ImportOptionsDialog(BaseDialog):
             command=self.destroy, **theme.btn_style("neutral", height="lg")
         ).pack(side="right")
 
-    def _build_checkboxes_section(self, frame, has_db_presets: bool,
-                                   has_config_files: bool, profile_data: dict):
-        """Build repo selection checkboxes for clone, install, DB, config files."""
+    def _build_checkboxes_section(self, frame, has_config_files: bool, profile_data: dict):
+        """Build repo selection checkboxes for clone, install, config files."""
         # ── Missing repos ──
         self._clone_var = ctk.BooleanVar(value=True if self._missing else False)
         self._install_var = ctk.BooleanVar(value=True if self._missing else False)
@@ -512,14 +484,6 @@ class ImportOptionsDialog(BaseDialog):
             ctk.CTkCheckBox(frame, text="📦 Instalar dependencias", variable=self._install_var,
                             command=self._update_preview, checkbox_width=20, checkbox_height=20
                             ).pack(anchor="w", padx=10, pady=(2, 10))
-
-        # ── DB Presets ──
-        self._import_db_var = ctk.BooleanVar(value=True if has_db_presets else False)
-        if has_db_presets:
-            names = ", ".join(profile_data.get('db_presets', {}).keys())
-            ctk.CTkCheckBox(frame, text=f"🗄 Importar presets de BD ({names})",
-                            variable=self._import_db_var, command=self._update_preview,
-                            checkbox_width=20, checkbox_height=20).pack(anchor="w", padx=10, pady=5)
 
         # ── Config files ──
         self._overwrite_configs_var = ctk.BooleanVar(value=True if has_config_files else False)
@@ -607,11 +571,6 @@ class ImportOptionsDialog(BaseDialog):
                 lines.append(f"📦 Se ejecutarán comandos de instalación en: {m['name']}")
             lines.append("")
 
-        if self._import_db_var.get():
-            db_presets = self._profile_data.get('db_presets', {})
-            names = ", ".join(db_presets.keys())
-            lines.append(f"🗄 Se importarán los presets de BD: {names}\n")
-
         if self._overwrite_configs_var.get():
             n_files = sum(len(r.get('config_files', {})) for r in self._profile_data.get('repos', {}).values())
             lines.append(f"📝 Se sobrescribirán {n_files} archivos de configuración locales.\n")
@@ -677,7 +636,6 @@ class ImportOptionsDialog(BaseDialog):
         return {
             'clone': self._clone_var.get() and bool(self._missing),
             'install': self._install_var.get() and bool(self._missing),
-            'import_db': self._import_db_var.get(),
             'overwrite_configs': self._overwrite_configs_var.get(),
         }
 
@@ -697,7 +655,6 @@ class ImportOptionsDialog(BaseDialog):
         steps_total = sum([
             len(self._missing) if settings['clone'] else 0,
             len(self._missing) if settings['install'] else 0,
-            1 if settings['import_db'] else 0,
             1 if settings['overwrite_configs'] else 0,
         ])
         steps_total = max(steps_total, 1)
@@ -719,8 +676,6 @@ class ImportOptionsDialog(BaseDialog):
             self._apply_repos(self._missing, _update_progress)
         if settings['install']:
             self._run_install_step(_update_progress)
-        if settings['import_db']:
-            self._run_db_import_step(_update_progress)
         if settings['overwrite_configs']:
             self._run_config_files_step(_update_progress)
 
@@ -747,38 +702,6 @@ class ImportOptionsDialog(BaseDialog):
         else:
             if self._log:
                 self._log("[import] Error: service launcher not found, cannot install dependencies in background.")
-
-    def _run_db_import_step(self, _update_progress):
-        """Merge DB presets from the profile into the local config file."""
-        from core.config_manager import get_config_path
-        db_presets = self._profile_data.get('db_presets', {})
-        config_path = get_config_path()
-        try:
-            if os.path.isfile(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    try:
-                        config = json.load(f)
-                    except json.JSONDecodeError as e:
-                        if self._log:
-                            self._log(f"[import] Error leyendo config JSON: {e}")
-                        messagebox.showerror(
-                            "Error de formato",
-                            f"El archivo de configuración contiene JSON inválido:\n{e}"
-                        )
-                        config = {}
-            else:
-                config = {}
-            existing = config.get('db_presets', {})
-            existing.update(db_presets)
-            config['db_presets'] = existing
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-            if self._log:
-                self._log(f"[import] BD presets importados: {', '.join(db_presets.keys())}")
-        except Exception as e:
-            if self._log:
-                self._log(f"[import] Error importando BD presets: {e}")
-        _update_progress("🗄 BD presets importados")
 
     def _run_config_files_step(self, _update_progress):
         """Overwrite local config files with those stored in the profile."""

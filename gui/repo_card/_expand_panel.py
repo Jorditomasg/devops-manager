@@ -5,7 +5,7 @@ import customtkinter as ctk
 import tkinter as tk
 from gui import theme
 from gui.tooltip import ToolTip
-from gui.constants import BADGE_REFRESH_MS, BTN_CONFIG_TEXT, BTN_CONFIG_TOOLTIP, NO_DB_PRESET, REINSTALL_LBL
+from gui.constants import BADGE_REFRESH_MS, BTN_CONFIG_TEXT, BTN_CONFIG_TOOLTIP, REINSTALL_LBL
 
 
 class ExpandPanelMixin:
@@ -103,15 +103,6 @@ class ExpandPanelMixin:
 
         # Install Button
         self._build_install_btn(self.right_frame)
-
-        # Seed
-        if repo.has_seeds or ('docker_checkboxes' in repo.features and repo.has_database):
-            seed_btn = ctk.CTkButton(
-                row1, text="🌱 Seed", width=70,
-                command=self._seed, **theme.btn_style("purple_global")
-            )
-            seed_btn.pack(side="left", padx=(0, 3))
-            ToolTip(seed_btn, "Ejecutar seeds de BD")
 
     def _build_branch_combo_section(self, row):
         """Build the branch combo box and fetch button within the branch row."""
@@ -277,22 +268,6 @@ class ExpandPanelMixin:
             ctk.CTkLabel(sel_frame, text=mod_name, font=theme.font("xs", mono=True),
                          text_color=theme.C.text_faint, anchor="w").pack(side="left", padx=(0, 8))
 
-    def _build_db_combo_section(self, frame, repo):
-        """Build DB preset selector section (~35 lines)."""
-        combo_style = theme.combo_style()
-        ctk.CTkLabel(frame, text="BD:", font=theme.font("lg"),
-                     text_color=theme.C.text_secondary, width=35, anchor="e").pack(side="left")
-        db_options = list(self._db_presets.keys()) if self._db_presets else [NO_DB_PRESET]
-        self._db_combo = ctk.CTkComboBox(
-            frame, values=db_options, width=140,
-            command=self._on_db_change, **combo_style
-        )
-        self._db_combo.pack(side="left", padx=(6, 0))
-        if self._db_presets:
-            self._db_combo.set(db_options[0])
-        else:
-            self._db_combo.set(NO_DB_PRESET)
-
     def _build_java_combo_section(self, frame, repo):
         """Build Java version selector section (~30 lines)."""
         combo_style = theme.combo_style()
@@ -328,10 +303,6 @@ class ExpandPanelMixin:
         if repo.environment_files and repo.repo_type != 'docker-infra':
             has_row2 = True
             self._build_config_combo_section(row2, repo)
-
-        if repo.has_database and 'database_selector' in repo.features:
-            has_row2 = True
-            self._build_db_combo_section(row2, repo)
 
         if has_row2:
             row2.pack(fill="x", pady=(4, 0))

@@ -1,7 +1,6 @@
 """Shared constants for the GUI layer."""
 
 # ── Combo / label sentinel values ──────────────────────────────
-NO_DB_PRESET       = "- Ninguna (Local) -"
 NO_PROFILE_TEXT    = "— Sin perfil —"
 PROFILE_DIRTY_SUFFIX = " *"
 

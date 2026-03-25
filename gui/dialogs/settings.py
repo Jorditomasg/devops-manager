@@ -1,4 +1,4 @@
-"""settings.py — SettingsDialog, PresetEditorDialog, JavaVersionEditorDialog."""
+"""settings.py — SettingsDialog, JavaVersionEditorDialog."""
 import os
 import sys
 import tkinter as tk
@@ -10,7 +10,7 @@ from gui import theme
 
 
 class SettingsDialog(BaseDialog):
-    """General settings dialog with DB preset management."""
+    """General settings dialog."""
 
     def __init__(self, parent, settings: dict, on_save=None):
         super().__init__(parent, "⚙ Configuración", 600, 550)
@@ -20,7 +20,6 @@ class SettingsDialog(BaseDialog):
 
         self._settings = settings
         self._on_save = on_save
-        self._db_presets = dict(settings.get('db_presets', {}))
         self._java_versions = dict(settings.get('java_versions', {}))
 
         self._build_save_bar()
@@ -50,7 +49,6 @@ class SettingsDialog(BaseDialog):
                      font=theme.font("h1", bold=True), text_color=theme.C.text_primary).pack(pady=(15, 20))
 
         self._build_section(self._build_workspace_section)
-        self._build_section(self._build_presets_section)
         self._build_section(self._build_java_section)
         self._build_section(self._build_shortcut_section)
 
@@ -97,37 +95,6 @@ class SettingsDialog(BaseDialog):
             dir_inner, text="Examinar",
             command=self._browse_dir, **theme.btn_style("blue", width=80)
         ).pack(side="left", padx=(10, 0))
-
-    def _build_presets_section(self, frame):
-        """Build the DB presets list + buttons."""
-        db_header = ctk.CTkFrame(frame, fg_color="transparent")
-        db_header.pack(fill="x", padx=15, pady=(15, 0))
-        ctk.CTkLabel(
-            db_header, text="🗄️ Presets de BD",
-            font=theme.font("xl", bold=True), text_color=theme.C.text_primary
-        ).pack(side="left")
-        ctk.CTkLabel(
-            frame,
-            text="El template URL admite {db_name} como placeholder autodetectado. Utilízalos en perfiles para reemplazar propiedades en properties.",
-            font=theme.font("md"), text_color=theme.C.text_muted
-        ).pack(anchor="w", padx=15, pady=(2, 12))
-
-        self._preset_list_frame = ctk.CTkScrollableFrame(
-            frame, height=80,
-            fg_color=theme.C.section_alt,
-            border_width=theme.G.border_width,
-            border_color=theme.C.subtle_border
-        )
-        self._preset_list_frame.pack(fill="x", padx=15, pady=(0, 10))
-        self._refresh_preset_list()
-
-        add_row = ctk.CTkFrame(frame, fg_color="transparent")
-        add_row.pack(fill="x", padx=15, pady=(0, 15))
-
-        ctk.CTkButton(
-            add_row, text="➕ Añadir preset",
-            command=self._add_preset, **theme.btn_style("success", width=140)
-        ).pack(side="left")
 
     def _build_java_section(self, frame):
         """Build the Java version list + buttons."""
@@ -313,71 +280,6 @@ class SettingsDialog(BaseDialog):
         finally:
             ole32.CoUninitialize()
 
-    # ── Preset management ─────────────────────────────────────────────────────
-
-    def _refresh_preset_list(self):
-        """Rebuild the preset list display."""
-        for widget in self._preset_list_frame.winfo_children():
-            widget.destroy()
-
-        if not self._db_presets:
-            ctk.CTkLabel(
-                self._preset_list_frame,
-                text="(Sin presets configurados)",
-                font=theme.font("sm"), text_color=theme.C.text_placeholder
-            ).pack(pady=5)
-            return
-
-        for name, preset in self._db_presets.items():
-            row = ctk.CTkFrame(self._preset_list_frame, fg_color="transparent")
-            row.pack(fill="x", pady=2)
-
-            ctk.CTkLabel(
-                row, text=f"🗄 {name}",
-                font=theme.font("md", bold=True), width=100, anchor="w"
-            ).pack(side="left")
-
-            url_display = preset.get('url', '')
-            if len(url_display) > 45:
-                url_display = url_display[:42] + '...'
-            ctk.CTkLabel(
-                row, text=url_display,
-                font=theme.font("xs", mono=True), text_color=theme.C.text_placeholder, anchor="w"
-            ).pack(side="left", padx=(5, 0), fill="x", expand=True)
-
-            ctk.CTkButton(
-                row, text="✏", width=28,
-                command=lambda n=name: self._edit_preset(n),
-                **theme.btn_style("warning", height="sm")
-            ).pack(side="right", padx=(2, 0))
-
-            ctk.CTkButton(
-                row, text="🗑", width=28,
-                command=lambda n=name: self._delete_preset(n),
-                **theme.btn_style("danger_deep", height="sm")
-            ).pack(side="right")
-
-    def _add_preset(self):
-        """Show dialog to add a new DB preset."""
-        PresetEditorDialog(self, on_save=self._on_preset_saved)
-
-    def _edit_preset(self, name: str):
-        """Show dialog to edit an existing DB preset."""
-        preset = self._db_presets.get(name, {})
-        PresetEditorDialog(self, preset_name=name, preset_data=preset,
-                           on_save=self._on_preset_saved)
-
-    def _on_preset_saved(self, name: str, data: dict):
-        """Callback when a preset is saved from the editor dialog."""
-        self._db_presets[name] = data
-        self._refresh_preset_list()
-
-    def _delete_preset(self, name: str):
-        """Delete a DB preset."""
-        if messagebox.askyesno("Confirmar", f"¿Eliminar el preset '{name}'?"):
-            del self._db_presets[name]
-            self._refresh_preset_list()
-
     # ── Java version management ───────────────────────────────────────────────
 
     def _refresh_java_list(self):
@@ -476,7 +378,6 @@ class SettingsDialog(BaseDialog):
 
     def _save(self):
         self._settings['workspace_dir'] = self._workspace_entry.get().strip()
-        self._settings['db_presets'] = self._db_presets
         self._settings['java_versions'] = self._java_versions
         if self._on_save:
             self._on_save(self._settings)
@@ -486,106 +387,6 @@ class SettingsDialog(BaseDialog):
         if hasattr(self.master, '_show_configs'):
             self.master._show_configs()
             self.destroy()
-
-
-class PresetEditorDialog(BaseDialog):
-    """Dialog for adding/editing a single DB preset."""
-
-    def __init__(self, parent, preset_name: str = '', preset_data: dict = None,
-                 on_save=None):
-        title = "Editar Preset BD" if preset_name else "Nuevo Preset BD"
-        super().__init__(parent, title, 520, 340)
-
-        self._on_save = on_save
-        self._preset_name = preset_name
-        data = preset_data or {}
-
-        ctk.CTkLabel(self, text="🗄 Preset de Base de Datos",
-                     font=theme.font("h2", bold=True)).pack(pady=(15, 10))
-
-        form = ctk.CTkFrame(self, fg_color="transparent")
-        form.pack(fill="x", padx=20)
-        self._build_fields(form, preset_name, data)
-
-        # Buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=15)
-
-        ctk.CTkButton(
-            btn_frame, text="💾 Guardar", width=120,
-            command=self._save, **theme.btn_style("success")
-        ).pack(side="right", padx=(10, 0))
-
-        ctk.CTkButton(
-            btn_frame, text="Cancelar", width=100,
-            command=self.destroy, **theme.btn_style("neutral")
-        ).pack(side="right")
-
-    def _build_fields(self, form, preset_name: str, data: dict):
-        """Build the form fields for preset name, URL, username, password, and driver."""
-        # Name
-        ctk.CTkLabel(form, text="Nombre:", font=theme.font("md"),
-                     width=80, anchor="w").grid(row=0, column=0, pady=4, sticky="w")
-        self._name_entry = ctk.CTkEntry(form, width=380)
-        self._name_entry.grid(row=0, column=1, pady=4)
-        if preset_name:
-            self._name_entry.insert(0, preset_name)
-
-        # URL
-        ctk.CTkLabel(form, text="URL:", font=theme.font("md"),
-                     width=80, anchor="w").grid(row=1, column=0, pady=4, sticky="w")
-        self._url_entry = ctk.CTkEntry(form, width=380,
-                                       placeholder_text="jdbc:mysql://host:3306/{db_name}")
-        self._url_entry.grid(row=1, column=1, pady=4)
-        if data.get('url'):
-            self._url_entry.insert(0, data['url'])
-
-        # Username
-        ctk.CTkLabel(form, text="Usuario:", font=theme.font("md"),
-                     width=80, anchor="w").grid(row=2, column=0, pady=4, sticky="w")
-        self._user_entry = ctk.CTkEntry(form, width=380)
-        self._user_entry.grid(row=2, column=1, pady=4)
-        if data.get('username'):
-            self._user_entry.insert(0, data['username'])
-
-        # Password
-        ctk.CTkLabel(form, text="Contraseña:", font=theme.font("md"),
-                     width=80, anchor="w").grid(row=3, column=0, pady=4, sticky="w")
-        self._pass_entry = ctk.CTkEntry(form, width=380, show="•")
-        self._pass_entry.grid(row=3, column=1, pady=4)
-        if data.get('password'):
-            self._pass_entry.insert(0, data['password'])
-
-        # Driver
-        ctk.CTkLabel(form, text="Driver:", font=theme.font("md"),
-                     width=80, anchor="w").grid(row=4, column=0, pady=4, sticky="w")
-        self._driver_entry = ctk.CTkEntry(form, width=380,
-                                          placeholder_text="com.mysql.cj.jdbc.Driver")
-        self._driver_entry.grid(row=4, column=1, pady=4)
-        if data.get('driver'):
-            self._driver_entry.insert(0, data['driver'])
-
-    def _save(self):
-        name = self._name_entry.get().strip()
-        if not name:
-            messagebox.showwarning("Error", "El nombre del preset es obligatorio")
-            return
-
-        url = self._url_entry.get().strip()
-        if not url:
-            messagebox.showwarning("Error", "La URL es obligatoria")
-            return
-
-        data = {
-            'url': url,
-            'username': self._user_entry.get().strip(),
-            'password': self._pass_entry.get().strip(),
-            'driver': self._driver_entry.get().strip() or 'com.mysql.cj.jdbc.Driver',
-        }
-
-        if self._on_save:
-            self._on_save(name, data)
-        self.destroy()
 
 
 class JavaVersionEditorDialog(BaseDialog):

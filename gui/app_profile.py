@@ -67,8 +67,6 @@ class ProfileManagerMixin:
         from core.profile_manager import build_profile_data, save_profile
         profile_data = build_profile_data(
             self._repo_cards,
-            db_presets=self._db_presets,
-            include_db_presets=True,
             include_config_files=True
         )
 
@@ -127,8 +125,6 @@ class ProfileManagerMixin:
         from core.profile_manager import build_profile_data
         current_data = build_profile_data(
             self._repo_cards,
-            db_presets=self._db_presets,
-            include_db_presets=False,
             include_config_files=False  # Heavy to compare, rely on memory branches/profiles
         )
 

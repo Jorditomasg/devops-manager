@@ -494,10 +494,3 @@ class ActionsMixin:
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def _seed(self):
-        """Run database seeds."""
-        def _run():
-            from core.db_manager import run_flyway_seeds
-            run_flyway_seeds(self._repo.path, self._log)
-
-        threading.Thread(target=_run, daemon=True).start()

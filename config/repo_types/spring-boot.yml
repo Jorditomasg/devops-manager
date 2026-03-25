@@ -55,4 +55,3 @@ ui:
 
 features:
   - "java_version"
-  - "database_selector"

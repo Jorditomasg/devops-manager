@@ -12,11 +12,6 @@ class RepoInfo:
     # Spring profiles / Angular environments
     profiles: List[str] = field(default_factory=list)
 
-    # Database info
-    has_database: bool = False
-    database_name: Optional[str] = None
-    database_url: Optional[str] = None
-
     # Git info
     git_remote_url: Optional[str] = None
     current_branch: Optional[str] = None
@@ -51,10 +46,6 @@ class RepoInfo:
     # Log-based status detection patterns (regex)
     ready_pattern: Optional[str] = None
     error_pattern: Optional[str] = None
-
-    # Seeds / Flyway migrations
-    has_seeds: bool = False
-    seed_dirs: List[str] = field(default_factory=list)
 
     # Docker Compose files
     docker_compose_files: List[str] = field(default_factory=list)

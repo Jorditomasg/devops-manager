@@ -16,9 +16,6 @@ from gui.tooltip import ToolTip
 from gui import theme
 from gui.constants import GIT_BADGE_SEMAPHORE_COUNT
 
-NO_DB_PRESET = "- Ninguna (Local) -"
-
-
 class RepoCard(
     HeaderMixin,
     ExpandPanelMixin,
@@ -37,7 +34,7 @@ class RepoCard(
 
     _GIT_BADGE_SEMAPHORE = threading.Semaphore(GIT_BADGE_SEMAPHORE_COUNT)
 
-    def __init__(self, parent, repo_info, service_launcher, db_presets=None,
+    def __init__(self, parent, repo_info, service_launcher,
                  java_versions=None, log_callback=None, on_edit_config=None, on_change_callback=None, **kwargs):
         super().__init__(parent, corner_radius=theme.G.corner_card, border_width=theme.G.border_width,
                          border_color=theme.C.card_border,
@@ -45,7 +42,6 @@ class RepoCard(
 
         self._repo = repo_info
         self._launcher = service_launcher
-        self._db_presets = db_presets or {}
         self._java_versions = java_versions or {}
         self._log = self._repo_log
         self._global_log = log_callback
@@ -133,11 +129,6 @@ class RepoCard(
         threading.Thread(target=_run, daemon=True).start()
         return True
 
-    def set_db_preset(self, preset_name: str):
-        if hasattr(self, '_db_combo'):
-            self._db_combo.set(preset_name)
-            self._on_db_change(preset_name)
-
     def set_profile(self, profile):
         if hasattr(self, '_config_combo'):
             p = profile if isinstance(profile, str) else ''
@@ -157,13 +148,6 @@ class RepoCard(
                     combo.set(p)
                     self._update_header_hints()
                     self._on_config_change(p, target_file, skip_log=True)
-
-    def update_db_presets(self, presets: dict):
-        self._db_presets = presets
-        if hasattr(self, '_db_combo'):
-            db_options = list(presets.keys()) if presets else [NO_DB_PRESET]
-            self._db_combo.configure(values=db_options)
-            self._db_combo.set(db_options[0] if presets else NO_DB_PRESET)
 
     def set_custom_command(self, cmd: str):
         """Set custom command (from persisted settings)."""

@@ -115,23 +115,16 @@ def get_missing_repos(workspace_dir: str, profile_data: dict) -> list:
     return missing
 
 
-def build_profile_data(repo_cards, db_presets=None,
-                       include_db_presets=False,
-                       include_config_files=False) -> dict:
+def build_profile_data(repo_cards, include_config_files=False) -> dict:
     """Build a complete profile dict from current repo card states.
 
     Args:
         repo_cards: list of RepoCard widgets
-        db_presets: dict of DB presets from settings
-        include_db_presets: whether to include global BD presets
         include_config_files: whether to capture config file contents
     """
     from core.git_manager import get_current_branch
 
     profile = {}
-
-    if include_db_presets and db_presets:
-        profile['db_presets'] = db_presets
 
     repos = {}
     for card in repo_cards:

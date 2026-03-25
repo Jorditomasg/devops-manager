@@ -9,20 +9,16 @@ import threading
 from gui.tooltip import ToolTip
 from gui import theme
 
-NO_DB_PRESET = "(Sin presets BD)"
-
-
 class GlobalPanel(ctk.CTkFrame):
     """Panel with global controls that affect all repo cards."""
 
-    def __init__(self, parent, db_presets=None, repo_cards: list = None,
+    def __init__(self, parent, repo_cards: list = None,
                  log_callback=None, **kwargs):
         super().__init__(parent, corner_radius=theme.G.corner_card, border_width=theme.G.border_width,
                          border_color=theme.C.card_border,
                          fg_color=theme.C.card, **kwargs)
 
         self._cards = repo_cards or []
-        self._db_presets = db_presets or {}
         self._log = log_callback
 
         self._build_ui()
@@ -30,16 +26,6 @@ class GlobalPanel(ctk.CTkFrame):
     def set_cards(self, cards: list):
         """Update the list of repo cards."""
         self._cards = cards
-
-    def update_db_presets(self, presets: dict):
-        """Update available DB presets (called when settings change)."""
-        self._db_presets = presets
-        db_options = list(presets.keys()) if presets else [NO_DB_PRESET]
-        self._db_combo.configure(values=db_options)
-        if presets:
-            self._db_combo.set(db_options[0])
-        else:
-            self._db_combo.set(NO_DB_PRESET)
 
     def _build_ui(self):
         """Build the global panel UI."""
@@ -63,11 +49,10 @@ class GlobalPanel(ctk.CTkFrame):
             command=self._toggle_select_all
         ).pack(side="right", padx=(10, 0))
 
-        # ─── Row 1: Branch + DB ───
+        # ─── Row 1: Branch ───
         row1 = ctk.CTkFrame(self, fg_color="transparent")
         row1.pack(fill="x", padx=15, pady=(0, 4))
 
-        # Branch
         ctk.CTkLabel(row1, text="Rama:", font=theme.font("base"),
                      text_color=theme.C.text_secondary, width=45).pack(side="left")
 
@@ -87,29 +72,6 @@ class GlobalPanel(ctk.CTkFrame):
         )
         apply_branch_btn.pack(side="left", padx=(0, 10))
         ToolTip(apply_branch_btn, "Aplicar esta rama a todos los repos seleccionados")
-
-        # DB
-        ctk.CTkLabel(row1, text="BD:", font=theme.font("base"),
-                     text_color=theme.C.text_secondary, width=25).pack(side="left")
-
-        db_options = list(self._db_presets.keys()) if self._db_presets else [NO_DB_PRESET]
-        self._db_combo = ctk.CTkComboBox(
-            row1, values=db_options, width=130,
-            **theme.combo_style()
-        )
-        self._db_combo.pack(side="left", padx=(4, 4))
-        if self._db_presets:
-            self._db_combo.set(db_options[0])
-        else:
-            self._db_combo.set(NO_DB_PRESET)
-
-        apply_db_btn = ctk.CTkButton(
-            row1, text="Aplicar", width=70,
-            command=self._apply_db_all,
-            **theme.btn_style("purple_global")
-        )
-        apply_db_btn.pack(side="left")
-        ToolTip(apply_db_btn, "Aplicar preset de BD a todos los repos seleccionados")
 
         # ─── Row 2: Action buttons ───
         row2 = ctk.CTkFrame(self, fg_color="transparent")
@@ -154,14 +116,6 @@ class GlobalPanel(ctk.CTkFrame):
         )
         restart_btn.pack(side="left", padx=(0, 3))
         ToolTip(restart_btn, "Reiniciar todos los servicios seleccionados")
-
-        seed_btn = ctk.CTkButton(
-            row2, text="🌱 Seed All", width=90,
-            command=self._seed_all,
-            **theme.btn_style("purple_global", font_size="md")
-        )
-        seed_btn.pack(side="left")
-        ToolTip(seed_btn, "Ejecutar seeds de BD para todos los repos")
 
     def _toggle_select_all(self):
         """Toggle all repo card checkboxes."""
@@ -209,28 +163,6 @@ class GlobalPanel(ctk.CTkFrame):
                           + (f" ({len(not_found)} sin la rama)" if not_found else ""))
 
         threading.Thread(target=_run, daemon=True).start()
-
-    def _apply_db_all(self):
-        """Apply DB preset to all selected repos."""
-        preset_name = self._db_combo.get()
-        if preset_name == NO_DB_PRESET:
-            messagebox.showwarning("Aviso", "No hay presets de BD configurados.\n"
-                                   "Ve a ⚙ Configuración para añadir presets.")
-            return
-
-        selected = self._get_selected_cards()
-
-        if not selected:
-            messagebox.showwarning("Aviso", "No hay repos seleccionados")
-            return
-
-        count = 0
-        for card in selected:
-            card.set_db_preset(preset_name)
-            count += 1
-
-        if self._log:
-            self._log(f"[global] BD '{preset_name}' aplicada a {count} repos")
 
     def _pull_all(self):
         """Pull all selected repos."""
@@ -291,16 +223,3 @@ class GlobalPanel(ctk.CTkFrame):
 
         self.after(3000, _delayed_start)
 
-    def _seed_all(self):
-        """Run seeds for all repos that support it."""
-        if self._log:
-            self._log("[global] Running seeds...")
-
-        def _run():
-            for card in self._cards:
-                repo = card.get_repo_info()
-                if repo.has_seeds or ('docker_checkboxes' in repo.features and repo.has_database):
-                    from core.db_manager import run_flyway_seeds
-                    run_flyway_seeds(repo.path, self._log)
-
-        threading.Thread(target=_run, daemon=True).start()

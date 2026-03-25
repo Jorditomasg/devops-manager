@@ -1,6 +1,5 @@
 """
 config_manager.py — Read/write application.yml and environment.ts config files.
-DB presets are managed by the user and stored in devops_manager_config.json.
 """
 import os
 import re
@@ -40,7 +39,7 @@ def _invalidate_config_cache(config_path: str) -> None:
     _CONFIG_CACHE_MTIME.pop(config_path, None)
 
 
-# ─── DB Preset Management ───────────────────────────────────────────────────
+# ─── Config Path ────────────────────────────────────────────────────────────
 
 def get_config_path() -> str:
     """Get the path to the main config file."""
@@ -48,50 +47,6 @@ def get_config_path() -> str:
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         'devops_manager_config.json'
     )
-
-
-def load_db_presets(config_path: str = '') -> dict:
-    """Load DB presets from the config file.
-    Returns a dict like:
-      { 'preset_name': { 'url': '...', 'username': '...', 'password': '...', 'driver': '...' }, ... }
-    """
-    if not config_path:
-        config_path = get_config_path()
-    return _load_config_cached(config_path).get('db_presets', {})
-
-
-def save_db_presets(presets: dict, config_path: str = ''):
-    """Save DB presets to the config file, preserving other settings."""
-    if not config_path:
-        config_path = get_config_path()
-    try:
-        if os.path.isfile(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-        else:
-            config = {}
-        config['db_presets'] = presets
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-        _invalidate_config_cache(config_path)
-    except (OSError, json.JSONDecodeError):
-        pass
-
-
-def detect_db_name_from_repo(resources_dir: str, profile: str = 'default') -> str:
-    """Auto-detect the database name from a repo's Spring config.
-    Parses the JDBC URL from application.yml / application-{profile}.yml.
-    Returns the detected DB name, or 'db' as fallback.
-    """
-    config = read_spring_config(resources_dir, profile)
-    spring = config.get('spring', {}) or {}
-    ds = spring.get('datasource', {}) or {}
-    url = ds.get('url', '')
-    if url:
-        match = re.search(r'/([^/?]+)(\?|$)', url)
-        if match:
-            return match.group(1)
-    return 'db'
 
 
 # ─── File Backup ─────────────────────────────────────────────────────────────
@@ -134,52 +89,6 @@ def write_spring_config(resources_dir: str, profile: str, config: dict) -> bool:
         return True
     except (OSError, yaml.YAMLError):
         return False
-
-
-def get_spring_db_info(resources_dir: str, profile: str = 'default') -> dict:
-    """Extract database connection info from a Spring profile."""
-    config = read_spring_config(resources_dir, profile)
-    spring = config.get('spring', {}) or {}
-    ds = spring.get('datasource', {}) or {}
-    return {
-        'url': ds.get('url', ''),
-        'username': ds.get('username', ''),
-        'password': ds.get('password', ''),
-        'driver': ds.get('driverClassName', ''),
-    }
-
-
-def set_spring_db_preset(resources_dir: str, profile: str, preset: dict,
-                          db_name: str = '') -> bool:
-    """Apply a DB preset (dict) to a Spring config file.
-    
-    Args:
-        resources_dir: Path to src/main/resources
-        profile: Spring profile name
-        preset: Dict with keys 'url', 'username', 'password', 'driver'
-        db_name: Database name to substitute in the URL template. 
-                 If empty, auto-detected from the current config.
-    """
-    if not preset:
-        return False
-
-    if not db_name:
-        db_name = detect_db_name_from_repo(resources_dir, profile)
-
-    url = preset.get('url', '').format(db_name=db_name)
-
-    config = read_spring_config(resources_dir, profile)
-    if 'spring' not in config:
-        config['spring'] = {}
-    if 'datasource' not in config['spring']:
-        config['spring']['datasource'] = {}
-
-    config['spring']['datasource']['url'] = url
-    config['spring']['datasource']['username'] = preset.get('username', '')
-    config['spring']['datasource']['password'] = preset.get('password', '')
-    config['spring']['datasource']['driverClassName'] = preset.get('driver', '')
-
-    return write_spring_config(resources_dir, profile, config)
 
 
 def get_active_spring_profile(repo_path: str) -> str:

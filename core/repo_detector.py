@@ -87,7 +87,6 @@ def _classify_repo(name: str, path: str) -> Optional[RepoInfo]:
             else:
                 with open(main_spring_config, 'r', encoding='utf-8') as f:
                     config = yaml.safe_load(f) or {}
-                _extract_spring_db_info(repo, config)
                 _extract_spring_server_info(repo, config)
         except Exception:
             pass
@@ -120,20 +119,6 @@ def _detect_spring_profiles(resources_dir: str) -> list:
     return profiles
 
 
-def _extract_spring_db_info(repo: RepoInfo, config: dict):
-    """Extract database connection info from parsed YAML config."""
-    spring = config.get('spring', {}) or {}
-    datasource = spring.get('datasource', {}) or {}
-    url = datasource.get('url', '')
-    if url:
-        repo.has_database = True
-        repo.database_url = url
-        # Extract DB name from JDBC URL
-        match = re.search(r'/([^/?]+)(\?|$)', url)
-        if match:
-            repo.database_name = match.group(1)
-
-
 def _extract_spring_server_info(repo: RepoInfo, config: dict):
     """Extract server port and context path from parsed YAML config."""
     server = config.get('server', {}) or {}
@@ -157,32 +142,12 @@ def _extract_spring_info_from_props(repo: RepoInfo, props_file: str):
                 key, val = line.split('=', 1)
                 key, val = key.strip(), val.strip()
                 
-                if key == 'spring.datasource.url':
-                    repo.has_database = True
-                    repo.database_url = val
-                    match = re.search(r'/([^/?]+)(\?|$)', val)
-                    if match:
-                        repo.database_name = match.group(1)
-                elif key == 'server.port':
+                if key == 'server.port':
                     repo.server_port = int(val)
                 elif key == 'server.servlet.context-path':
                     repo.context_path = val
     except Exception:
         pass
-
-
-def _detect_seeds(path: str) -> tuple:
-    """Detect if the repo has Flyway migration seeds."""
-    seed_dirs = []
-    db_dir = os.path.join(path, 'db')
-    if os.path.isdir(db_dir):
-        for entry in os.listdir(db_dir):
-            full = os.path.join(db_dir, entry)
-            if os.path.isdir(full) and entry.startswith('flyway'):
-                migration_dir = os.path.join(full, 'migration')
-                if os.path.isdir(migration_dir):
-                    seed_dirs.append(full)
-    return (len(seed_dirs) > 0, seed_dirs)
 
 
 def _find_docker_compose_files(path: str) -> list:

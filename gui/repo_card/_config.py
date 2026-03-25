@@ -4,7 +4,6 @@ import os
 import threading
 from tkinter import messagebox
 import customtkinter as ctk
-from gui.constants import NO_DB_PRESET
 from gui import theme
 
 
@@ -182,22 +181,3 @@ class ConfigMixin:
             source_dir=source_dir,
         )
 
-    def _on_db_change(self, preset_name: str):
-        """Handle DB preset change."""
-        if preset_name == NO_DB_PRESET:
-            return
-        preset = self._db_presets.get(preset_name)
-        if not preset:
-            return
-
-        def _run():
-            from core.config_manager import set_spring_db_preset
-            profile = getattr(self, '_profile_combo', None)
-            active_profile = profile.get() if profile else 'default'
-            resources_dir = os.path.join(self._repo.path, getattr(self._repo, 'env_default_dir', 'src/main/resources'))
-            success = set_spring_db_preset(resources_dir, active_profile, preset)
-            if self._log:
-                msg = f"BD cambiada a: {preset_name}" if success else "Error al cambiar BD"
-                self._log(f"[{self._repo.name}] {msg}")
-
-        threading.Thread(target=_run, daemon=True).start()
