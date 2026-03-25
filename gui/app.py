@@ -73,6 +73,7 @@ class DevOpsManagerApp(ctk.CTk):
             )
 
         self._app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self._icons_dir = os.path.join(self._app_dir, "assets", "icons")
 
         self._settings = self._load_settings()
         # Keep settings synced to prevent false change detection on close
@@ -93,7 +94,7 @@ class DevOpsManagerApp(ctk.CTk):
         self.minsize(1000, 650)
 
         # Set Window icon
-        icon_path = os.path.join(self._app_dir, "icon_red.ico")
+        icon_path = os.path.join(self._icons_dir, "icon_red.ico")
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
             self.after(200, lambda: self.iconbitmap(icon_path))
@@ -171,17 +172,6 @@ class DevOpsManagerApp(ctk.CTk):
         from core.profile_manager import list_profiles
 
         profiles = [NO_PROFILE_TEXT] + list_profiles()
-
-        # Quick Save btn
-        self._quick_save_btn = ctk.CTkButton(
-            btn_frame, text="💾", width=38,
-            text_color=theme.C.text_white,
-            command=self._save_current_profile,
-            **theme.btn_style("danger_alt", height="lg", font_size="h2")
-        )
-        self._quick_save_btn.pack(side="left", padx=(0, 5))
-        self._quick_save_btn.pack_forget() # Initially hidden
-        ToolTip(self._quick_save_btn, "💾 Guardar cambios en el perfil actual")
 
         # Profile Dropdown
         combo_kw = theme.combo_style(height="lg")
@@ -550,16 +540,7 @@ class DevOpsManagerApp(ctk.CTk):
         
         save_profile(self._current_profile_name, profile_data)
         self._current_profile_data = profile_data
-        
-        self._quick_save_btn.pack_forget()
-        neutral = theme.btn_style("neutral", height="lg")
-        self._save_profile_btn.configure(
-            text="👤",
-            fg_color=neutral["fg_color"],
-            hover_color=neutral["hover_color"],
-            border_color=neutral["border_color"],
-            text_color=theme.C.text_primary,
-        )
+        self._do_check_profile_changes()
         self._log(f"✅ Perfil '{self._current_profile_name}' guardado correctamente")
 
     def _check_profile_changes(self):
@@ -574,43 +555,35 @@ class DevOpsManagerApp(ctk.CTk):
                 pass
         self._pending_profile_check = self.after(10, self._do_check_profile_changes)
 
+    def _set_profile_combo_dirty(self, dirty: bool):
+        """Style the profile combo to indicate unsaved changes (dirty=True) or restore it."""
+        if not hasattr(self, '_profile_combo'):
+            return
+        if dirty:
+            self._profile_combo.configure(
+                text_color="#f97316",
+                font=theme.font("base") + ("italic",),
+            )
+            self._profile_combo.set(f"* {self._current_profile_name}")
+        else:
+            self._profile_combo.configure(
+                text_color=theme.C.text_primary,
+                font=theme.font("base"),
+            )
+            self._profile_combo.set(self._current_profile_name or NO_PROFILE_TEXT)
+
     def _do_check_profile_changes(self):
         """Actual profile-change detection — runs at most once per 300 ms burst."""
         self._pending_profile_check = None
-        if not hasattr(self, '_save_profile_btn'):
+        if not hasattr(self, '_profile_combo'):
             return
 
         if not self._current_profile_name or self._current_profile_name == NO_PROFILE_TEXT:
-            # No profile selected
-            if self._save_profile_btn.cget("text") != "👤":
-                neutral = theme.btn_style("neutral", height="lg")
-                self._save_profile_btn.configure(
-                    text="👤",
-                    fg_color=neutral["fg_color"],
-                    hover_color=neutral["hover_color"],
-                    border_color=neutral["border_color"],
-                    text_color=theme.C.text_primary,
-                )
-            if self._quick_save_btn.winfo_ismapped():
-                self._quick_save_btn.pack_forget()
+            self._set_profile_combo_dirty(False)
             return
 
-        # Check if changed
         has_changed = self._detect_unsaved_profile_changes()
-
-        if has_changed:
-            if not self._quick_save_btn.winfo_ismapped():
-                danger = theme.btn_style("danger_alt", height="lg")
-                self._quick_save_btn.configure(
-                    text="💾",
-                    fg_color=danger["fg_color"],
-                    hover_color=danger["hover_color"],
-                    border_color=danger["border_color"],
-                )
-                self._quick_save_btn.pack(side="left", padx=(0, 5), before=self._profile_combo)
-        else:
-            if self._quick_save_btn.winfo_ismapped():
-                self._quick_save_btn.pack_forget()
+        self._set_profile_combo_dirty(has_changed)
 
     def _detect_unsaved_profile_changes(self) -> bool:
         """Returns True if current repo cards deviate from _current_profile_data."""
@@ -655,9 +628,6 @@ class DevOpsManagerApp(ctk.CTk):
         Suppresses per-card change callbacks during the loop; runs one check at the end."""
         self._applying_profile = True
         try:
-            if hasattr(self, '_quick_save_btn') and self._quick_save_btn.winfo_ismapped():
-                self._quick_save_btn.pack_forget()
-
             repos_config = profile_data.get('repos', {})
             for card in self._repo_cards:
                 name = card.get_name()
@@ -770,7 +740,7 @@ class DevOpsManagerApp(ctk.CTk):
         self._tray_icon = None
         self._tray_icon_images = {}
         for color in ("red", "green"):
-            icon_path = os.path.join(self._app_dir, f"icon_{color}.ico")
+            icon_path = os.path.join(self._icons_dir, f"icon_{color}.ico")
             try:
                 img = Image.open(icon_path) if os.path.exists(icon_path) else Image.new('RGB', (64, 64), color=color)
             except Exception:
@@ -827,18 +797,12 @@ class DevOpsManagerApp(ctk.CTk):
         self.after(0, self._do_update_tray_status)
 
     def _do_update_tray_status(self):
-        """Update tray and window icon based on running services."""
+        """Update tray icon based on running services. Window icon stays fixed (icon_red)."""
         any_running = any(
             getattr(card, '_status', '') in ('running', 'starting')
             for card in self._repo_cards
         )
         color = "green" if any_running else "red"
-        icon_path = os.path.join(self._app_dir, f"icon_{color}.ico")
-        if os.path.exists(icon_path) and self.state() != 'iconic':
-            try:
-                self.iconbitmap(icon_path)
-            except tk.TclError:
-                pass
         if self._tray_icon:
             img = self._tray_icon_images.get(color)
             if img:

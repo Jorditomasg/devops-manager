@@ -371,6 +371,8 @@ class RepoCard(ctk.CTkFrame):
             branch = self._branch_combo.get()
             if branch and branch != "cargando...":
                 parts.append(f"⎇ {branch}")
+        elif self._current_branch:
+            parts.append(f"⎇ {self._current_branch}")
         # Profile / Env
         if hasattr(self, '_profile_combo'):
             parts.append(f"⚙ {self._profile_combo.get()}")
@@ -511,12 +513,11 @@ class RepoCard(ctk.CTkFrame):
         self._detached_log_window.title(f"Logs - {self._repo.name}")
         self._detached_log_window.geometry("800x600")
 
-        # Set window icon (green if running/starting, red otherwise)
+        # Set window icon (always red for consistency)
         try:
             app_dir = getattr(self.winfo_toplevel(), '_app_dir', None)
             if app_dir:
-                _icon_color = "green" if self._status in ('running', 'starting') else "red"
-                _icon_path = os.path.join(app_dir, f"icon_{_icon_color}.ico")
+                _icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
                 if os.path.exists(_icon_path):
                     self._detached_log_window.after(200, lambda p=_icon_path: self._detached_log_window.iconbitmap(p))
         except Exception:
@@ -1825,17 +1826,6 @@ class RepoCard(ctk.CTkFrame):
                 text_color=COLORS.get(status, '#888')
             )
             self._update_button_visibility()
-            # Update detached log window icon to match running state
-            if getattr(self, '_detached_log_window', None) and self._detached_log_window.winfo_exists():
-                try:
-                    app_dir = getattr(self.winfo_toplevel(), '_app_dir', None)
-                    if app_dir:
-                        _icon_color = "green" if status in ('running', 'starting') else "red"
-                        _icon_path = os.path.join(app_dir, f"icon_{_icon_color}.ico")
-                        if os.path.exists(_icon_path):
-                            self._detached_log_window.iconbitmap(_icon_path)
-                except Exception:
-                    pass
 
         try:
             self.after(0, _update)

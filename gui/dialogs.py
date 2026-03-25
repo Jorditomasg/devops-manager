@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import threading
 import os
+import sys
 
 from gui import theme
 
@@ -1014,6 +1015,125 @@ class SettingsDialog(ctk.CTkToplevel):
             java_add_row, text="🔍 Auto-detectar",
             command=self._auto_detect_java, **theme.btn_style("purple", width=140)
         ).pack(side="left", padx=(10, 0))
+
+        # ─── Acceso Rápido section ───
+        shortcut_frame = ctk.CTkFrame(self._main_scroll, fg_color=theme.C.section, corner_radius=theme.G.corner_card, border_width=theme.G.border_width, border_color=theme.C.settings_border)
+        shortcut_frame.pack(fill="x", padx=10, pady=(0, 15))
+
+        sc_header = ctk.CTkFrame(shortcut_frame, fg_color="transparent")
+        sc_header.pack(fill="x", padx=15, pady=(15, 0))
+        ctk.CTkLabel(sc_header, text="🖥️ Acceso Rápido", font=theme.font("xl", bold=True), text_color=theme.C.text_primary).pack(side="left")
+        ctk.CTkLabel(shortcut_frame, text="Crea un acceso directo en el Escritorio para lanzar la aplicación sin abrir la terminal.", font=theme.font("md"), text_color=theme.C.text_muted).pack(anchor="w", padx=15, pady=(2, 12))
+
+        sc_btn_row = ctk.CTkFrame(shortcut_frame, fg_color="transparent")
+        sc_btn_row.pack(fill="x", padx=15, pady=(0, 15))
+        ctk.CTkButton(
+            sc_btn_row, text="🔗 Crear acceso directo en el Escritorio",
+            command=self._create_shortcut, **theme.btn_style("blue", width=280)
+        ).pack(side="left")
+
+    def _create_shortcut(self):
+        """Create a Desktop shortcut pointing to run.bat with the app icon (ctypes, no PowerShell)."""
+        if sys.platform != 'win32':
+            messagebox.showinfo("No disponible", "La creación de accesos directos solo está disponible en Windows.", parent=self)
+            return
+        try:
+            app_dir = getattr(self.master, '_app_dir', None)
+            if not app_dir:
+                messagebox.showerror("Error", "No se pudo determinar el directorio de la aplicación.", parent=self)
+                return
+            run_bat = os.path.join(app_dir, "run.bat")
+            icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
+
+            # Resolve real Desktop path (handles OneDrive-redirected desktops)
+            import ctypes
+            buf = ctypes.create_unicode_buffer(260)
+            ctypes.windll.shell32.SHGetFolderPathW(None, 0, None, 0, buf)  # CSIDL_DESKTOP = 0
+            desktop = buf.value or os.path.join(os.path.expanduser("~"), "Desktop")
+            lnk_path = os.path.join(desktop, "DevOps Manager.lnk")
+
+            self._create_lnk_ctypes(run_bat, lnk_path, icon_path, app_dir, "DevOps Manager")
+            messagebox.showinfo("Acceso directo creado", f"Se ha creado 'DevOps Manager' en:\n{lnk_path}", parent=self)
+        except Exception as e:
+            messagebox.showerror("Error", str(e), parent=self)
+
+    @staticmethod
+    def _create_lnk_ctypes(target_path, lnk_path, icon_path, working_dir, description):
+        """Create a Windows .lnk shortcut via IShellLink COM using ctypes only (no subprocess)."""
+        import ctypes
+        from ctypes import byref, POINTER
+
+        ole32 = ctypes.windll.ole32
+
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ('Data1', ctypes.c_ulong),
+                ('Data2', ctypes.c_ushort),
+                ('Data3', ctypes.c_ushort),
+                ('Data4', ctypes.c_byte * 8),
+            ]
+
+        def guid_from_str(s):
+            s = s.strip('{}').replace('-', '')
+            g = GUID()
+            g.Data1 = int(s[0:8], 16)
+            g.Data2 = int(s[8:12], 16)
+            g.Data3 = int(s[12:16], 16)
+            b = bytes.fromhex(s[16:32])
+            for i, v in enumerate(b):
+                g.Data4[i] = v
+            return g
+
+        CLSID_ShellLink = guid_from_str('{00021401-0000-0000-C000-000000000046}')
+        IID_IShellLinkW = guid_from_str('{000214F9-0000-0000-C000-000000000046}')
+        IID_IPersistFile = guid_from_str('{0000010B-0000-0000-C000-000000000046}')
+
+        ole32.CoInitialize(None)
+        try:
+            ppsl = ctypes.c_void_p(None)
+            hr = ole32.CoCreateInstance(
+                byref(CLSID_ShellLink), None, 1,  # CLSCTX_INPROC_SERVER
+                byref(IID_IShellLinkW), byref(ppsl)
+            )
+            if hr != 0:
+                raise OSError(f'CoCreateInstance IShellLink falló: 0x{hr & 0xFFFFFFFF:08X}')
+
+            def get_vtbl(iface):
+                vtbl_addr = ctypes.c_void_p.from_address(iface.value).value
+                return (ctypes.c_void_p * 64).from_address(vtbl_addr)
+
+            vtbl = get_vtbl(ppsl)
+
+            def str_method(idx):
+                return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_wchar_p)(vtbl[idx])
+
+            # IShellLinkW vtable (IUnknown: 0-2, then):
+            # 7=SetDescription, 9=SetWorkingDirectory, 17=SetIconLocation, 20=SetPath
+            str_method(20)(ppsl, target_path)
+            str_method(9)(ppsl, working_dir)
+            str_method(7)(ppsl, description)
+            ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int)(vtbl[17])(ppsl, icon_path, 0)
+
+            # QueryInterface → IPersistFile
+            pppf = ctypes.c_void_p(None)
+            fn_qi = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, POINTER(GUID), POINTER(ctypes.c_void_p))(vtbl[0])
+            hr = fn_qi(ppsl, byref(IID_IPersistFile), byref(pppf))
+            if hr != 0:
+                raise OSError(f'QI IPersistFile falló: 0x{hr & 0xFFFFFFFF:08X}')
+
+            vtbl_pf = get_vtbl(pppf)
+
+            # IPersistFile vtable (IUnknown:0-2, IPersist:3, then): 4=IsDirty, 5=Load, 6=Save
+            fn_save = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int)(vtbl_pf[6])
+            hr = fn_save(pppf, lnk_path, 1)
+            if hr != 0:
+                raise OSError(f'IPersistFile::Save falló: 0x{hr & 0xFFFFFFFF:08X}')
+
+            # Release
+            ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl_pf[2])(pppf)
+            ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])(ppsl)
+        finally:
+            ole32.CoUninitialize()
 
     def _refresh_preset_list(self):
         """Rebuild the preset list display."""
