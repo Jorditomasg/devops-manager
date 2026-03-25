@@ -42,7 +42,7 @@ The codebase follows a layered DDD-influenced architecture:
 - **`application/`** — `ProjectAnalyzerService` (repo detection) and `ManageServicesUseCase` (service orchestration).
 - **`infrastructure/`** — `ProcessManager` (subprocess lifecycle) and YAML/properties file parsers.
 - **`core/`** — Managers for config, DB presets, git operations, Java version detection, logging, and service launching.
-- **`gui/`** — All UI code: `app.py` (main window), `repo_card.py` (per-repo accordion widget), `global_panel.py` (batch controls), `dialogs.py`, `tooltip.py`, `theme.py` (UI theme loader).
+- **`gui/`** — All UI code: `app.py` (main window) + `app_profile.py` (profile mixin), `repo_card/` package (per-repo accordion widget split into focused mixins), `dialogs/` package (9 dialog classes with shared `BaseDialog`), `global_panel.py` (batch controls), `constants.py` (shared magic strings/numbers), `log_helpers.py` (shared log insertion), `tooltip.py`, `theme.py` (UI theme loader).
 - **`config/repo_types/`** — YAML definitions that drive repository detection and available commands (one file per framework).
 - **`config/ui_theme.yml`** — Editable UI theme: colors, fonts, sizes, button variants. Overrides the defaults embedded in `gui/theme.py`.
 - **`ui/presenters/`** — MVP presenters stub (currently minimal).
@@ -72,16 +72,32 @@ Button variants available: `success`, `start`, `danger`, `danger_alt`, `danger_d
 
 ## GUI Structure
 
-`gui/repo_card.py` (~2000 lines) is the most complex file. Each `RepoCard` is an accordion widget with:
-- Collapsed view: checkbox, repo name, branch hint, status indicator, quick action buttons
-- Expanded view: branch selector, profile/DB dropdowns, install button, custom command input, log output panel
+`gui/repo_card/` is a package splitting the accordion widget by concern:
+- `_base.py` — `RepoCard` composite class: `__init__`, `destroy`, public getters/setters. Inherits all mixins.
+- `_header.py` — `HeaderMixin`: `_build_ui`, `_build_header`, `_build_action_buttons`, `_update_button_visibility`, `_update_header_hints`
+- `_expand_panel.py` — `ExpandPanelMixin`: `_build_expand_panel`, `_build_*_row`, `_toggle_expand`, `_update_status`, `_on_status_change`
+- `_log.py` — `LogMixin`: `_repo_log`, `_clear_logs`, `_detach_logs`, `_flash_log_icon`
+- `_git.py` — `GitMixin`: badge refresh loop, branch fetching, port/status detection from log
+- `_config.py` — `ConfigMixin`: Spring config file writing, DB preset handling, config manager
+- `_docker.py` — `DockerMixin`: docker-compose profile changes, status polling, button updates
+- `_actions.py` — `ActionsMixin`: start/stop/restart/pull/install/clean/seed
 
-`gui/app.py` (~850 lines) manages the scrollable list of repo cards, profile selection, DB preset management, and system tray integration (pystray).
+`gui/dialogs/` is a package with one file per dialog group:
+- `_base.py` — `BaseDialog(ctk.CTkToplevel)`: shared title/geometry/transient/grab_set boilerplate
+- `clone.py`, `config_editor.py`, `profile.py`, `settings.py`, `repo_config_manager.py`, `docker_compose.py`
+
+`gui/app.py` manages the scrollable list of repo cards, DB preset management, and system tray integration (pystray). Profile load/save/detect/apply logic lives in `gui/app_profile.py` (`ProfileManagerMixin`).
+
+`gui/constants.py` centralises all magic strings, timing values, regex patterns, and concurrency limits used across GUI files.
+
+`gui/log_helpers.py` provides `insert_log_line(textbox, text)` — the shared log insertion helper used by all log panels.
 
 ## Performance-Critical Patterns (do not break)
 
-**Lazy expand panel** (`gui/repo_card.py`): `_build_expand_panel()` is NOT called in `RepoCard.__init__`. It is called lazily on the first `_toggle_expand()` via the `_expand_panel_built` flag. Widgets like `_branch_combo`, `_config_combo`, `_cmd_entry`, `_db_combo` do not exist until the card is expanded for the first time. Any code that accesses these must guard with `hasattr(self, '_branch_combo')` etc. `set_branch()`, `set_profile()`, and `set_custom_command()` silently no-op on collapsed cards — this is intentional.
+**Lazy expand panel** (`gui/repo_card/_expand_panel.py`): `_build_expand_panel()` is NOT called in `RepoCard.__init__`. It is called lazily on the first `_toggle_expand()` via the `_expand_panel_built` flag. Widgets like `_branch_combo`, `_config_combo`, `_cmd_entry`, `_db_combo` do not exist until the card is expanded for the first time. Any code that accesses these must guard with `hasattr(self, '_branch_combo')` etc. `set_branch()`, `set_profile()`, and `set_custom_command()` silently no-op on collapsed cards — this is intentional.
 
-**Profile-switch callback suppression** (`gui/app.py`): `_apply_config()` sets `self._applying_profile = True` during the loop and calls `_do_check_profile_changes()` once at the end. `_check_profile_changes()` is a 300 ms debounce wrapper that returns immediately when `_applying_profile` is True. Any new card-level change trigger must respect this pattern — do not call `_do_check_profile_changes()` directly from card code.
+**Profile-switch callback suppression** (`gui/app_profile.py`): `_apply_config()` sets `self._applying_profile = True` during the loop and calls `_do_check_profile_changes()` once at the end. `_check_profile_changes()` is a 300 ms debounce wrapper that returns immediately when `_applying_profile` is True. Any new card-level change trigger must respect this pattern — do not call `_do_check_profile_changes()` directly from card code.
 
-**Git badge concurrency cap** (`gui/repo_card.py`): `_GIT_BADGE_SEMAPHORE = threading.Semaphore(3)` limits concurrent `git status` subprocesses. Badge refresh runs every 30 s per card (not 10 s). Docker compose status polls every 15 s (not 4 s). Do not lower these intervals.
+**Git badge concurrency cap** (`gui/repo_card/_git.py`): `_GIT_BADGE_SEMAPHORE = threading.Semaphore(GIT_BADGE_SEMAPHORE_COUNT)` (value: 3) is a class variable on `GitMixin` limiting concurrent `git status` subprocesses. Badge refresh runs every 30 s per card (`BADGE_REFRESH_MS = 30_000` in `gui/constants.py`). Docker compose status polls every 15 s (`DOCKER_POLL_MS = 15_000`). Do not lower these intervals.
+
+**Constants** (`gui/constants.py`): All magic strings, timing values, regex patterns, and limits live here. Never add inline string literals like `"- Ninguna (Local) -"` or hardcoded intervals like `30000` to GUI files — import from `gui.constants` instead.

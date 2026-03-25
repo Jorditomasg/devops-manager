@@ -1,0 +1,73 @@
+"""ConfigEditorDialog — dialog for editing config files."""
+import os
+from tkinter import messagebox
+
+import customtkinter as ctk
+
+from gui.dialogs._base import BaseDialog
+from gui import theme
+
+
+class ConfigEditorDialog(BaseDialog):
+    """Dialog for editing config files (application.yml / environment.ts)."""
+
+    def __init__(self, parent, filepath: str, log_callback=None):
+        super().__init__(parent, f"Editor: {os.path.basename(filepath)}", 700, 550)
+        self._filepath = filepath
+        self._log = log_callback
+
+        # Header with file path
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=15, pady=(15, 5))
+
+        ctk.CTkLabel(header, text=filepath, font=theme.font("xs", mono=True),
+                     text_color=theme.C.text_placeholder).pack(anchor="w")
+
+        # Text editor
+        self._editor = ctk.CTkTextbox(
+            self, font=theme.font("base", mono=True), corner_radius=theme.G.corner_panel,
+            border_width=theme.G.border_width,
+            border_color=(theme.C.file_btn_light, theme.C.card_border)
+        )
+        self._editor.pack(fill="both", expand=True, padx=15, pady=5)
+
+        # Load content
+        from core.config_manager import read_config_file_raw
+        content = read_config_file_raw(filepath)
+        self._editor.insert("1.0", content)
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=15, pady=10)
+
+        ctk.CTkButton(
+            btn_frame, text="💾 Guardar", width=120,
+            command=self._save, **theme.btn_style("success")
+        ).pack(side="right", padx=(10, 0))
+
+        ctk.CTkButton(
+            btn_frame, text="Cancelar", width=100,
+            command=self.destroy, **theme.btn_style("neutral")
+        ).pack(side="right")
+
+        ctk.CTkButton(
+            btn_frame, text="↩ Recargar", width=100,
+            command=self._reload, **theme.btn_style("warning")
+        ).pack(side="right", padx=(0, 10))
+
+    def _save(self):
+        content = self._editor.get("1.0", "end").rstrip('\n')
+        from core.config_manager import write_config_file_raw
+        if write_config_file_raw(self._filepath, content):
+            if self._log:
+                self._log(f"Guardado: {os.path.basename(self._filepath)}")
+            messagebox.showinfo("Guardado", "Archivo guardado correctamente (backup creado)")
+            self.destroy()
+        else:
+            messagebox.showerror("Error", "No se pudo guardar el archivo")
+
+    def _reload(self):
+        from core.config_manager import read_config_file_raw
+        content = read_config_file_raw(self._filepath)
+        self._editor.delete("1.0", "end")
+        self._editor.insert("1.0", content)
