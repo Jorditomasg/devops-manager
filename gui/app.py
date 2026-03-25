@@ -31,15 +31,13 @@ from gui.repo_card import RepoCard
 from gui.global_panel import GlobalPanel
 from gui.tooltip import ToolTip
 from gui.dialogs import CloneDialog, ConfigEditorDialog, ProfileDialog, SettingsDialog
+from gui import theme
 from core.repo_detector import detect_repos
 from core.service_launcher import ServiceLauncher
 from core.config_manager import load_db_presets
 
 
 CONFIG_FILE = 'devops_manager_config.json'
-
-# ── Font constants ──────────────────────────────────────────────
-FONT_FAMILY = "Segoe UI"
 
 # ── Profile constants ───────────────────────────────────────────
 NO_PROFILE_TEXT = "- Sin Perfil -"
@@ -129,7 +127,7 @@ class DevOpsManagerApp(ctk.CTk):
         self._build_global_log_panel()
         self._statusbar = ctk.CTkLabel(
             self, text="Listo",
-            font=(FONT_FAMILY, 11), text_color="#6366f1",
+            font=theme.font("md"), text_color=theme.C.text_accent,
             anchor="w", height=24
         )
         self._statusbar.pack(fill="x", padx=15, pady=(0, 6))
@@ -137,20 +135,20 @@ class DevOpsManagerApp(ctk.CTk):
 
     def _build_topbar(self):
         """Build the top bar with logo, path, and action buttons."""
-        topbar = ctk.CTkFrame(self, height=56, corner_radius=0, fg_color="#0f0e26")
+        topbar = ctk.CTkFrame(self, height=theme.G.topbar_height, corner_radius=0, fg_color=theme.C.app)
         topbar.pack(fill="x")
         topbar.pack_propagate(False)
 
-        ctk.CTkFrame(self, height=2, corner_radius=0, fg_color="#312e81").pack(fill="x")
+        ctk.CTkFrame(self, height=2, corner_radius=0, fg_color=theme.C.divider).pack(fill="x")
 
         ctk.CTkLabel(
             topbar, text="🚀 DevOps Manager",
-            font=(FONT_FAMILY, 22, "bold"), text_color="#e0e7ff"
+            font=theme.font("h1", bold=True), text_color=theme.C.text_primary
         ).pack(side="left", padx=20)
 
         path_label = ctk.CTkLabel(
             topbar, text=self._workspace_dir,
-            font=("Consolas", 12), text_color="#6366f1", cursor="hand2"
+            font=theme.font("base", mono=True), text_color=theme.C.text_accent, cursor="hand2"
         )
         path_label.pack(side="left", padx=10)
         path_label.bind("<Button-1>", lambda e: self._open_workspace())
@@ -164,10 +162,10 @@ class DevOpsManagerApp(ctk.CTk):
         btn_frame.pack(side="right", padx=15)
 
         btn_defs = [
-            ("➕ Clonar",  95,  "#172554", "#2563eb", "#3b82f6", self._show_clone_dialog, "Clonar nuevo repositorio"),
-            ("🔄 Rescan",  95,  "#4a3310", "#d97706", "#f59e0b", self._scan_repos, "Re-escanear workspace"),
-            ("⚙",          38,  "#1e293b", "#475569", "#64748b", self._show_settings, "Abrir configuración"),
-            ("📜",         38,  "#1e293b", "#475569", "#64748b", self._toggle_global_log, "Mostrar/Ocultar Log Global"),
+            ("➕ Clonar",  95, "blue",    self._show_clone_dialog,   "Clonar nuevo repositorio"),
+            ("🔄 Rescan",  95, "warning", self._scan_repos,           "Re-escanear workspace"),
+            ("⚙",          38, "neutral", self._show_settings,        "Abrir configuración"),
+            ("📜",         38, "neutral", self._toggle_global_log,    "Mostrar/Ocultar Log Global"),
         ]
 
         from core.profile_manager import list_profiles
@@ -176,23 +174,23 @@ class DevOpsManagerApp(ctk.CTk):
 
         # Quick Save btn
         self._quick_save_btn = ctk.CTkButton(
-            btn_frame, text="💾", width=38, height=34,
-            font=(FONT_FAMILY, 16),
-            fg_color="#7f1d1d", hover_color="#991b1b",
-            border_width=1, border_color="#b91c1c",
-            text_color="#ffffff",
-            corner_radius=6, command=self._save_current_profile
+            btn_frame, text="💾", width=38,
+            text_color=theme.C.text_white,
+            command=self._save_current_profile,
+            **theme.btn_style("danger_alt", height="lg", font_size="h2")
         )
         self._quick_save_btn.pack(side="left", padx=(0, 5))
         self._quick_save_btn.pack_forget() # Initially hidden
         ToolTip(self._quick_save_btn, "💾 Guardar cambios en el perfil actual")
-        
+
         # Profile Dropdown
+        combo_kw = theme.combo_style(height="lg")
+        combo_kw["border_color"] = theme.C.profile_accent
+        combo_kw["button_color"] = theme.C.profile_accent
         self._profile_combo = ctk.CTkComboBox(
-            btn_frame, values=profiles, width=160, height=34,
-            font=(FONT_FAMILY, 12),
-            corner_radius=6, border_color="#7c3aed", button_color="#7c3aed",
-            command=self._on_profile_dropdown_change
+            btn_frame, values=profiles, width=160,
+            command=self._on_profile_dropdown_change,
+            **combo_kw
         )
         self._profile_combo.pack(side="left", padx=(0, 10))
         if self._current_profile_name in profiles:
@@ -204,23 +202,18 @@ class DevOpsManagerApp(ctk.CTk):
         
         # Gestionar Perfiles btn (Dynamic, to the right of the selector)
         self._save_profile_btn = ctk.CTkButton(
-            btn_frame, text="👤", width=38, height=34,
-            font=(FONT_FAMILY, 16),
-            fg_color="#1e293b", hover_color="#475569",
-            border_width=1, border_color="#64748b",
-            corner_radius=6, command=self._show_configs
+            btn_frame, text="👤", width=38,
+            command=self._show_configs,
+            **theme.btn_style("neutral", height="lg", font_size="h2")
         )
         self._save_profile_btn.pack(side="left", padx=(0, 20))
         ToolTip(self._save_profile_btn, "Gestionar Perfiles")
-        
-        for text, width, fg, hover, border, cmd, tip in btn_defs:
-            btn = ctk.CTkButton(
-                btn_frame, text=text, width=width, height=34,
-                font=(FONT_FAMILY, 12 if len(text) > 2 else 16),
-                fg_color=fg, hover_color=hover,
-                border_width=1, border_color=border,
-                corner_radius=6, command=cmd
-            )
+
+        for text, width, variant, cmd, tip in btn_defs:
+            font_size = "base" if len(text) > 2 else "h2"
+            s = theme.btn_style(variant, height="lg")
+            s["font"] = theme.font(font_size)
+            btn = ctk.CTkButton(btn_frame, text=text, width=width, command=cmd, **s)
             btn.pack(side="left", padx=3)
             ToolTip(btn, tip)
 
@@ -268,23 +261,21 @@ class DevOpsManagerApp(ctk.CTk):
 
     def _build_global_log_panel(self):
         """Build the global log panel (hidden by default)."""
-        self._global_log_frame = ctk.CTkFrame(self, fg_color="#0f0e26", height=150)
+        self._global_log_frame = ctk.CTkFrame(self, fg_color=theme.C.app, height=150)
         self._global_log_frame.pack_propagate(False)
 
         log_header = ctk.CTkFrame(self._global_log_frame, fg_color="transparent")
         log_header.pack(fill="x", padx=10, pady=(5, 0))
 
-        ctk.CTkLabel(log_header, text="📜 Log Global", font=(FONT_FAMILY, 12, "bold"), text_color="#c7d2fe").pack(side="left")
+        ctk.CTkLabel(log_header, text="📜 Log Global", font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
 
-        btn_style = {"height": 24, "font": (FONT_FAMILY, 10), "fg_color": "#1e1b4b", "hover_color": "#312e81", "border_width": 1, "border_color": "#4338ca"}
-        ctk.CTkButton(log_header, text="🗗 Desacoplar", width=80, command=self._detach_global_log, **btn_style).pack(side="right", padx=(0, 6))
-        ctk.CTkButton(log_header, text="🗑 Limpiar", width=60, command=self._clear_global_log, **btn_style).pack(side="right")
+        log_btn_s = theme.btn_style("log_action", height="sm", font_size="sm")
+        ctk.CTkButton(log_header, text="🗗 Desacoplar", width=80, command=self._detach_global_log, **log_btn_s).pack(side="right", padx=(0, 6))
+        ctk.CTkButton(log_header, text="🗑 Limpiar", width=60, command=self._clear_global_log, **log_btn_s).pack(side="right")
 
         self._global_log_textbox = ctk.CTkTextbox(
-            self._global_log_frame, font=("Consolas", 11),
-            corner_radius=6, border_width=1,
-            border_color="#3b3768", fg_color="#16132e",
-            text_color="#e0e7ff", state="disabled"
+            self._global_log_frame, state="disabled",
+            **theme.log_textbox_style()
         )
         self._global_log_textbox.pack(fill="both", expand=True, padx=10, pady=5)
         self._log_line_counts: dict = {}
@@ -331,9 +322,8 @@ class DevOpsManagerApp(ctk.CTk):
         self.after(110, lambda: self._detached_global_log_window.focus_force())
         
         self._detached_global_log_textbox = ctk.CTkTextbox(
-            self._detached_global_log_window, font=("Consolas", 12),
-            corner_radius=0, border_width=0,
-            fg_color="#0f0e26", text_color="#e0e7ff"
+            self._detached_global_log_window,
+            **theme.log_textbox_style(detached=True)
         )
         self._detached_global_log_textbox.pack(fill="both", expand=True)
         
@@ -562,9 +552,13 @@ class DevOpsManagerApp(ctk.CTk):
         self._current_profile_data = profile_data
         
         self._quick_save_btn.pack_forget()
+        neutral = theme.btn_style("neutral", height="lg")
         self._save_profile_btn.configure(
-            text="👤", fg_color="#1e293b", border_color="#64748b",
-            hover_color="#475569", text_color="#e0e7ff"
+            text="👤",
+            fg_color=neutral["fg_color"],
+            hover_color=neutral["hover_color"],
+            border_color=neutral["border_color"],
+            text_color=theme.C.text_primary,
         )
         self._log(f"✅ Perfil '{self._current_profile_name}' guardado correctamente")
 
@@ -589,9 +583,13 @@ class DevOpsManagerApp(ctk.CTk):
         if not self._current_profile_name or self._current_profile_name == NO_PROFILE_TEXT:
             # No profile selected
             if self._save_profile_btn.cget("text") != "👤":
+                neutral = theme.btn_style("neutral", height="lg")
                 self._save_profile_btn.configure(
-                    text="👤", fg_color="#1e293b", hover_color="#475569",
-                    border_color="#64748b", text_color="#e0e7ff"
+                    text="👤",
+                    fg_color=neutral["fg_color"],
+                    hover_color=neutral["hover_color"],
+                    border_color=neutral["border_color"],
+                    text_color=theme.C.text_primary,
                 )
             if self._quick_save_btn.winfo_ismapped():
                 self._quick_save_btn.pack_forget()
@@ -602,7 +600,13 @@ class DevOpsManagerApp(ctk.CTk):
 
         if has_changed:
             if not self._quick_save_btn.winfo_ismapped():
-                self._quick_save_btn.configure(text="💾", fg_color="#7f1d1d", hover_color="#991b1b", border_color="#b91c1c")
+                danger = theme.btn_style("danger_alt", height="lg")
+                self._quick_save_btn.configure(
+                    text="💾",
+                    fg_color=danger["fg_color"],
+                    hover_color=danger["hover_color"],
+                    border_color=danger["border_color"],
+                )
                 self._quick_save_btn.pack(side="left", padx=(0, 5), before=self._profile_combo)
         else:
             if self._quick_save_btn.winfo_ismapped():
@@ -678,6 +682,14 @@ class DevOpsManagerApp(ctk.CTk):
         java_version = config.get('java_version')
         if java_version is not None and hasattr(card, 'selected_java_var'):
             card.selected_java_var.set(java_version)
+        if hasattr(card, 'set_docker_compose_active'):
+            active = config.get('docker_compose_active', [])
+            if active:
+                card.set_docker_compose_active(active)
+        if hasattr(card, 'set_docker_profile_services'):
+            svc_map = config.get('docker_profile_services', {})
+            if svc_map:
+                card.set_docker_profile_services(svc_map)
 
     def _load_settings(self) -> dict:
         """Load settings from config file."""
@@ -796,7 +808,10 @@ class DevOpsManagerApp(ctk.CTk):
         # Must schedule the UI update in the main thread
         def _show():
             self.deiconify()
+            self.attributes('-alpha', 1.0)
             self.state('normal')
+            self.lift()
+            self.focus_force()
         self.after(0, _show)
 
     def _quit_app(self, icon, item):

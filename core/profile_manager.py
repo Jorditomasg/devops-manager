@@ -157,6 +157,9 @@ def _build_single_repo_profile(card, include_config_files: bool) -> tuple[str, d
     if hasattr(card, 'get_docker_compose_active'):
         repo_data['docker_compose_active'] = card.get_docker_compose_active()
 
+    if hasattr(card, 'get_docker_profile_services'):
+        repo_data['docker_profile_services'] = card.get_docker_profile_services()
+
     if include_config_files:
         repo_data['config_files'] = _capture_config_files(repo)
 

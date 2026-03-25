@@ -5,6 +5,8 @@ Displays a styled tooltip popup on hover with a configurable delay.
 import customtkinter as ctk
 import tkinter as tk
 
+from gui import theme
+
 
 class ToolTip:
     """
@@ -12,10 +14,6 @@ class ToolTip:
     Usage:
         ToolTip(my_button, "Descriptive text here")
     """
-
-    DELAY_MS = 500       # Delay before showing
-    WRAP_LENGTH = 250    # Max width in pixels before wrapping
-    PADDING = (8, 4)     # (x, y) internal padding
 
     def __init__(self, widget, text: str):
         self._widget = widget
@@ -29,7 +27,7 @@ class ToolTip:
 
     def _schedule(self, event=None):
         self._cancel()
-        self._after_id = self._widget.after(self.DELAY_MS, self._show)
+        self._after_id = self._widget.after(theme.tooltip_delay(), self._show)
 
     def _cancel(self, event=None):
         if self._after_id:
@@ -45,9 +43,21 @@ class ToolTip:
             return
 
         try:
+            # Prevent showing tooltip if mouse has left the widget bounds
+            x_mouse = self._widget.winfo_pointerx()
+            y_mouse = self._widget.winfo_pointery()
+            x_widget = self._widget.winfo_rootx()
+            y_widget = self._widget.winfo_rooty()
+            w_widget = self._widget.winfo_width()
+            h_widget = self._widget.winfo_height()
+            
+            if not (x_widget <= x_mouse <= x_widget + w_widget and 
+                    y_widget <= y_mouse <= y_widget + h_widget):
+                return
+
             # Position: below and slightly right of the widget
-            x = self._widget.winfo_rootx() + 12
-            y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+            x = x_widget + 12
+            y = y_widget + h_widget + 4
         except tk.TclError:
             return
 
@@ -58,27 +68,19 @@ class ToolTip:
         # Remove from taskbar on Windows
         tw.attributes("-topmost", True)
 
-        # Determine colors based on current appearance mode
         mode = ctk.get_appearance_mode()
-        if mode == "Dark":
-            bg_color = "#2a2a3e"
-            text_color = "#e0e0e0"
-            border_color = "#444466"
-        else:
-            bg_color = "#333344"
-            text_color = "#f5f5f5"
-            border_color = "#555577"
+        bg_color, text_color, border_color = theme.tooltip_colors(mode)
 
         # Outer frame acts as border
         outer = ctk.CTkFrame(
-            tw, corner_radius=6,
+            tw, corner_radius=theme.G.corner_tooltip,
             fg_color=border_color,
             bg_color=border_color
         )
         outer.pack(fill="both", expand=True, padx=0, pady=0)
 
         inner = ctk.CTkFrame(
-            outer, corner_radius=5,
+            outer, corner_radius=theme.G.corner_tooltip - 1,
             fg_color=bg_color,
             bg_color=bg_color
         )
@@ -86,15 +88,13 @@ class ToolTip:
 
         label = ctk.CTkLabel(
             inner, text=self._text,
-            font=("Segoe UI", 11),
+            font=theme.font("md"),
             text_color=text_color,
-            wraplength=self.WRAP_LENGTH,
+            wraplength=theme.tooltip_wrap(),
             justify="left",
             anchor="w"
         )
-        label.pack(
-            padx=self.PADDING[0], pady=self.PADDING[1]
-        )
+        label.pack(padx=8, pady=4)
 
         tw.geometry(f"+{x}+{y}")
         tw.deiconify()

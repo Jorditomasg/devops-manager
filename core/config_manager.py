@@ -290,20 +290,23 @@ def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = '')
 
 def auto_import_configs(repo_path: str, repo_type: str, environment_files: list = None) -> dict:
     """Scan a repository for existing configuration files and import them.
-    Returns a dict of found configs: { 'name': 'content ...' }
+    Returns a dict of found configs: { 'profile_name': 'content ...' }
+    Keys are simple profile names (e.g. 'default', 'local', 'test').
+    The caller is responsible for scoping environment_files to a single directory
+    to avoid key collisions across multiple source directories.
     """
     imported = {}
-    
+
     if not environment_files:
         return imported
 
     for file_path in environment_files:
         if not os.path.isfile(file_path):
             continue
-            
+
         name = 'default'
         basename = os.path.basename(file_path)
-        
+
         if 'environment' in basename:
             parts = basename.split('.')
             if len(parts) > 2:

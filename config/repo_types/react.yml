@@ -44,4 +44,4 @@ ui:
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "npm install"
-    status_label_deps_missing: "❌ Faltan deps"
+    status_label_deps_missing: "⚠ Falta instalar"

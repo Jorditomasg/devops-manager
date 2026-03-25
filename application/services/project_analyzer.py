@@ -166,7 +166,12 @@ class ProjectAnalyzerService:
             
         if 'features' in r_type:
             repo.features = r_type['features']
-        
+
+        if 'docker_checkboxes' in repo.features:
+            dc_files = self._find_docker_compose_files(path)
+            if dc_files:
+                repo.docker_compose_files = dc_files
+
         env_files_conf = r_type.get('env_files', {})
         env_files, profiles = self._resolve_env_files(path, repo.repo_type, env_files_conf)
         
@@ -178,6 +183,19 @@ class ProjectAnalyzerService:
         repo.env_main_config_filename = env_files_conf.get('main_config_filename', '')
         
         return repo
+
+    def _find_docker_compose_files(self, path: str) -> list:
+        """Find all docker-compose*.yml/yaml files in a directory (non-recursive)."""
+        import fnmatch
+        files = []
+        for f in os.listdir(path):
+            full = os.path.join(path, f)
+            if os.path.isfile(full) and (
+                fnmatch.fnmatch(f, 'docker-compose*.yml') or
+                fnmatch.fnmatch(f, 'docker-compose*.yaml')
+            ):
+                files.append(full)
+        return sorted(files)
 
     def _resolve_run_command(self, path: str, commands: Dict[str, Any]) -> Optional[str]:
         cmd = commands.get('start_cmd')

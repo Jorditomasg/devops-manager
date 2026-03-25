@@ -7,9 +7,8 @@ from tkinter import messagebox
 import threading
 
 from gui.tooltip import ToolTip
+from gui import theme
 
-# ── Font constants ──────────────────────────────────────────────
-FONT_FAMILY = "Segoe UI"
 NO_DB_PRESET = "(Sin presets BD)"
 
 
@@ -18,9 +17,9 @@ class GlobalPanel(ctk.CTkFrame):
 
     def __init__(self, parent, db_presets=None, repo_cards: list = None,
                  log_callback=None, **kwargs):
-        super().__init__(parent, corner_radius=10, border_width=1,
-                         border_color="#3b3768",
-                         fg_color="#16132e", **kwargs)
+        super().__init__(parent, corner_radius=theme.G.corner_card, border_width=theme.G.border_width,
+                         border_color=theme.C.card_border,
+                         fg_color=theme.C.card, **kwargs)
 
         self._cards = repo_cards or []
         self._db_presets = db_presets or {}
@@ -50,16 +49,17 @@ class GlobalPanel(ctk.CTkFrame):
 
         ctk.CTkLabel(
             title_frame, text="🌐 Panel Global",
-            font=(FONT_FAMILY, 15, "bold"),
-            text_color="#e0e7ff"
+            font=theme.font("xxl", bold=True),
+            text_color=theme.C.text_primary
         ).pack(side="left")
 
         # Select All checkbox (toggles all card checkboxes)
         self._select_all_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             title_frame, text="Seleccionar todos", variable=self._select_all_var,
-            font=(FONT_FAMILY, 11), checkbox_width=16, checkbox_height=16,
-            text_color="#94a3b8",
+            font=theme.font("md"),
+            checkbox_width=theme.G.checkbox_size_sm, checkbox_height=theme.G.checkbox_size_sm,
+            text_color=theme.C.text_muted,
             command=self._toggle_select_all
         ).pack(side="right", padx=(10, 0))
 
@@ -68,38 +68,34 @@ class GlobalPanel(ctk.CTkFrame):
         row1.pack(fill="x", padx=15, pady=(0, 4))
 
         # Branch
-        ctk.CTkLabel(row1, text="Rama:", font=(FONT_FAMILY, 12),
-                     text_color="#c7d2fe", width=45).pack(side="left")
+        ctk.CTkLabel(row1, text="Rama:", font=theme.font("base"),
+                     text_color=theme.C.text_secondary, width=45).pack(side="left")
 
         self._branch_entry = ctk.CTkEntry(
-            row1, width=180, height=28, font=(FONT_FAMILY, 12),
-            corner_radius=6, fg_color="#1e1b4b",
-            border_color="#4338ca",
+            row1, width=180, height=theme.G.btn_height_md, font=theme.font("base"),
+            corner_radius=theme.G.corner_btn,
+            fg_color=theme.C.section,
+            border_color=theme.C.default_border,
             placeholder_text="develop"
         )
         self._branch_entry.pack(side="left", padx=(4, 4))
 
         apply_branch_btn = ctk.CTkButton(
-            row1, text="Aplicar", width=70, height=28,
-            font=(FONT_FAMILY, 11),
-            fg_color="#172554", hover_color="#2563eb",
-            border_width=1, border_color="#3b82f6",
-            corner_radius=6,
-            command=self._apply_branch_all
+            row1, text="Aplicar", width=70,
+            command=self._apply_branch_all,
+            **theme.btn_style("blue")
         )
         apply_branch_btn.pack(side="left", padx=(0, 10))
         ToolTip(apply_branch_btn, "Aplicar esta rama a todos los repos seleccionados")
 
         # DB
-        ctk.CTkLabel(row1, text="BD:", font=(FONT_FAMILY, 12),
-                     text_color="#c7d2fe", width=25).pack(side="left")
+        ctk.CTkLabel(row1, text="BD:", font=theme.font("base"),
+                     text_color=theme.C.text_secondary, width=25).pack(side="left")
 
         db_options = list(self._db_presets.keys()) if self._db_presets else [NO_DB_PRESET]
         self._db_combo = ctk.CTkComboBox(
-            row1, values=db_options,
-            width=130, height=28, font=(FONT_FAMILY, 12),
-            corner_radius=6, fg_color="#1e1b4b",
-            border_color="#4338ca", button_color="#4338ca",
+            row1, values=db_options, width=130,
+            **theme.combo_style()
         )
         self._db_combo.pack(side="left", padx=(4, 4))
         if self._db_presets:
@@ -108,12 +104,9 @@ class GlobalPanel(ctk.CTkFrame):
             self._db_combo.set(NO_DB_PRESET)
 
         apply_db_btn = ctk.CTkButton(
-            row1, text="Aplicar", width=70, height=28,
-            font=(FONT_FAMILY, 11),
-            fg_color="#2e1065", hover_color="#9333ea",
-            border_width=1, border_color="#a855f7",
-            corner_radius=6,
-            command=self._apply_db_all
+            row1, text="Aplicar", width=70,
+            command=self._apply_db_all,
+            **theme.btn_style("purple_global")
         )
         apply_db_btn.pack(side="left")
         ToolTip(apply_db_btn, "Aplicar preset de BD a todos los repos seleccionados")
@@ -122,59 +115,50 @@ class GlobalPanel(ctk.CTkFrame):
         row2 = ctk.CTkFrame(self, fg_color="transparent")
         row2.pack(fill="x", padx=15, pady=(0, 8))
 
-        btn_style = {"height": 28, "font": (FONT_FAMILY, 11), "corner_radius": 6,
-                     "border_width": 1}
-
         pull_btn = ctk.CTkButton(
             row2, text="⬇ Pull All", width=90,
-            fg_color="#172554", hover_color="#2563eb",
-            border_color="#3b82f6",
-            command=self._pull_all, **btn_style
+            command=self._pull_all,
+            **theme.btn_style("blue", font_size="md")
         )
         pull_btn.pack(side="left", padx=(0, 3))
         ToolTip(pull_btn, "Descargar cambios de todos los repos seleccionados")
 
         install_btn = ctk.CTkButton(
             row2, text="📦 Install All", width=95,
-            fg_color="#1e293b", hover_color="#334155",
-            border_color="#64748b",
-            command=self._install_all, **btn_style
+            command=self._install_all,
+            **theme.btn_style("neutral_alt", font_size="md")
         )
         install_btn.pack(side="left", padx=(0, 3))
         ToolTip(install_btn, "Instalar dependencias de todos los proyectos seleccionados")
 
         start_btn = ctk.CTkButton(
             row2, text="▶ Start", width=80,
-            fg_color="#144d28", hover_color="#16a34a",
-            border_color="#22c55e",
-            command=self._start_selected, **btn_style
+            command=self._start_selected,
+            **theme.btn_style("start", font_size="md")
         )
         start_btn.pack(side="left", padx=(0, 3))
         ToolTip(start_btn, "Iniciar todos los servicios seleccionados")
 
         stop_btn = ctk.CTkButton(
             row2, text="⬛ Stop", width=80,
-            fg_color="#4c1616", hover_color="#dc2626",
-            border_color="#ef4444",
-            command=self._stop_selected, **btn_style
+            command=self._stop_selected,
+            **theme.btn_style("danger", font_size="md")
         )
         stop_btn.pack(side="left", padx=(0, 3))
         ToolTip(stop_btn, "Detener todos los servicios seleccionados")
 
         restart_btn = ctk.CTkButton(
             row2, text="🔄 Restart", width=90,
-            fg_color="#4a3310", hover_color="#d97706",
-            border_color="#f59e0b",
-            command=self._restart_selected, **btn_style
+            command=self._restart_selected,
+            **theme.btn_style("warning", font_size="md")
         )
         restart_btn.pack(side="left", padx=(0, 3))
         ToolTip(restart_btn, "Reiniciar todos los servicios seleccionados")
 
         seed_btn = ctk.CTkButton(
             row2, text="🌱 Seed All", width=90,
-            fg_color="#2e1065", hover_color="#9333ea",
-            border_color="#a855f7",
-            command=self._seed_all, **btn_style
+            command=self._seed_all,
+            **theme.btn_style("purple_global", font_size="md")
         )
         seed_btn.pack(side="left")
         ToolTip(seed_btn, "Ejecutar seeds de BD para todos los repos")
@@ -270,7 +254,7 @@ class GlobalPanel(ctk.CTkFrame):
         selected = self._get_selected_cards()
         if not selected:
             return
-        
+
         if self._log:
             self._log(f"[global] Installing dependencies for {len(selected)} repos...")
 

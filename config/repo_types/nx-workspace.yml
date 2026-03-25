@@ -42,4 +42,4 @@ ui:
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "npm i // npm install --yes --legacy-peer-deps"
-    status_label_deps_missing: "❌ Faltan deps"
+    status_label_deps_missing: "⚠ Falta instalar"

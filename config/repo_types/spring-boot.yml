@@ -51,7 +51,7 @@ ui:
     label_missing: "Install"
     label_ok: "Reinstall ✓"
     tooltip: "mvn verify // mvn install -DskipTests --batch-mode"
-    status_label_deps_missing: "❌ Faltan deps"
+    status_label_deps_missing: "⚠ Falta instalar"
 
 features:
   - "java_version"

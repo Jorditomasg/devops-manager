@@ -42,8 +42,9 @@ The codebase follows a layered DDD-influenced architecture:
 - **`application/`** — `ProjectAnalyzerService` (repo detection) and `ManageServicesUseCase` (service orchestration).
 - **`infrastructure/`** — `ProcessManager` (subprocess lifecycle) and YAML/properties file parsers.
 - **`core/`** — Managers for config, DB presets, git operations, Java version detection, logging, and service launching.
-- **`gui/`** — All UI code: `app.py` (main window), `repo_card.py` (per-repo accordion widget), `global_panel.py` (batch controls), `dialogs.py`, `tooltip.py`.
+- **`gui/`** — All UI code: `app.py` (main window), `repo_card.py` (per-repo accordion widget), `global_panel.py` (batch controls), `dialogs.py`, `tooltip.py`, `theme.py` (UI theme loader).
 - **`config/repo_types/`** — YAML definitions that drive repository detection and available commands (one file per framework).
+- **`config/ui_theme.yml`** — Editable UI theme: colors, fonts, sizes, button variants. Overrides the defaults embedded in `gui/theme.py`.
 - **`ui/presenters/`** — MVP presenters stub (currently minimal).
 
 ## Key Design Decisions
@@ -55,6 +56,19 @@ The codebase follows a layered DDD-influenced architecture:
 **Process management** (`infrastructure/process/process_manager.py`): Subprocess execution is async (threads), streams stdout/stderr to the repo card's log panel, and registers an atexit hook for clean shutdown. `service_launcher.py` wraps this with service-lifecycle semantics (ready detection via log regex patterns).
 
 **Configuration persistence** (`devops_manager_config.json`): Stores window geometry, last profile, DB presets, and workspace path. Managed by `core/config_manager.py`. Reads are cached in memory with mtime-based invalidation via `_load_config_cached()`. Any new load function that reads this file must use `_load_config_cached()`; any new save function must call `_invalidate_config_cache(config_path)` after writing.
+
+**Centralized UI theme** (`gui/theme.py` + `config/ui_theme.yml`): All colors, fonts, sizes, and button variants are defined in one place. `gui/theme.py` loads `config/ui_theme.yml` once at import time and merges it over embedded `_DEFAULTS` — so the app always starts even if the YAML is missing. All GUI files import via `from gui import theme` and must use the theme API instead of hardcoded hex values or font tuples.
+
+Key API:
+- `theme.font(size_key, bold=False, mono=False)` → font tuple, e.g. `theme.font("base")`, `theme.font("h1", bold=True)`
+- `theme.btn_style(variant, height="md", width=None, font_size="base")` → kwargs dict for `ctk.CTkButton` — use as `**theme.btn_style("start")`; do NOT also pass an explicit `font=` argument or it will raise a duplicate-keyword error
+- `theme.combo_style(height="md")` → kwargs dict for `ctk.CTkComboBox`
+- `theme.log_textbox_style(detached=False)` → kwargs dict for log `ctk.CTkTextbox`
+- `theme.C.*` — color namespace: `theme.C.card`, `theme.C.text_primary`, `theme.C.status_running`, etc.
+- `theme.G.*` — geometry namespace: `theme.G.corner_btn`, `theme.G.btn_height_md`, etc.
+- `theme.STATUS_ICONS` — dict mapping status strings to their display colors
+
+Button variants available: `success`, `start`, `danger`, `danger_alt`, `danger_deep`, `warning`, `blue`, `blue_active`, `neutral`, `neutral_alt`, `purple`, `purple_alt`, `purple_global`, `log_action`, `toggle_expand`, `profile_accent`.
 
 ## GUI Structure
 

@@ -7,8 +7,7 @@ from tkinter import filedialog, messagebox
 import threading
 import os
 
-# ── Font constants ──────────────────────────────────────────────
-FONT_FAMILY = "Segoe UI"
+from gui import theme
 
 
 class CloneDialog(ctk.CTkToplevel):
@@ -50,17 +49,13 @@ class CloneDialog(ctk.CTkToplevel):
 
         self._clone_btn = ctk.CTkButton(
             btn_frame, text="Clonar", width=120,
-            fg_color="#172554", hover_color="#2563eb",
-            border_width=1, border_color="#3b82f6",
-            command=self._start_clone
+            command=self._start_clone, **theme.btn_style("blue")
         )
         self._clone_btn.pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#1e293b", hover_color="#475569",
-            border_width=1, border_color="#64748b",
-            command=self.destroy
+            command=self.destroy, **theme.btn_style("neutral")
         ).pack(side="right")
 
     def _start_clone(self):
@@ -128,13 +123,14 @@ class ConfigEditorDialog(ctk.CTkToplevel):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=15, pady=(15, 5))
 
-        ctk.CTkLabel(header, text=filepath, font=("Consolas", 10),
-                     text_color="#888").pack(anchor="w")
+        ctk.CTkLabel(header, text=filepath, font=theme.font("xs", mono=True),
+                     text_color=theme.C.text_placeholder).pack(anchor="w")
 
         # Text editor
         self._editor = ctk.CTkTextbox(
-            self, font=("Consolas", 12), corner_radius=8,
-            border_width=1, border_color=("#ccc", "#444")
+            self, font=theme.font("base", mono=True), corner_radius=theme.G.corner_panel,
+            border_width=theme.G.border_width,
+            border_color=(theme.C.file_btn_light, theme.C.card_border)
         )
         self._editor.pack(fill="both", expand=True, padx=15, pady=5)
 
@@ -149,23 +145,17 @@ class ConfigEditorDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             btn_frame, text="💾 Guardar", width=120,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            command=self._save
+            command=self._save, **theme.btn_style("success")
         ).pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#1e293b", hover_color="#475569",
-            border_width=1, border_color="#64748b",
-            command=self.destroy
+            command=self.destroy, **theme.btn_style("neutral")
         ).pack(side="right")
 
         ctk.CTkButton(
             btn_frame, text="↩ Recargar", width=100,
-            fg_color="#4a3310", hover_color="#d97706",
-            border_width=1, border_color="#f59e0b",
-            command=self._reload
+            command=self._reload, **theme.btn_style("warning")
         ).pack(side="right", padx=(0, 10))
 
     def _save(self):
@@ -213,14 +203,14 @@ class ProfileDialog(ctk.CTkToplevel):
         self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
         ctk.CTkLabel(self._main_scroll, text="💾 Configuraciones Guardadas",
-                     font=(FONT_FAMILY, 16, "bold")).pack(pady=(15, 10))
+                     font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
         # ─── Save section ───
         save_frame = ctk.CTkFrame(self._main_scroll, corner_radius=8)
         save_frame.pack(fill="x", padx=20, pady=5)
 
         ctk.CTkLabel(save_frame, text="Guardar configuración actual:",
-                     font=(FONT_FAMILY, 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+                     font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
         name_row = ctk.CTkFrame(save_frame, fg_color="transparent")
         name_row.pack(fill="x", padx=10, pady=(0, 4))
@@ -231,9 +221,7 @@ class ProfileDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             name_row, text="💾 Guardar", width=100,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            command=self._save_profile
+            command=self._save_profile, **theme.btn_style("success")
         ).pack(side="left")
 
         # Save options
@@ -243,13 +231,15 @@ class ProfileDialog(ctk.CTkToplevel):
         self._include_db_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             opts_row, text="Incluir presets de BD", variable=self._include_db_var,
-            font=(FONT_FAMILY, 11), checkbox_width=18, checkbox_height=18
+            font=theme.font("md"),
+            checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size
         ).pack(side="left", padx=(0, 15))
 
         self._include_files_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             opts_row, text="Incluir config files (yml/ts)", variable=self._include_files_var,
-            font=(FONT_FAMILY, 11), checkbox_width=18, checkbox_height=18
+            font=theme.font("md"),
+            checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size
         ).pack(side="left")
 
         # ─── Load / Export section ───
@@ -257,15 +247,15 @@ class ProfileDialog(ctk.CTkToplevel):
         load_frame.pack(fill="x", padx=20, pady=5)
 
         ctk.CTkLabel(load_frame, text="Configuraciones guardadas:",
-                     font=(FONT_FAMILY, 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+                     font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
         from core.profile_manager import list_profiles
         profiles = list_profiles()
         
         # Profile List (Scrollable)
         self._profile_list_frame = ctk.CTkScrollableFrame(
-            load_frame, height=120, fg_color="#0f172a", 
-            border_width=1, border_color="#1e293b"
+            load_frame, height=120, fg_color=theme.C.section_alt,
+            border_width=theme.G.border_width, border_color=theme.C.subtle_border
         )
         self._profile_list_frame.pack(fill="x", padx=10, pady=5)
         
@@ -277,23 +267,17 @@ class ProfileDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             btn_row, text="📂 Cargar", width=100,
-            fg_color="#172554", hover_color="#2563eb",
-            border_width=1, border_color="#3b82f6",
-            command=self._load_profile
+            command=self._load_profile, **theme.btn_style("blue")
         ).pack(side="left", padx=(0, 5))
 
         ctk.CTkButton(
             btn_row, text="🗑 Eliminar", width=100,
-            fg_color="#450a0a", hover_color="#dc2626",
-            border_width=1, border_color="#ef4444",
-            command=self._delete_profile
+            command=self._delete_profile, **theme.btn_style("danger_deep")
         ).pack(side="left", padx=(0, 5))
 
         ctk.CTkButton(
             btn_row, text="📤 Exportar", width=100,
-            fg_color="#4a3310", hover_color="#d97706",
-            border_width=1, border_color="#f59e0b",
-            command=self._export_profile
+            command=self._export_profile, **theme.btn_style("warning")
         ).pack(side="left")
 
         # ─── Import section ───
@@ -301,20 +285,18 @@ class ProfileDialog(ctk.CTkToplevel):
         import_frame.pack(fill="x", padx=20, pady=5)
 
         ctk.CTkLabel(import_frame, text="Importar configuración externa:",
-                     font=(FONT_FAMILY, 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+                     font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
         ctk.CTkButton(
             import_frame, text="📥 Importar desde archivo...", width=250,
-            fg_color="#2e1065", hover_color="#6d28d9",
-            border_width=1, border_color="#7c3aed",
-            command=self._import_profile
+            command=self._import_profile, **theme.btn_style("purple")
         ).pack(padx=10, pady=(0, 10))
 
         # ─── Info ───
         ctk.CTkLabel(
             self._main_scroll, text="💡 Guardar: guarda repos (URL, rama, env, cmd) + opciones BD/configs.\n"
                        "    Importar: permite clonar repos, instalar deps, aplicar configs.",
-            font=(FONT_FAMILY, 10), text_color="#888",
+            font=theme.font("sm"), text_color=theme.C.text_placeholder,
             justify="left"
         ).pack(padx=20, pady=(10, 15))
 
@@ -547,20 +529,20 @@ class ProfileDialog(ctk.CTkToplevel):
             ctk.CTkLabel(
                 self._profile_list_frame,
                 text="(Sin configs guardadas)",
-                font=(FONT_FAMILY, 11), text_color="#888"
+                font=theme.font("md"), text_color=theme.C.text_placeholder
             ).pack(pady=10)
             self._selected_profile.set("")
             return
 
+        _blue = theme.btn_style("blue")
+        _neutral = theme.btn_style("neutral")
         for profile in profiles:
-            color = "#1e293b"
-            if self._selected_profile.get() == profile:
-                color = "#2563eb"  # Selected color
-
+            is_sel = self._selected_profile.get() == profile
+            fg = _blue["fg_color"] if is_sel else _neutral["fg_color"]
             btn = ctk.CTkButton(
                 self._profile_list_frame, text=profile,
-                anchor="w", fg_color=color, hover_color="#3b82f6",
-                font=(FONT_FAMILY, 12, "bold"),
+                anchor="w", fg_color=fg, hover_color=_blue["border_color"],
+                font=theme.font("base", bold=True),
                 command=lambda p=profile: self._select_profile_item(p)
             )
             btn.pack(fill="x", pady=2)
@@ -628,19 +610,15 @@ class ImportOptionsDialog(ctk.CTkToplevel):
         self._btn_frame.pack(side="bottom", fill="x", padx=20, pady=10)
         
         self._apply_btn = ctk.CTkButton(
-            self._btn_frame, text="✅ Aceptar y Aplicar", width=150, height=36,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            font=("Segoe UI", 12, "bold"),
-            command=self._apply
+            self._btn_frame, text="✅ Aceptar y Aplicar", width=150,
+            font=theme.font("base", bold=True),
+            command=self._apply, **theme.btn_style("success", height="lg")
         )
         self._apply_btn.pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
-            self._btn_frame, text="Cancelar", width=100, height=36,
-            fg_color="#1e293b", hover_color="#475569",
-            border_width=1, border_color="#64748b",
-            command=self.destroy
+            self._btn_frame, text="Cancelar", width=100,
+            command=self.destroy, **theme.btn_style("neutral", height="lg")
         ).pack(side="right")
 
         # ── Main Content Area (Scrollable) ──
@@ -648,7 +626,7 @@ class ImportOptionsDialog(ctk.CTkToplevel):
         main_scroll.pack(side="top", fill="both", expand=True, padx=5, pady=(5, 0))
 
         ctk.CTkLabel(main_scroll, text="📥 Opciones de Importación",
-                     font=(FONT_FAMILY, 15, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+                     font=theme.font("xxl", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
         # Checkboxes and Map Frame
         options_frame = ctk.CTkFrame(main_scroll, corner_radius=8)
@@ -660,12 +638,12 @@ class ImportOptionsDialog(ctk.CTkToplevel):
 
         if self._missing:
             ctk.CTkLabel(options_frame, text="Repositorios faltantes encontrados:",
-                         font=(FONT_FAMILY, 12, "bold"), text_color="#f59e0b").pack(anchor="w", padx=10, pady=(10, 0))
+                         font=theme.font("base", bold=True), text_color=theme.C.status_starting).pack(anchor="w", padx=10, pady=(10, 0))
 
             missing_txt = ", ".join([m['name'] for m in self._missing])
             if len(missing_txt) > 80: missing_txt = missing_txt[:77] + "..."
             ctk.CTkLabel(options_frame, text=f"• {missing_txt}",
-                         font=(FONT_FAMILY, 11), text_color="#94a3b8").pack(anchor="w", padx=20)
+                         font=theme.font("md"), text_color=theme.C.text_muted).pack(anchor="w", padx=20)
 
             ctk.CTkCheckBox(options_frame, text="🔗 Clonar repos faltantes", variable=self._clone_var,
                             command=self._update_preview, checkbox_width=20, checkbox_height=20
@@ -695,7 +673,7 @@ class ImportOptionsDialog(ctk.CTkToplevel):
         self._java_mappings = {}
         if self._missing_javas:
             ctk.CTkLabel(options_frame, text="Asociar versiones de Java locales:",
-                         font=(FONT_FAMILY, 12, "bold"), text_color="#f59e0b").pack(anchor="w", padx=10, pady=(5, 0))
+                         font=theme.font("base", bold=True), text_color=theme.C.status_starting).pack(anchor="w", padx=10, pady=(5, 0))
 
             for missing_jv in self._missing_javas:
                 row = ctk.CTkFrame(options_frame, fg_color="transparent")
@@ -717,18 +695,18 @@ class ImportOptionsDialog(ctk.CTkToplevel):
                     repos_txt = " usará en: " + ", ".join(repos_needing_java)
                     if len(repos_txt) > 50:
                         repos_txt = repos_txt[:47] + "..."
-                    ctk.CTkLabel(row, text=repos_txt, font=("Consolas", 10), text_color="#888").pack(side="left", padx=(10, 0))
+                    ctk.CTkLabel(row, text=repos_txt, font=theme.font("sm", mono=True), text_color=theme.C.text_placeholder).pack(side="left", padx=(10, 0))
             ctk.CTkLabel(options_frame, text="").pack(pady=2)
 
         # ── Changes Preview ──
         ctk.CTkLabel(main_scroll, text="📋 Resumen de Cambios",
-                     font=(FONT_FAMILY, 14, "bold")).pack(anchor="w", padx=10, pady=(5, 5))
+                     font=theme.font("xl", bold=True)).pack(anchor="w", padx=10, pady=(5, 5))
 
-        self._preview_box = ctk.CTkTextbox(main_scroll, font=("Consolas", 11), wrap="none", height=150)
+        self._preview_box = ctk.CTkTextbox(main_scroll, font=theme.font("md", mono=True), wrap="none", height=150)
         self._preview_box.pack(fill="x", padx=10, pady=(0, 10))
 
         # ── Progress ──
-        self._progress_label = ctk.CTkLabel(main_scroll, text="", font=(FONT_FAMILY, 10), text_color="#94a3b8")
+        self._progress_label = ctk.CTkLabel(main_scroll, text="", font=theme.font("sm"), text_color=theme.C.text_muted)
         self._progress_label.pack(anchor="w", padx=10, pady=(5, 0))
         self._progress = ctk.CTkProgressBar(main_scroll)
         self._progress.pack(fill="x", padx=10, pady=(0, 10))
@@ -950,46 +928,57 @@ class SettingsDialog(ctk.CTkToplevel):
         self._db_presets = dict(settings.get('db_presets', {}))
         self._java_versions = dict(settings.get('java_versions', {}))
 
+        # Save container (Not scrolling, fixed at bottom) - Packed first so it's never pushed off-screen
+        self._save_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self._save_frame.pack(side="bottom", fill="x", padx=20, pady=15)
+
+        ctk.CTkButton(
+            self._save_frame, text="💾 Guardar Cambios",
+            command=self._save, **theme.btn_style("success", width=150, height="lg", font_size="lg")
+        ).pack(side="right")
+
+        ctk.CTkButton(
+            self._save_frame, text="Cancelar",
+            command=self.destroy, **theme.btn_style("neutral", width=100, height="lg", font_size="lg")
+        ).pack(side="right", padx=(0, 15))
+
         self._main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
         ctk.CTkLabel(self._main_scroll, text="Ajustes de DevOps Manager",
-                     font=("Segoe UI", 18, "bold"), text_color="#f8fafc").pack(pady=(15, 20))
+                     font=theme.font("h1", bold=True), text_color=theme.C.text_primary).pack(pady=(15, 20))
 
         # ─── Workspace section ───
-        ws_frame = ctk.CTkFrame(self._main_scroll, fg_color="#1e1b4b", corner_radius=10, border_width=1, border_color="#312e81")
+        ws_frame = ctk.CTkFrame(self._main_scroll, fg_color=theme.C.section, corner_radius=theme.G.corner_card, border_width=theme.G.border_width, border_color=theme.C.settings_border)
         ws_frame.pack(fill="x", padx=10, pady=(0, 15))
 
         ws_header = ctk.CTkFrame(ws_frame, fg_color="transparent")
         ws_header.pack(fill="x", padx=15, pady=(15, 0))
-        ctk.CTkLabel(ws_header, text="📁 Directorio de Trabajo", font=("Segoe UI", 14, "bold"), text_color="#e2e8f0").pack(side="left")
-        ctk.CTkLabel(ws_frame, text="Ubicación donde se estructuran los repositorios de tus espacios de trabajo.", font=("Segoe UI", 11), text_color="#94a3b8").pack(anchor="w", padx=15, pady=(2, 12))
+        ctk.CTkLabel(ws_header, text="📁 Directorio de Trabajo", font=theme.font("xl", bold=True), text_color=theme.C.text_primary).pack(side="left")
+        ctk.CTkLabel(ws_frame, text="Ubicación donde se estructuran los repositorios de tus espacios de trabajo.", font=theme.font("md"), text_color=theme.C.text_muted).pack(anchor="w", padx=15, pady=(2, 12))
 
         dir_inner = ctk.CTkFrame(ws_frame, fg_color="transparent")
         dir_inner.pack(fill="x", padx=15, pady=(0, 15))
         
-        self._workspace_entry = ctk.CTkEntry(dir_inner, height=32, font=("Consolas", 12), fg_color="#0f172a", border_color="#334155")
+        self._workspace_entry = ctk.CTkEntry(dir_inner, height=32, font=theme.font("base", mono=True), fg_color=theme.C.section_alt, border_color=theme.C.subtle_border)
         self._workspace_entry.pack(side="left", fill="x", expand=True)
         self._workspace_entry.insert(0, settings.get('workspace_dir', ''))
 
         ctk.CTkButton(
-            dir_inner, text="Examinar", width=80, height=32,
-            fg_color="#172554", hover_color="#2563eb",
-            border_width=1, border_color="#3b82f6",
-            font=("Segoe UI", 12, "bold"),
-            command=self._browse_dir
+            dir_inner, text="Examinar",
+            command=self._browse_dir, **theme.btn_style("blue", width=80)
         ).pack(side="left", padx=(10, 0))
 
         # ─── DB Presets section ───
-        db_frame = ctk.CTkFrame(self._main_scroll, fg_color="#1e1b4b", corner_radius=10, border_width=1, border_color="#312e81")
+        db_frame = ctk.CTkFrame(self._main_scroll, fg_color=theme.C.section, corner_radius=theme.G.corner_card, border_width=theme.G.border_width, border_color=theme.C.settings_border)
         db_frame.pack(fill="x", padx=10, pady=(0, 15))
 
         db_header = ctk.CTkFrame(db_frame, fg_color="transparent")
         db_header.pack(fill="x", padx=15, pady=(15, 0))
-        ctk.CTkLabel(db_header, text="🗄️ Presets de BD", font=("Segoe UI", 14, "bold"), text_color="#e2e8f0").pack(side="left")
-        ctk.CTkLabel(db_frame, text="El template URL admite {db_name} como placeholder autodetectado. Utilízalos en perfiles para reemplazar propiedades en properties.", font=("Segoe UI", 11), text_color="#94a3b8").pack(anchor="w", padx=15, pady=(2, 12))
+        ctk.CTkLabel(db_header, text="🗄️ Presets de BD", font=theme.font("xl", bold=True), text_color=theme.C.text_primary).pack(side="left")
+        ctk.CTkLabel(db_frame, text="El template URL admite {db_name} como placeholder autodetectado. Utilízalos en perfiles para reemplazar propiedades en properties.", font=theme.font("md"), text_color=theme.C.text_muted).pack(anchor="w", padx=15, pady=(2, 12))
 
-        self._preset_list_frame = ctk.CTkScrollableFrame(db_frame, height=80, fg_color="#0f172a", border_width=1, border_color="#1e293b") 
+        self._preset_list_frame = ctk.CTkScrollableFrame(db_frame, height=80, fg_color=theme.C.section_alt, border_width=theme.G.border_width, border_color=theme.C.subtle_border)
         self._preset_list_frame.pack(fill="x", padx=15, pady=(0, 10))
         self._refresh_preset_list()
 
@@ -997,23 +986,20 @@ class SettingsDialog(ctk.CTkToplevel):
         add_row.pack(fill="x", padx=15, pady=(0, 15))
 
         ctk.CTkButton(
-            add_row, text="➕ Añadir preset", width=140, height=32,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            font=("Segoe UI", 12, "bold"),
-            command=self._add_preset
+            add_row, text="➕ Añadir preset",
+            command=self._add_preset, **theme.btn_style("success", width=140)
         ).pack(side="left")
 
         # ─── Java Versions section ───
-        java_frame = ctk.CTkFrame(self._main_scroll, fg_color="#1e1b4b", corner_radius=10, border_width=1, border_color="#312e81")
+        java_frame = ctk.CTkFrame(self._main_scroll, fg_color=theme.C.section, corner_radius=theme.G.corner_card, border_width=theme.G.border_width, border_color=theme.C.settings_border)
         java_frame.pack(fill="x", padx=10, pady=(0, 15))
 
         java_header = ctk.CTkFrame(java_frame, fg_color="transparent")
         java_header.pack(fill="x", padx=15, pady=(15, 0))
-        ctk.CTkLabel(java_header, text="☕ Versiones de Java", font=("Segoe UI", 14, "bold"), text_color="#e2e8f0").pack(side="left")
-        ctk.CTkLabel(java_frame, text="Registra versiones de JDK locales para usarlas en los servicios Spring Boot y Maven.", font=("Segoe UI", 11), text_color="#94a3b8").pack(anchor="w", padx=15, pady=(2, 12))
-        
-        self._java_list_frame = ctk.CTkScrollableFrame(java_frame, height=80, fg_color="#0f172a", border_width=1, border_color="#1e293b")
+        ctk.CTkLabel(java_header, text="☕ Versiones de Java", font=theme.font("xl", bold=True), text_color=theme.C.text_primary).pack(side="left")
+        ctk.CTkLabel(java_frame, text="Registra versiones de JDK locales para usarlas en los servicios Spring Boot y Maven.", font=theme.font("md"), text_color=theme.C.text_muted).pack(anchor="w", padx=15, pady=(2, 12))
+
+        self._java_list_frame = ctk.CTkScrollableFrame(java_frame, height=80, fg_color=theme.C.section_alt, border_width=theme.G.border_width, border_color=theme.C.subtle_border)
         self._java_list_frame.pack(fill="x", padx=15, pady=(0, 10))
         self._refresh_java_list()
         
@@ -1021,40 +1007,14 @@ class SettingsDialog(ctk.CTkToplevel):
         java_add_row.pack(fill="x", padx=15, pady=(0, 15))
 
         ctk.CTkButton(
-            java_add_row, text="➕ Añadir Java", width=130, height=32,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            font=("Segoe UI", 12, "bold"),
-            command=self._add_java_version
+            java_add_row, text="➕ Añadir Java",
+            command=self._add_java_version, **theme.btn_style("success", width=130)
         ).pack(side="left")
-        
+
         ctk.CTkButton(
-            java_add_row, text="🔍 Auto-detectar", width=140, height=32,
-            fg_color="#2e1065", hover_color="#6d28d9",
-            border_width=1, border_color="#7c3aed",
-            font=("Segoe UI", 12, "bold"),
-            command=self._auto_detect_java
+            java_add_row, text="🔍 Auto-detectar",
+            command=self._auto_detect_java, **theme.btn_style("purple", width=140)
         ).pack(side="left", padx=(10, 0))
-
-        # Save container (Not scrolling, fixed at bottom)
-        save_frame = ctk.CTkFrame(self, fg_color="transparent")
-        save_frame.pack(fill="x", padx=20, pady=15)
-
-        ctk.CTkButton(
-            save_frame, text="💾 Guardar Cambios", width=150, height=36,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            font=("Segoe UI", 13, "bold"),
-            command=self._save
-        ).pack(side="right")
-        
-        ctk.CTkButton(
-            save_frame, text="Cancelar", width=100, height=36,
-            fg_color="#1e293b", hover_color="#475569",
-            border_width=1, border_color="#64748b",
-            font=("Segoe UI", 13),
-            command=self.destroy
-        ).pack(side="right", padx=(0, 15))
 
     def _refresh_preset_list(self):
         """Rebuild the preset list display."""
@@ -1065,7 +1025,7 @@ class SettingsDialog(ctk.CTkToplevel):
             ctk.CTkLabel(
                 self._preset_list_frame,
                 text="(Sin presets configurados)",
-                font=("Segoe UI", 10), text_color="#888"
+                font=theme.font("sm"), text_color=theme.C.text_placeholder
             ).pack(pady=5)
             return
 
@@ -1075,7 +1035,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
             ctk.CTkLabel(
                 row, text=f"🗄 {name}",
-                font=("Segoe UI", 11, "bold"), width=100, anchor="w"
+                font=theme.font("md", bold=True), width=100, anchor="w"
             ).pack(side="left")
 
             url_display = preset.get('url', '')
@@ -1083,23 +1043,21 @@ class SettingsDialog(ctk.CTkToplevel):
                 url_display = url_display[:42] + '...'
             ctk.CTkLabel(
                 row, text=url_display,
-                font=("Consolas", 9), text_color="#888", anchor="w"
+                font=theme.font("xs", mono=True), text_color=theme.C.text_placeholder, anchor="w"
             ).pack(side="left", padx=(5, 0), fill="x", expand=True)
 
             ctk.CTkButton(
-                row, text="✏", width=28, height=24,
-                fg_color="#4a3310", hover_color="#d97706",
-                border_width=1, border_color="#f59e0b",
-                font=("Segoe UI", 11),
-                command=lambda n=name: self._edit_preset(n)
+                row, text="✏", width=28,
+                font=theme.font("md"),
+                command=lambda n=name: self._edit_preset(n),
+                **theme.btn_style("warning", height="sm")
             ).pack(side="right", padx=(2, 0))
 
             ctk.CTkButton(
-                row, text="🗑", width=28, height=24,
-                fg_color="#450a0a", hover_color="#dc2626",
-                border_width=1, border_color="#ef4444",
-                font=("Segoe UI", 11),
-                command=lambda n=name: self._delete_preset(n)
+                row, text="🗑", width=28,
+                font=theme.font("md"),
+                command=lambda n=name: self._delete_preset(n),
+                **theme.btn_style("danger_deep", height="sm")
             ).pack(side="right")
 
     def _add_preset(self):
@@ -1133,7 +1091,7 @@ class SettingsDialog(ctk.CTkToplevel):
             ctk.CTkLabel(
                 self._java_list_frame,
                 text="(Sin versiones configuradas. Usa '➕ Añadir Java' o '🔍 Auto-detectar')",
-                font=("Segoe UI", 10), text_color="#888"
+                font=theme.font("sm"), text_color=theme.C.text_placeholder
             ).pack(pady=5)
             return
 
@@ -1143,7 +1101,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
             ctk.CTkLabel(
                 row, text=f"☕ {name}",
-                font=("Segoe UI", 11, "bold"), width=120, anchor="w"
+                font=theme.font("md", bold=True), width=120, anchor="w"
             ).pack(side="left")
 
             path_display = path
@@ -1151,23 +1109,21 @@ class SettingsDialog(ctk.CTkToplevel):
                 path_display = path_display[:32] + '...'
             ctk.CTkLabel(
                 row, text=path_display,
-                font=("Consolas", 9), text_color="#888", anchor="w"
+                font=theme.font("xs", mono=True), text_color=theme.C.text_placeholder, anchor="w"
             ).pack(side="left", padx=(5, 0), fill="x", expand=True)
 
             ctk.CTkButton(
-                row, text="✏", width=28, height=24,
-                fg_color="#4a3310", hover_color="#d97706",
-                border_width=1, border_color="#f59e0b",
-                font=("Segoe UI", 11),
-                command=lambda n=name: self._edit_java(n)
+                row, text="✏", width=28,
+                font=theme.font("md"),
+                command=lambda n=name: self._edit_java(n),
+                **theme.btn_style("warning", height="sm")
             ).pack(side="right", padx=(2, 0))
 
             ctk.CTkButton(
-                row, text="🗑", width=28, height=24,
-                fg_color="#450a0a", hover_color="#dc2626",
-                border_width=1, border_color="#ef4444",
-                font=("Segoe UI", 11),
-                command=lambda n=name: self._delete_java(n)
+                row, text="🗑", width=28,
+                font=theme.font("md"),
+                command=lambda n=name: self._delete_java(n),
+                **theme.btn_style("danger_deep", height="sm")
             ).pack(side="right")
 
     def _auto_detect_java(self):
@@ -1250,13 +1206,13 @@ class PresetEditorDialog(ctk.CTkToplevel):
         data = preset_data or {}
 
         ctk.CTkLabel(self, text="🗄 Preset de Base de Datos",
-                     font=("Segoe UI", 14, "bold")).pack(pady=(15, 10))
+                     font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
         form = ctk.CTkFrame(self, fg_color="transparent")
         form.pack(fill="x", padx=20)
 
         # Name
-        ctk.CTkLabel(form, text="Nombre:", font=("Segoe UI", 11),
+        ctk.CTkLabel(form, text="Nombre:", font=theme.font("md"),
                      width=80, anchor="w").grid(row=0, column=0, pady=4, sticky="w")
         self._name_entry = ctk.CTkEntry(form, width=380)
         self._name_entry.grid(row=0, column=1, pady=4)
@@ -1264,7 +1220,7 @@ class PresetEditorDialog(ctk.CTkToplevel):
             self._name_entry.insert(0, preset_name)
 
         # URL
-        ctk.CTkLabel(form, text="URL:", font=("Segoe UI", 11),
+        ctk.CTkLabel(form, text="URL:", font=theme.font("md"),
                      width=80, anchor="w").grid(row=1, column=0, pady=4, sticky="w")
         self._url_entry = ctk.CTkEntry(form, width=380,
                                         placeholder_text="jdbc:mysql://host:3306/{db_name}")
@@ -1273,7 +1229,7 @@ class PresetEditorDialog(ctk.CTkToplevel):
             self._url_entry.insert(0, data['url'])
 
         # Username
-        ctk.CTkLabel(form, text="Usuario:", font=("Segoe UI", 11),
+        ctk.CTkLabel(form, text="Usuario:", font=theme.font("md"),
                      width=80, anchor="w").grid(row=2, column=0, pady=4, sticky="w")
         self._user_entry = ctk.CTkEntry(form, width=380)
         self._user_entry.grid(row=2, column=1, pady=4)
@@ -1281,7 +1237,7 @@ class PresetEditorDialog(ctk.CTkToplevel):
             self._user_entry.insert(0, data['username'])
 
         # Password
-        ctk.CTkLabel(form, text="Contraseña:", font=("Segoe UI", 11),
+        ctk.CTkLabel(form, text="Contraseña:", font=theme.font("md"),
                      width=80, anchor="w").grid(row=3, column=0, pady=4, sticky="w")
         self._pass_entry = ctk.CTkEntry(form, width=380, show="•")
         self._pass_entry.grid(row=3, column=1, pady=4)
@@ -1289,7 +1245,7 @@ class PresetEditorDialog(ctk.CTkToplevel):
             self._pass_entry.insert(0, data['password'])
 
         # Driver
-        ctk.CTkLabel(form, text="Driver:", font=("Segoe UI", 11),
+        ctk.CTkLabel(form, text="Driver:", font=theme.font("md"),
                      width=80, anchor="w").grid(row=4, column=0, pady=4, sticky="w")
         self._driver_entry = ctk.CTkEntry(form, width=380,
                                            placeholder_text="com.mysql.cj.jdbc.Driver")
@@ -1303,16 +1259,12 @@ class PresetEditorDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             btn_frame, text="💾 Guardar", width=120,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            command=self._save
+            command=self._save, **theme.btn_style("success")
         ).pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#1e293b", hover_color="#475569",
-            border_width=1, border_color="#64748b",
-            command=self.destroy
+            command=self.destroy, **theme.btn_style("neutral")
         ).pack(side="right")
 
     def _save(self):
@@ -1352,13 +1304,13 @@ class JavaVersionEditorDialog(ctk.CTkToplevel):
         self._on_save = on_save
 
         ctk.CTkLabel(self, text="☕ Configuración de Java",
-                     font=("Segoe UI", 14, "bold")).pack(pady=(15, 10))
+                     font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
         form = ctk.CTkFrame(self, fg_color="transparent")
         form.pack(fill="x", padx=20)
 
         # Name
-        ctk.CTkLabel(form, text="Nombre:", font=("Segoe UI", 11),
+        ctk.CTkLabel(form, text="Nombre:", font=theme.font("md"),
                      width=80, anchor="w").grid(row=0, column=0, pady=4, sticky="w")
         self._name_entry = ctk.CTkEntry(form, width=380, placeholder_text="Ej: Java 17 o Java 8 (Corretto)")
         self._name_entry.grid(row=0, column=1, pady=4, sticky="w", columnspan=2)
@@ -1366,7 +1318,7 @@ class JavaVersionEditorDialog(ctk.CTkToplevel):
             self._name_entry.insert(0, version_name)
 
         # Path (JAVA_HOME)
-        ctk.CTkLabel(form, text="Directorio:", font=("Segoe UI", 11),
+        ctk.CTkLabel(form, text="Directorio:", font=theme.font("md"),
                      width=80, anchor="w").grid(row=1, column=0, pady=4, sticky="w")
         self._path_entry = ctk.CTkEntry(form, width=330, placeholder_text="JAVA_HOME path (carpeta principal con /bin)")
         self._path_entry.grid(row=1, column=1, pady=4, sticky="w")
@@ -1381,9 +1333,7 @@ class JavaVersionEditorDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             form, text="📁", width=40,
-            fg_color="#172554", hover_color="#2563eb",
-            border_width=1, border_color="#3b82f6",
-            command=_browse_path
+            command=_browse_path, **theme.btn_style("blue")
         ).grid(row=1, column=2, padx=(10,0))
 
         # Buttons
@@ -1392,16 +1342,12 @@ class JavaVersionEditorDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             btn_frame, text="💾 Guardar", width=120,
-            fg_color="#064e3b", hover_color="#047857",
-            border_width=1, border_color="#10b981",
-            command=self._save
+            command=self._save, **theme.btn_style("success")
         ).pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            fg_color="#1e293b", hover_color="#475569",
-            border_width=1, border_color="#64748b",
-            command=self.destroy
+            command=self.destroy, **theme.btn_style("neutral")
         ).pack(side="right")
 
     def _save(self):
@@ -1431,12 +1377,13 @@ class JavaVersionEditorDialog(ctk.CTkToplevel):
 class RepoConfigManagerDialog(ctk.CTkToplevel):
     """Dialog to manage Env/App configurations for a repository."""
 
-    def __init__(self, parent, repo, config_key=None, log_callback=None, on_close_callback=None):
+    def __init__(self, parent, repo, config_key=None, log_callback=None, on_close_callback=None, source_dir=''):
         super().__init__(parent)
         self._repo = repo
         self._config_key = config_key if config_key else repo.name
         self._log = log_callback
         self._on_close = on_close_callback
+        self._source_dir = os.path.normpath(source_dir) if source_dir else ''
         
         self.title(f"⚙ Gestor de Entornos/Apps - {self._config_key}")
         self.geometry("850x600")
@@ -1453,10 +1400,10 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
         self._current_selected = None
         
         self._build_ui()
-        self._refresh_list()
-        
+
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
         self.grab_set()
+        self.after_idle(lambda: self.after_idle(self._refresh_list))
 
     def _build_ui(self):
         # Paneles principales
@@ -1468,23 +1415,19 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
         right_panel.pack(side="right", fill="both", expand=True, padx=10, pady=10)
         
         # --- Left Panel ---
-        ctk.CTkLabel(left_panel, text="Entornos Guardados", font=("Segoe UI", 14, "bold")).pack(pady=(15, 10))
+        ctk.CTkLabel(left_panel, text="Entornos Guardados", font=theme.font("h2", bold=True)).pack(pady=(15, 10))
         
         self._list_frame = ctk.CTkScrollableFrame(left_panel, fg_color="transparent")
         self._list_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        btn_style = {"height": 28, "font": ("Segoe UI", 12), "corner_radius": 6, "border_width": 1}
-        
         ctk.CTkButton(
             left_panel, text="➕ Nuevo",
-            fg_color="#172554", hover_color="#2563eb", border_color="#3b82f6",
-            command=self._cmd_new, **btn_style
+            command=self._cmd_new, **theme.btn_style("blue")
         ).pack(fill="x", padx=15, pady=(5, 5))
-        
+
         ctk.CTkButton(
             left_panel, text="📥 Auto-Importar",
-            fg_color="#4c1d95", hover_color="#6d28d9", border_color="#7c3aed",
-            command=self._cmd_auto_import, **btn_style
+            command=self._cmd_auto_import, **theme.btn_style("purple_alt")
         ).pack(fill="x", padx=15, pady=(0, 15))
         
         # --- Right Panel ---
@@ -1492,61 +1435,64 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
         header = ctk.CTkFrame(right_panel, fg_color="transparent")
         header.pack(fill="x", pady=(0, 10))
         
-        ctk.CTkLabel(header, textvariable=self._title_var, font=("Segoe UI", 16, "bold")).pack(side="left")
-        
+        ctk.CTkLabel(header, textvariable=self._title_var, font=theme.font("h2", bold=True)).pack(side="left")
+
         self._actions_frame = ctk.CTkFrame(header, fg_color="transparent")
         self._actions_frame.pack(side="right")
-        
+
         self._btn_rename = ctk.CTkButton(
             self._actions_frame, text="✏️ Renombrar", width=90,
-            fg_color="#1e293b", hover_color="#475569", border_color="#64748b",
-            command=self._cmd_rename, state="disabled", **btn_style
+            command=self._cmd_rename, state="disabled",
+            **theme.btn_style("neutral")
         )
         self._btn_rename.pack(side="left", padx=3)
-        
+
         self._btn_duplicate = ctk.CTkButton(
             self._actions_frame, text="📄 Duplicar", width=80,
-            fg_color="#1e293b", hover_color="#475569", border_color="#64748b",
-            command=self._cmd_duplicate, state="disabled", **btn_style
+            command=self._cmd_duplicate, state="disabled",
+            **theme.btn_style("neutral")
         )
         self._btn_duplicate.pack(side="left", padx=3)
-        
+
         self._btn_delete = ctk.CTkButton(
             self._actions_frame, text="🗑 Eliminar", width=80,
-            fg_color="#4c1616", hover_color="#dc2626", border_color="#ef4444",
-            command=self._cmd_delete, state="disabled", **btn_style
+            command=self._cmd_delete, state="disabled",
+            **theme.btn_style("danger")
         )
         self._btn_delete.pack(side="left", padx=3)
-        
+
         # Editor
         self._editor = ctk.CTkTextbox(
-            right_panel, font=("Consolas", 12),
-            wrap="none", corner_radius=6, border_width=1, border_color="#3b3768"
+            right_panel, font=theme.font("base", mono=True),
+            wrap="none", corner_radius=theme.G.corner_btn,
+            border_width=theme.G.border_width, border_color=theme.C.card_border
         )
         self._editor.pack(fill="both", expand=True, pady=(0, 10))
         self._editor.configure(state="disabled")
-        
+
         # Save btn
         self._btn_save = ctk.CTkButton(
-            right_panel, text="💾 Guardar Cambios en Entorno", height=32,
-            font=("Segoe UI", 14, "bold"), corner_radius=6,
-            fg_color="#064e3b", hover_color="#047857", border_width=1, border_color="#10b981",
-            command=self._cmd_save_text, state="disabled"
+            right_panel, text="💾 Guardar Cambios en Entorno",
+            font=theme.font("xl", bold=True),
+            command=self._cmd_save_text, state="disabled",
+            **theme.btn_style("success")
         )
         self._btn_save.pack(side="right")
         
     def _refresh_list(self):
         for widget in self._list_frame.winfo_children():
             widget.destroy()
-            
+
+        _blue = theme.btn_style("blue")
         for name in sorted(self._configs.keys()):
-            color = "#3b82f6" if name == self._current_selected else "transparent"
+            fg = _blue["fg_color"] if name == self._current_selected else "transparent"
             btn = ctk.CTkButton(
                 self._list_frame, text=name, anchor="w",
-                fg_color=color, hover_color="#2563eb",
+                fg_color=fg, hover_color=_blue["hover_color"],
                 command=lambda n=name: self._select_config(n)
             )
             btn.pack(fill="x", pady=2)
+        self.update_idletasks()
             
     def _select_config(self, name: str):
         if self._current_selected and self._current_selected != name:
@@ -1650,26 +1596,41 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
             self._select_config(None)
 
     def _cmd_auto_import(self):
+        env_files = getattr(self._repo, 'environment_files', [])
+        if not env_files:
+            messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")
+            return
+
+        # Filter to source_dir when available, otherwise use all env files
+        if self._source_dir:
+            selected_files = [f for f in env_files if os.path.normpath(os.path.dirname(f)) == self._source_dir]
+        else:
+            selected_files = env_files
+
+        if not selected_files:
+            messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")
+            return
+
         from core.config_manager import auto_import_configs
         imported = auto_import_configs(
-            self._repo.path, 
-            self._repo.repo_type, 
-            environment_files=getattr(self._repo, 'environment_files', [])
+            self._repo.path,
+            self._repo.repo_type,
+            environment_files=selected_files,
         )
         if not imported:
             messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")
             return
-            
+
         added = 0
         for k, v in imported.items():
             if k not in self._configs:
                 self._configs[k] = v
                 added += 1
-                
+
         if added > 0:
             self._persist_to_db()
-            messagebox.showinfo("Auto-Import", f"Se han importado {added} configuraciones correctamente.")
             self._refresh_list()
+            messagebox.showinfo("Auto-Import", f"Se han importado {added} configuraciones correctamente.")
         else:
             messagebox.showinfo("Auto-Import", "No hay configuraciones nuevas que importar (las encontradas ya existen).")
             
@@ -1689,17 +1650,20 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
 class DockerComposeDialog(ctk.CTkToplevel):
     """Dialog to manage individual services within a docker-compose file."""
 
-    def __init__(self, parent, compose_file: str, log_callback=None, on_status_change=None):
+    def __init__(self, parent, compose_file: str, log_callback=None, on_status_change=None,
+                 profile_services=None, on_profile_change=None):
         super().__init__(parent)
         self.title(f"Docker Compose - {os.path.basename(compose_file)}")
-        self.geometry("800x600")
-        self.minsize(600, 400)
+        self.geometry("900x620")
+        self.minsize(660, 420)
         self.transient(parent)
         self.grab_set()
 
         self._compose_file = compose_file
         self._log = log_callback
         self._on_status_change = on_status_change
+        self._on_profile_change = on_profile_change
+        self._profile_services = set(profile_services or [])
         self._auto_refresh = True
         self._services = []
         self._service_rows = {}
@@ -1719,7 +1683,7 @@ class DockerComposeDialog(ctk.CTkToplevel):
         header.pack(fill="x", padx=15, pady=(15, 5))
 
         ctk.CTkLabel(header, text="Servicios Definidos",
-                     font=(FONT_FAMILY, 16, "bold")).pack(side="left")
+                     font=theme.font("h2", bold=True)).pack(side="left")
 
         # Global Actions
         actions = ctk.CTkFrame(header, fg_color="transparent")
@@ -1728,19 +1692,17 @@ class DockerComposeDialog(ctk.CTkToplevel):
         self._auto_refresh_var = ctk.BooleanVar(value=True)
         ctk.CTkSwitch(
             actions, text="Auto-Refresh", variable=self._auto_refresh_var,
-            command=self._toggle_auto_refresh, font=(FONT_FAMILY, 11)
+            command=self._toggle_auto_refresh, font=theme.font("md")
         ).pack(side="left", padx=10)
 
         ctk.CTkButton(
-            actions, text="Iniciar Todos", width=110, height=28,
-            fg_color="#064e3b", hover_color="#047857",
-            command=self._start_all
+            actions, text="Iniciar Todos", width=110,
+            command=self._start_all, **theme.btn_style("success")
         ).pack(side="left", padx=5)
 
         ctk.CTkButton(
-            actions, text="Detener Todos", width=110, height=28,
-            fg_color="#450a0a", hover_color="#dc2626",
-            command=self._stop_all
+            actions, text="Detener Todos", width=110,
+            command=self._stop_all, **theme.btn_style("danger_deep")
         ).pack(side="left")
 
         # Services List
@@ -1750,7 +1712,7 @@ class DockerComposeDialog(ctk.CTkToplevel):
         if not self._services:
             ctk.CTkLabel(self._list_frame,
                          text="No se encontraron servicios en el YAML.",
-                         text_color="#ef4444").pack(pady=20)
+                         text_color=theme.C.status_error).pack(pady=20)
 
         for srv in self._services:
             self._build_service_row(srv)
@@ -1761,25 +1723,25 @@ class DockerComposeDialog(ctk.CTkToplevel):
 
         self._logs_title = ctk.CTkLabel(
             logs_header, text="Logs: (Seleccione un servicio)",
-            font=(FONT_FAMILY, 12, "bold"))
+            font=theme.font("base", bold=True))
         self._logs_title.pack(side="left")
 
         ctk.CTkButton(
-            logs_header, text="Limpiar", width=60, height=24,
-            fg_color="#334155", hover_color="#475569",
-            command=self._clear_logs
+            logs_header, text="Limpiar", width=60,
+            command=self._clear_logs, **theme.btn_style("neutral_alt", height="sm")
         ).pack(side="right")
 
         self._btn_refresh_logs = ctk.CTkButton(
-            logs_header, text="Recargar Logs", width=100, height=24,
-            fg_color="#1e293b", hover_color="#334155",
-            command=self._refresh_selected_logs, state="disabled"
+            logs_header, text="Recargar Logs", width=100,
+            command=self._refresh_selected_logs, state="disabled",
+            **theme.btn_style("neutral", height="sm")
         )
         self._btn_refresh_logs.pack(side="right", padx=5)
 
         self._logs_box = ctk.CTkTextbox(
-            self, font=("Consolas", 11), height=150,
-            corner_radius=6, border_width=1, border_color="#334155"
+            self, font=theme.font("md", mono=True), height=150,
+            corner_radius=theme.G.corner_btn, border_width=theme.G.border_width,
+            border_color=theme.C.subtle_border
         )
         self._logs_box.pack(fill="x", padx=15, pady=(5, 15))
         self._logs_box.configure(state="disabled")
@@ -1789,14 +1751,14 @@ class DockerComposeDialog(ctk.CTkToplevel):
     def _build_service_row(self, srv: dict):
         name = srv['name']
 
-        row = ctk.CTkFrame(self._list_frame, corner_radius=6,
-                           border_width=1, border_color="#1e293b",
-                           fg_color="#0f172a")
+        row = ctk.CTkFrame(self._list_frame, corner_radius=theme.G.corner_btn,
+                           border_width=theme.G.border_width, border_color=theme.C.subtle_border,
+                           fg_color=theme.C.section_alt)
         row.pack(fill="x", pady=3, padx=5)
 
         # Status indicator
-        lbl_status = ctk.CTkLabel(row, text="--", text_color="#64748b",
-                                  width=20, font=(FONT_FAMILY, 14))
+        lbl_status = ctk.CTkLabel(row, text="--", text_color=theme.C.text_faint,
+                                  width=20, font=theme.font("xl"))
         lbl_status.pack(side="left", padx=10)
 
         # Info
@@ -1804,40 +1766,66 @@ class DockerComposeDialog(ctk.CTkToplevel):
         info_frame.pack(side="left", fill="both", expand=True, pady=5)
 
         ctk.CTkLabel(info_frame, text=name,
-                     font=(FONT_FAMILY, 13, "bold"),
-                     text_color="#e2e8f0").pack(anchor="w")
+                     font=theme.font("lg", bold=True),
+                     text_color=theme.C.text_primary).pack(anchor="w")
 
         details = f"Image: {srv.get('image', 'unknown')}"
         if srv.get('ports'):
             details += f" | Ports: {', '.join(srv.get('ports'))}"
 
         ctk.CTkLabel(info_frame, text=details,
-                     font=(FONT_FAMILY, 10),
-                     text_color="#94a3b8").pack(anchor="w")
+                     font=theme.font("sm"),
+                     text_color=theme.C.text_muted).pack(anchor="w")
+
+        # Profile checkbox
+        profile_var = ctk.BooleanVar(value=name in self._profile_services)
+        profile_cb = ctk.CTkCheckBox(
+            row, text="Perfil", variable=profile_var, width=70,
+            font=theme.font("md"), text_color=theme.C.text_muted,
+            fg_color=theme.C.docker_border_active, hover_color=theme.C.docker_border_active,
+            command=lambda n=name, v=profile_var: self._on_profile_checkbox(n, v)
+        )
+        profile_cb.pack(side="right", padx=(0, 6))
 
         # Action Buttons
         btn_frame = ctk.CTkFrame(row, fg_color="transparent")
         btn_frame.pack(side="right", padx=10)
 
         ctk.CTkButton(
-            btn_frame, text="Start", width=50, height=28,
-            fg_color="#064e3b", hover_color="#047857",
-            command=lambda n=name: self._start_service(n)
+            btn_frame, text="Start", width=50,
+            command=lambda n=name: self._start_service(n),
+            **theme.btn_style("success")
         ).pack(side="left", padx=2)
 
         ctk.CTkButton(
-            btn_frame, text="Stop", width=50, height=28,
-            fg_color="#450a0a", hover_color="#dc2626",
-            command=lambda n=name: self._stop_service(n)
+            btn_frame, text="Stop", width=50,
+            command=lambda n=name: self._stop_service(n),
+            **theme.btn_style("danger_deep")
         ).pack(side="left", padx=2)
 
         ctk.CTkButton(
-            btn_frame, text="Logs", width=50, height=28,
-            fg_color="#334155", hover_color="#475569",
-            command=lambda n=name: self._view_logs(n)
+            btn_frame, text="Logs", width=50,
+            command=lambda n=name: self._view_logs(n),
+            **theme.btn_style("neutral_alt")
         ).pack(side="left", padx=(10, 0))
 
-        self._service_rows[name] = {"status_lbl": lbl_status}
+        self._service_rows[name] = {"status_lbl": lbl_status, "profile_var": profile_var}
+
+    def _on_profile_checkbox(self, name: str, var: ctk.BooleanVar):
+        if var.get():
+            self._profile_services.add(name)
+        else:
+            self._profile_services.discard(name)
+        if self._on_profile_change:
+            self._on_profile_change(self._compose_file, list(self._profile_services))
+
+    def _check_docker_daemon(self) -> bool:
+        from core.db_manager import is_docker_available
+        if not is_docker_available():
+            if self._log:
+                self._log("[docker] Docker no está disponible. Asegúrate de que Docker Desktop esté en ejecución.")
+            return False
+        return True
 
     def _refresh_status(self):
         if not self._services:
@@ -1853,10 +1841,10 @@ class DockerComposeDialog(ctk.CTkToplevel):
                 for sname, widgets in self._service_rows.items():
                     state = status_map.get(sname, "stopped")
                     if state == "running":
-                        color = "#22c55e"
+                        color = theme.C.status_running
                         icon = "ON"
                     else:
-                        color = "#64748b"
+                        color = theme.C.status_stopped
                         icon = "OFF"
                     widgets["status_lbl"].configure(text=icon, text_color=color)
 
@@ -1880,6 +1868,8 @@ class DockerComposeDialog(ctk.CTkToplevel):
         self._auto_refresh = self._auto_refresh_var.get()
 
     def _start_service(self, name: str):
+        if not self._check_docker_daemon():
+            return
         if self._log:
             self._log(f"Iniciando servicio: {name}")
 
@@ -1890,6 +1880,8 @@ class DockerComposeDialog(ctk.CTkToplevel):
         threading.Thread(target=_run, daemon=True).start()
 
     def _stop_service(self, name: str):
+        if not self._check_docker_daemon():
+            return
         if self._log:
             self._log(f"Deteniendo servicio: {name}")
 
@@ -1900,6 +1892,8 @@ class DockerComposeDialog(ctk.CTkToplevel):
         threading.Thread(target=_run, daemon=True).start()
 
     def _start_all(self):
+        if not self._check_docker_daemon():
+            return
         if self._log:
             self._log("Iniciando todos los servicios del compose")
 
@@ -1910,6 +1904,8 @@ class DockerComposeDialog(ctk.CTkToplevel):
         threading.Thread(target=_run, daemon=True).start()
 
     def _stop_all(self):
+        if not self._check_docker_daemon():
+            return
         if self._log:
             self._log("Deteniendo todos los servicios del compose")
 

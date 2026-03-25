@@ -13,11 +13,7 @@ import re
 from datetime import datetime
 
 from gui.tooltip import ToolTip
-
-
-# ── Font constants ──────────────────────────────────────────────
-FONT_FAMILY = "Segoe UI"
-FONT_MONO = "Consolas"
+from gui import theme
 
 # ── String constants ────────────────────────────────────────────
 NO_DB_PRESET = "- Ninguna (Local) -"
@@ -25,27 +21,6 @@ REINSTALL_LBL = "Reinstall ✓"
 BTN_CLICK = "<Button-1>"
 BTN_CONFIG_TEXT = "⚙ Config"
 BTN_CONFIG_TOOLTIP = "Editar configuración"
-
-COLORS = {
-    'running': '#22c55e',
-    'starting': '#f59e0b',
-    'stopped': '#6b7280',
-    'error': '#ef4444',
-}
-
-STATUS_ICONS = {
-    'running': '#22c55e', # Green
-    'starting': '#eab308', # Yellow
-    'stopped': '#6b7280', # Gray
-    'error': '#ef4444', # Red
-    'logging': '#f97316', # Orange
-}
-
-# ── Card colors ─────────────────────────────────────────────────
-CARD_BG = "#16132e"
-CARD_HOVER = "#1c1940"
-CARD_BORDER = "#3b3768"
-EXPAND_BG = "#120f28"
 
 PORT_REGEXES = [
     re.compile(r"Tomcat (?:started on|initialized with) port.*?(\d+)", re.IGNORECASE),
@@ -74,9 +49,9 @@ class RepoCard(ctk.CTkFrame):
 
     def __init__(self, parent, repo_info, service_launcher, db_presets=None,
                  java_versions=None, log_callback=None, on_edit_config=None, on_change_callback=None, **kwargs):
-        super().__init__(parent, corner_radius=10, border_width=1,
-                         border_color=CARD_BORDER,
-                         fg_color=CARD_BG, **kwargs)
+        super().__init__(parent, corner_radius=theme.G.corner_card, border_width=theme.G.border_width,
+                         border_color=theme.C.card_border,
+                         fg_color=theme.C.card, **kwargs)
 
         self._repo = repo_info
         self._launcher = service_launcher
@@ -97,6 +72,7 @@ class RepoCard(ctk.CTkFrame):
         
         self._active_compose_files = set()
         self._docker_compose_buttons = {}
+        self._docker_profile_services: dict = {}   # compose_file -> [service_names]
         self._compose_status_thread_running = False
         self._compose_stop_event = threading.Event()
         self._badge_timer = None
@@ -198,7 +174,7 @@ class RepoCard(ctk.CTkFrame):
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_hover_enter(self, event=None):
-        self._header.configure(fg_color=CARD_HOVER)
+        self._header.configure(fg_color=theme.C.card_hover)
 
     def _on_hover_leave(self, event=None):
         self._header.configure(fg_color="transparent")
@@ -237,8 +213,8 @@ class RepoCard(ctk.CTkFrame):
         # Status dot
         self._status_label = ctk.CTkLabel(
             self._header, text="🔴",
-            font=(FONT_FAMILY, 15), width=30,
-            text_color=STATUS_ICONS.get('stopped', '#6b7280')
+            font=theme.font("xl"), width=30,
+            text_color=theme.STATUS_ICONS.get('stopped', theme.C.status_stopped)
         )
         self._status_label.pack(side="left", padx=(0, 6))
         self._status_label.bind(BTN_CLICK, self._toggle_expand)
@@ -247,16 +223,16 @@ class RepoCard(ctk.CTkFrame):
         ctk.CTkLabel(
             self._header,
             text=f" {repo.repo_type.replace('-', ' ').title()} ",
-            font=(FONT_FAMILY, 10, "bold"),
-            text_color="#fff", fg_color=type_color,
-            corner_radius=4, height=18
+            font=theme.font("xs", bold=True),
+            text_color=theme.C.text_white, fg_color=type_color,
+            corner_radius=theme.G.corner_badge, height=18
         ).pack(side="left", padx=(0, 8))
 
         # Name
         name_label = ctk.CTkLabel(
             self._header, text=f"{repo.ui_config.get('icon', '📁')} {repo.name}",
-            font=(FONT_FAMILY, 14, "bold"), anchor="w",
-            text_color="#e0e7ff"
+            font=theme.font("h2", bold=True), anchor="w",
+            text_color=theme.C.text_primary
         )
         name_label.pack(side="left")
         name_label.bind(BTN_CLICK, self._toggle_expand)
@@ -267,7 +243,7 @@ class RepoCard(ctk.CTkFrame):
         # Unsaved changes badge
         self._changes_count_label = ctk.CTkLabel(
             self._header, text="",
-            font=(FONT_FAMILY, 11, "bold"), text_color="#facc15"
+            font=theme.font("md", bold=True), text_color=theme.C.text_warning_badge
         )
         self._changes_count_label.pack(side="left", padx=(4, 4))
         ToolTip(self._changes_count_label, "Ficheros modificados sin guardar en el directorio vinculados al repo.")
@@ -275,7 +251,7 @@ class RepoCard(ctk.CTkFrame):
         # Branch + profile hints (grey, right of name)
         self._branch_hint = ctk.CTkLabel(
             self._header, text="",
-            font=(FONT_MONO, 10), text_color="#6b7280", anchor="w"
+            font=theme.font("xs", mono=True), text_color=theme.C.text_faint, anchor="w"
         )
         self._branch_hint.pack(side="left", padx=(6, 0), fill="x", expand=True)
         self._branch_hint.bind(BTN_CLICK, self._toggle_expand)
@@ -283,44 +259,35 @@ class RepoCard(ctk.CTkFrame):
         # Status text
         self._status_text = ctk.CTkLabel(
             self._header, text="Detenido",
-            font=(FONT_FAMILY, 12), text_color="#94a3b8"
+            font=theme.font("base"), text_color=theme.C.text_muted
         )
         self._status_text.pack(side="left", padx=(0, 4))
 
         if repo.server_port:
             ctk.CTkLabel(
                 self._header, text=f":{repo.server_port}",
-                font=(FONT_MONO, 11, "bold"), text_color="#6366f1"
+                font=theme.font("md", bold=True, mono=True), text_color=theme.C.text_accent
             ).pack(side="left", padx=(0, 8))
 
         # Main action buttons
         self._action_btns_frame = ctk.CTkFrame(self._header, fg_color="transparent")
         self._action_btns_frame.pack(side="left", padx=(0, 4))
 
-        btn_style = {"height": 28, "font": (FONT_FAMILY, 13), "corner_radius": 6,
-                     "border_width": 1}
-
         self._start_btn = ctk.CTkButton(
             self._action_btns_frame, text="▶", width=32,
-            fg_color="#144d28", hover_color="#16a34a",
-            border_color="#22c55e",
-            command=self._start, **btn_style
+            command=self._start, **theme.btn_style("start", font_size="lg")
         )
         ToolTip(self._start_btn, "Iniciar servicio")
 
         self._stop_btn = ctk.CTkButton(
             self._action_btns_frame, text="⬛", width=32,
-            fg_color="#4c1616", hover_color="#dc2626",
-            border_color="#ef4444",
-            command=self._stop, **btn_style
+            command=self._stop, **theme.btn_style("danger", font_size="lg")
         )
         ToolTip(self._stop_btn, "Detener servicio")
 
         self._restart_btn = ctk.CTkButton(
             self._action_btns_frame, text="🔄", width=32,
-            fg_color="#4a3310", hover_color="#d97706",
-            border_color="#f59e0b",
-            command=self._restart, **btn_style
+            command=self._restart, **theme.btn_style("warning", font_size="lg")
         )
         ToolTip(self._restart_btn, "Reiniciar servicio")
 
@@ -328,15 +295,37 @@ class RepoCard(ctk.CTkFrame):
 
         # Expand toggle
         self._toggle_btn = ctk.CTkButton(
-            self._header, text="▼", width=28, height=28,
-            font=(FONT_FAMILY, 11),
-            fg_color="transparent", hover_color="#312e81",
-            text_color="#818cf8",
-            border_width=1, border_color="#4338ca",
-            corner_radius=6, command=self._toggle_expand
+            self._header, text="▼", width=28,
+            text_color=theme.C.text_accent_bright,
+            command=self._toggle_expand, **theme.btn_style("toggle_expand", font_size="md")
         )
         self._toggle_btn.pack(side="right", padx=(4, 2))
         ToolTip(self._toggle_btn, "Expandir / Colapsar opciones")
+
+        # Open in Explorer
+        self._explorer_btn = ctk.CTkButton(
+            self._header, text="📁", width=28,
+            command=self._open_in_explorer, **theme.btn_style("neutral", font_size="md")
+        )
+        self._explorer_btn.pack(side="right", padx=(4, 2))
+        ToolTip(self._explorer_btn, "Abrir en el explorador")
+
+    def _open_in_explorer(self):
+        import os
+        import sys
+        import subprocess
+        
+        path = self._repo.path
+        try:
+            if os.name == 'nt':
+                os.startfile(path)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', path])
+            else:
+                subprocess.Popen(['xdg-open', path])
+        except Exception as e:
+            if hasattr(self, '_global_log') and self._global_log:
+                self._global_log(f"Error opening explorer: {e}", level="error")
 
     def _update_button_visibility(self):
         """Show only relevant action buttons based on status."""
@@ -415,10 +404,11 @@ class RepoCard(ctk.CTkFrame):
                     break
                     
         if not is_installed and self._repo.run_install_cmd:
-            deps_text = install_cfg.get('status_label_deps_missing', '❌ Faltan deps')
+            deps_text = install_cfg.get('status_label_deps_missing', '⚠ Falta instalar')
             parts.insert(0, deps_text)
-
-        self._branch_hint.configure(text="   ".join(parts))
+            self._branch_hint.configure(text="   ".join(parts), text_color=theme.C.text_warning_badge)
+        else:
+            self._branch_hint.configure(text="   ".join(parts), text_color=theme.C.text_faint)
 
     def install_dependencies(self, skip_if_installed=False):
         """Method to trigger dependency installation via YAML commands."""
@@ -450,9 +440,9 @@ class RepoCard(ctk.CTkFrame):
         repo = self._repo
 
         # corner_radius para encajar bien sin tapar las esquinas del padre
-        self._expand_panel = ctk.CTkFrame(self, fg_color=EXPAND_BG, corner_radius=8)
+        self._expand_panel = ctk.CTkFrame(self, fg_color=theme.C.expand_panel, corner_radius=theme.G.corner_panel)
 
-        ctk.CTkFrame(self._expand_panel, height=1, fg_color="#312e81").pack(fill="x", padx=10)
+        ctk.CTkFrame(self._expand_panel, height=1, fg_color=theme.C.divider).pack(fill="x", padx=10)
 
         content = ctk.CTkFrame(self._expand_panel, fg_color="transparent")
         content.pack(fill="x", padx=12, pady=(4, 4))
@@ -462,7 +452,10 @@ class RepoCard(ctk.CTkFrame):
         # Row 2: Conditional selectors
         self._build_selector_row(content, repo)
         # Row 3: Custom start command
-        self._build_command_row(content, repo)
+        if repo.repo_type != 'docker-infra':
+            self._build_command_row(content, repo)
+        # Row 3.5: Docker Checkboxes (Below Cmd)
+        self._build_docker_row(content, repo)
         # Row 4: Logs
         self._build_log_row(content)
 
@@ -474,31 +467,23 @@ class RepoCard(ctk.CTkFrame):
         header = ctk.CTkFrame(self._log_frame, fg_color="transparent")
         header.pack(fill="x")
         
-        ctk.CTkLabel(header, text="📋 Logs del Repositorio", font=(FONT_FAMILY, 12, "bold"), text_color="#c7d2fe").pack(side="left")
-        
+        ctk.CTkLabel(header, text="📋 Logs del Repositorio", font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
+
         clear_btn = ctk.CTkButton(
-            header, text="🗑 Limpiar", width=60, height=24,
-            font=(FONT_FAMILY, 10),
-            fg_color="#1e1b4b", hover_color="#312e81",
-            border_width=1, border_color="#4338ca",
-            command=self._clear_logs
+            header, text="🗑 Limpiar", width=60,
+            command=self._clear_logs, **theme.btn_style("log_action", height="sm")
         )
         clear_btn.pack(side="right")
-        
+
         detach_btn = ctk.CTkButton(
-            header, text="🗗 Desacoplar", width=80, height=24,
-            font=(FONT_FAMILY, 10),
-            fg_color="#1e1b4b", hover_color="#312e81",
-            border_width=1, border_color="#4338ca",
-            command=self._detach_logs
+            header, text="🗗 Desacoplar", width=80,
+            command=self._detach_logs, **theme.btn_style("log_action", height="sm")
         )
         detach_btn.pack(side="right", padx=(0, 6))
-        
+
         self._log_textbox = ctk.CTkTextbox(
-            self._log_frame, height=120, font=(FONT_MONO, 11),
-            corner_radius=6, border_width=1,
-            border_color="#3b3768", fg_color="#0f0e26",
-            text_color="#e0e7ff", state="disabled"
+            self._log_frame, height=120,
+            state="disabled", **theme.log_textbox_style()
         )
         self._log_textbox.pack(fill="x", pady=(4, 0))
         
@@ -526,15 +511,25 @@ class RepoCard(ctk.CTkFrame):
         self._detached_log_window = ctk.CTkToplevel(self)
         self._detached_log_window.title(f"Logs - {self._repo.name}")
         self._detached_log_window.geometry("800x600")
-        
+
+        # Set window icon (green if running/starting, red otherwise)
+        try:
+            app_dir = getattr(self.winfo_toplevel(), '_app_dir', None)
+            if app_dir:
+                _icon_color = "green" if self._status in ('running', 'starting') else "red"
+                _icon_path = os.path.join(app_dir, f"icon_{_icon_color}.ico")
+                if os.path.exists(_icon_path):
+                    self._detached_log_window.after(200, lambda p=_icon_path: self._detached_log_window.iconbitmap(p))
+        except Exception:
+            pass
+
         # Bring window to front
         self.after(100, lambda: self._detached_log_window.lift())
         self.after(110, lambda: self._detached_log_window.focus_force())
         
         self._detached_log_textbox = ctk.CTkTextbox(
-            self._detached_log_window, font=(FONT_MONO, 12),
-            corner_radius=0, border_width=0,
-            fg_color="#0f0e26", text_color="#e0e7ff"
+            self._detached_log_window,
+            **theme.log_textbox_style(detached=True)
         )
         self._detached_log_textbox.pack(fill="both", expand=True)
         
@@ -597,11 +592,11 @@ class RepoCard(ctk.CTkFrame):
         if hasattr(self, '_log_flash_timer') and self._log_flash_timer:
             self.after_cancel(self._log_flash_timer)
 
-        self._status_label.configure(text="🔴", text_color=STATUS_ICONS.get('logging', '#f97316'))
+        self._status_label.configure(text="🔴", text_color=theme.STATUS_ICONS.get('logging', theme.C.status_logging))
 
         def _revert():
             if hasattr(self, '_status_label') and hasattr(self, '_status'):
-                self._status_label.configure(text="🔴", text_color=STATUS_ICONS.get(self._status, '#6b7280'))
+                self._status_label.configure(text="🔴", text_color=theme.STATUS_ICONS.get(self._status, theme.C.status_stopped))
             self._log_flash_timer = None
 
         self._log_flash_timer = self.after(3000, _revert)
@@ -611,16 +606,13 @@ class RepoCard(ctk.CTkFrame):
         row1 = ctk.CTkFrame(content, fg_color="transparent")
         row1.pack(fill="x")
 
-        ctk.CTkLabel(row1, text="Rama:", font=(FONT_FAMILY, 13),
-                     text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
+        ctk.CTkLabel(row1, text="Rama:", font=theme.font("lg"),
+                     text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
 
         initial_branches = self._branches_cache if getattr(self, '_branches_cache', None) else ["cargando..."]
         self._branch_combo = ctk.CTkComboBox(
-            row1, values=initial_branches,
-            width=180, height=28, font=(FONT_FAMILY, 12),
-            corner_radius=6, fg_color="#1e1b4b",
-            border_color="#4338ca", button_color="#4338ca",
-            command=self._on_branch_change
+            row1, values=initial_branches, width=180,
+            command=self._on_branch_change, **theme.combo_style()
         )
         if getattr(self, '_current_branch', None):
             self._branch_combo.set(self._current_branch)
@@ -630,27 +622,20 @@ class RepoCard(ctk.CTkFrame):
             text = self._branch_combo.get().lower()
             filtered = [b for b in self._branches_cache if text in b.lower()]
             self._branch_combo.configure(values=filtered if filtered else self._branches_cache)
-        
+
         self._branch_combo.bind("<KeyRelease>", _on_branch_type)
 
         search_btn = ctk.CTkButton(
-            row1, text="🔍", width=28, height=28,
-            fg_color="#1e1b4b", hover_color="#312e81",
-            border_width=1, border_color="#4338ca",
-            corner_radius=6, command=self._fetch_branches
+            row1, text="🔍", width=28,
+            command=self._fetch_branches, **theme.btn_style("log_action")
         )
         search_btn.pack(side="left", padx=(0, 10))
         ToolTip(search_btn, "Buscar ramas remotas (fetch)")
 
-        sec_btn_style = {"height": 28, "font": (FONT_FAMILY, 12), "corner_radius": 6,
-                         "border_width": 1}
-
         # Pull
         self._pull_btn = ctk.CTkButton(
             row1, text="⬇ Pull", width=65,
-            fg_color="#172554", hover_color="#2563eb",
-            border_color="#3b82f6",
-            command=self._pull, **sec_btn_style
+            command=self._pull, **theme.btn_style("blue")
         )
         self._pull_btn.pack(side="left", padx=(0, 3))
         ToolTip(self._pull_btn, "Descargar cambios (git pull)")
@@ -658,44 +643,37 @@ class RepoCard(ctk.CTkFrame):
         # Clean
         self._clean_btn = ctk.CTkButton(
             row1, text="🧹 Limpiar", width=80,
-            fg_color="#4c1d95", hover_color="#6d28d9",
-            border_color="#7c3aed",
-            command=self._clean_repo, **sec_btn_style
+            command=self._clean_repo, **theme.btn_style("purple")
         )
         self._clean_btn.pack(side="left", padx=(0, 3))
         ToolTip(self._clean_btn, "Limpiar ficheros no commiteados y reestablecer cambios")
 
         # Config
-        if not repo.environment_files:
+        if not repo.environment_files and repo.repo_type != 'docker-infra':
             edit_btn = ctk.CTkButton(
                 row1, text=BTN_CONFIG_TEXT, width=80,
-                fg_color="#1e293b", hover_color="#475569",
-                border_color="#64748b",
-                command=self._edit_config, **sec_btn_style
+                command=self._edit_config, **theme.btn_style("neutral")
             )
             edit_btn.pack(side="left")
             ToolTip(edit_btn, BTN_CONFIG_TOOLTIP)
 
         # Right-aligned frame for install buttons
-        self.right_frame = ctk.CTkFrame(row1, fg_color="transparent")
+        self.right_frame = ctk.CTkFrame(row1, fg_color="transparent", width=0, height=0)
         self.right_frame.pack(side="right", padx=(10, 0))
-        self.btn_style = sec_btn_style # Store for reuse
 
         # Install Button
-        self._build_install_btn(self.right_frame, self.btn_style)
+        self._build_install_btn(self.right_frame)
 
         # Seed
         if repo.has_seeds or ('docker_checkboxes' in repo.features and repo.has_database):
             seed_btn = ctk.CTkButton(
                 row1, text="🌱 Seed", width=70,
-                fg_color="#2e1065", hover_color="#9333ea",
-                border_color="#a855f7",
-                command=self._seed, **sec_btn_style
+                command=self._seed, **theme.btn_style("purple_global")
             )
             seed_btn.pack(side="left", padx=(0, 3))
             ToolTip(seed_btn, "Ejecutar seeds de BD")
 
-    def _build_install_btn(self, parent, style):
+    def _build_install_btn(self, parent):
         """Build the general install button (Install or Reinstall) based on UI Config."""
         repo = self._repo
         path = repo.path
@@ -731,20 +709,14 @@ class RepoCard(ctk.CTkFrame):
         
         if is_installed:
             btn_text = install_cfg.get('label_ok', REINSTALL_LBL)
-            fg_color = "#334155"
-            border_color = "#64748b"
-            hover_color = "#475569"
+            _variant = "neutral_alt"
         else:
             btn_text = install_cfg.get('label_missing', "Install")
-            fg_color = "#7f1d1d" 
-            border_color = "#b91c1c"
-            hover_color = "#991b1b"
+            _variant = "danger_alt"
 
         self._install_btn = ctk.CTkButton(
             parent, text=btn_text, width=100,
-            fg_color=fg_color, hover_color=hover_color,
-            border_color=border_color,
-            command=self._run_install_cmd, **style
+            command=self._run_install_cmd, **theme.btn_style(_variant)
         )
         self._install_btn.pack(side="left", padx=(0, 6))
         self._install_tooltip = ToolTip(self._install_btn, tooltip_text)
@@ -755,11 +727,9 @@ class RepoCard(ctk.CTkFrame):
         row2 = ctk.CTkFrame(content, fg_color="transparent")
         has_row2 = False
 
-        combo_style = {"height": 28, "font": (FONT_FAMILY, 12), "corner_radius": 6,
-                       "fg_color": "#1e1b4b", "border_color": "#4338ca",
-                       "button_color": "#4338ca"}
+        combo_style = theme.combo_style()
 
-        if repo.environment_files:
+        if repo.environment_files and repo.repo_type != 'docker-infra':
             has_row2 = True
             from core.config_manager import load_repo_configs, load_active_config
             
@@ -820,8 +790,8 @@ class RepoCard(ctk.CTkFrame):
                 
                 lbl_text = f"{lbl_prefix}:"
 
-                ctk.CTkLabel(sel_frame, text=lbl_text, font=(FONT_FAMILY, 13),
-                             text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
+                ctk.CTkLabel(sel_frame, text=lbl_text, font=theme.font("lg"),
+                             text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
 
                 combo = ctk.CTkComboBox(
                     sel_frame, values=opts, width=180,
@@ -841,23 +811,22 @@ class RepoCard(ctk.CTkFrame):
                 
                 # Config Button inside the selector row
                 cfg_btn = ctk.CTkButton(
-                    sel_frame, text="⚙", width=28, height=28,
-                    font=(FONT_FAMILY, 14), fg_color="#1e293b",
-                    hover_color="#475569", border_width=1, border_color="#64748b",
-                    corner_radius=6, command=lambda tf=target_file: self._open_config_manager(tf)
+                    sel_frame, text="⚙", width=28,
+                    command=lambda tf=target_file: self._open_config_manager(tf),
+                    **theme.btn_style("neutral", font_size="xl")
                 )
                 cfg_btn.pack(side="left", padx=(0, 6))
                 ToolTip(cfg_btn, f"Modificar esta configuración ({mod_name})")
 
                 # Type label on the right as plain grey hint
                 if len(target_files) > 1:
-                    ctk.CTkLabel(sel_frame, text=mod_name, font=(FONT_MONO, 10),
-                                 text_color="#6b7280", anchor="w").pack(side="left", padx=(0, 8))
+                    ctk.CTkLabel(sel_frame, text=mod_name, font=theme.font("xs", mono=True),
+                                 text_color=theme.C.text_faint, anchor="w").pack(side="left", padx=(0, 8))
 
         if repo.has_database and 'database_selector' in repo.features:
             has_row2 = True
-            ctk.CTkLabel(row2, text="BD:", font=(FONT_FAMILY, 13),
-                         text_color="#c7d2fe", width=35, anchor="e").pack(side="left")
+            ctk.CTkLabel(row2, text="BD:", font=theme.font("lg"),
+                         text_color=theme.C.text_secondary, width=35, anchor="e").pack(side="left")
             db_options = list(self._db_presets.keys()) if self._db_presets else [NO_DB_PRESET]
             self._db_combo = ctk.CTkComboBox(
                 row2, values=db_options, width=140,
@@ -869,42 +838,6 @@ class RepoCard(ctk.CTkFrame):
             else:
                 self._db_combo.set(NO_DB_PRESET)
 
-        if 'docker_checkboxes' in repo.features and repo.docker_compose_files:
-            for dc_file in repo.docker_compose_files:
-                dc_name = os.path.basename(dc_file)
-                if dc_name == 'docker-compose.yml':
-                    dc_name = 'docker-compose'
-                elif dc_name.startswith('docker-compose.'):
-                    dc_name = dc_name.replace('docker-compose.', '').replace('.yml', '')
-                    
-                if dc_name == 'all':
-                    continue
-                has_row2 = True
-                
-                # Default assume stopped styling
-                btn_color = "#1e293b" if dc_file not in self._active_compose_files else "#0f172a"
-                border_color = "#334155" if dc_file not in self._active_compose_files else "#3b82f6"
-                
-                btn = ctk.CTkButton(
-                    row2, text=f"🐳 {dc_name.title()} [?/?]",
-                    font=(FONT_FAMILY, 11), height=26,
-                    fg_color=btn_color, hover_color="#334155",
-                    border_width=1, border_color=border_color,
-                    command=lambda f=dc_file: self._open_docker_compose_dialog(f)
-                )
-                btn.pack(side="left", padx=(0, 6))
-                self._docker_compose_buttons[dc_file] = btn
-                
-                if dc_file in self._active_compose_files:
-                    ToolTip(btn, "Haga clic para gestionar servicios (Activo en perfil)")
-                else:
-                    ToolTip(btn, "Haga clic para gestionar servicios")
-
-            # Start thread to update container counts if not running
-            if not self._compose_status_thread_running:
-                self._compose_status_thread_running = True
-                self._start_compose_status_thread()
-
         if has_row2:
             row2.pack(fill="x", pady=(4, 0))
 
@@ -913,8 +846,8 @@ class RepoCard(ctk.CTkFrame):
 
         if 'java_version' in repo.features:
             has_row_java = True
-            ctk.CTkLabel(row_java, text="Java:", font=(FONT_FAMILY, 13),
-                         text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
+            ctk.CTkLabel(row_java, text="Java:", font=theme.font("lg"),
+                         text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
             java_options = ["Sistema (Por Defecto)"] + list(self._java_versions.keys())
             self._java_combo = ctk.CTkComboBox(
                 row_java, values=java_options, width=150,
@@ -923,7 +856,7 @@ class RepoCard(ctk.CTkFrame):
             self._java_combo.pack(side="left", padx=(6, 12))
 
             if getattr(repo, 'java_version', None):
-                self._java_hint_label = ctk.CTkLabel(row_java, text=f"Recomendado: Java {repo.java_version}", font=(FONT_FAMILY, 11), text_color="#6b7280")
+                self._java_hint_label = ctk.CTkLabel(row_java, text=f"Recomendado: Java {repo.java_version}", font=theme.font("md"), text_color=theme.C.text_faint)
                 self._java_hint_label.pack(side="left", padx=(0, 10))
 
                 def _on_java_change(*args):
@@ -957,13 +890,13 @@ class RepoCard(ctk.CTkFrame):
         row3 = ctk.CTkFrame(content, fg_color="transparent")
         row3.pack(fill="x", pady=(4, 0))
 
-        ctk.CTkLabel(row3, text="Cmd:", font=(FONT_FAMILY, 13),
-                     text_color="#c7d2fe", width=50, anchor="e").pack(side="left")
+        ctk.CTkLabel(row3, text="Cmd:", font=theme.font("lg"),
+                     text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
 
         self._cmd_entry = ctk.CTkEntry(
-            row3, height=28, font=(FONT_MONO, 11),
-            corner_radius=6, fg_color="#1e1b4b",
-            border_color="#4338ca",
+            row3, height=theme.G.btn_height_md, font=theme.font("md", mono=True),
+            corner_radius=theme.G.corner_btn, fg_color=theme.C.section,
+            border_color=theme.C.default_border,
             placeholder_text=repo.run_command or "comando de inicio"
         )
         self._cmd_entry.pack(side="left", padx=(6, 4), fill="x", expand=True)
@@ -978,6 +911,52 @@ class RepoCard(ctk.CTkFrame):
         
         self._cmd_entry.bind("<FocusOut>", _on_cmd_changed)
         self._cmd_entry.bind("<Return>", _on_cmd_changed)
+
+    def _build_docker_row(self, content, repo):
+        """Build docker-compose checkboxes row."""
+        if 'docker_checkboxes' not in repo.features or not repo.docker_compose_files:
+            return
+
+        row_docker = ctk.CTkFrame(content, fg_color="transparent")
+        row_docker.pack(fill="x", pady=(4, 0))
+
+        docker_frame = ctk.CTkFrame(row_docker, fg_color="transparent")
+        docker_frame.pack(side="left", padx=(1, 0))
+
+        for dc_file in repo.docker_compose_files:
+            dc_name = os.path.basename(dc_file)
+            if dc_name == 'docker-compose.yml':
+                dc_name = 'docker-compose'
+            elif dc_name.startswith('docker-compose.'):
+                dc_name = dc_name.replace('docker-compose.', '').replace('.yml', '')
+
+            if dc_name == 'all':
+                continue
+
+            # Default assume stopped styling
+            btn_color = theme.C.docker_stopped_fg if dc_file not in self._active_compose_files else theme.C.docker_active_fg
+            border_color = theme.C.docker_border_stopped if dc_file not in self._active_compose_files else theme.C.docker_border_active
+
+            btn = ctk.CTkButton(
+                docker_frame, text=f"🐳 {dc_name.title()} [?/?]",
+                font=theme.font("md"), height=26,
+                fg_color=btn_color, hover_color=theme.C.subtle_border,
+                border_width=theme.G.border_width, border_color=border_color,
+                corner_radius=theme.G.corner_btn,
+                command=lambda f=dc_file: self._open_docker_compose_dialog(f)
+            )
+            btn.pack(side="left", padx=(0, 6))
+            self._docker_compose_buttons[dc_file] = btn
+
+            if dc_file in self._active_compose_files:
+                ToolTip(btn, "Haga clic para gestionar servicios (Activo en perfil)")
+            else:
+                ToolTip(btn, "Haga clic para gestionar servicios")
+
+        # Start thread to update container counts if not running
+        if not self._compose_status_thread_running:
+            self._compose_status_thread_running = True
+            self._start_compose_status_thread()
 
     # ─── Toggle expand ───────────────────────────────────────────
 
@@ -1186,34 +1165,43 @@ class RepoCard(ctk.CTkFrame):
     def _open_config_manager(self, target_file: str = None):
         """Open the RepoConfigManagerDialog for this repository."""
         from gui.dialogs import RepoConfigManagerDialog
-        
+
         config_key = self.get_config_key(target_file) if target_file else self._repo.name
-        
+
+        if target_file:
+            source_dir = os.path.dirname(target_file)
+        else:
+            default_dir = getattr(self._repo, 'env_default_dir', '')
+            source_dir = os.path.join(self._repo.path, default_dir) if default_dir else ''
+
         def _on_configs_updated():
-            from core.config_manager import load_repo_configs
-            configs = load_repo_configs(config_key)
-            opts = ["- Sin Seleccionar -"] + list(configs.keys())
-            if hasattr(self, '_config_combos'):
-                combo = self._config_combos.get(target_file)
-                if combo:
-                    combo.configure(values=opts)
-                    curr = combo.get()
-                    if curr not in opts:
-                        combo.set("- Sin Seleccionar -")
-                self._update_header_hints()
-            elif hasattr(self, '_config_combo'):
-                self._config_combo.configure(values=opts)
-                curr = self._config_combo.get()
-                if curr not in opts:
-                    self._config_combo.set("- Sin Seleccionar -")
+            def _do_update():
+                from core.config_manager import load_repo_configs
+                configs = load_repo_configs(config_key)
+                opts = ["- Sin Seleccionar -"] + list(configs.keys())
+                if hasattr(self, '_config_combos'):
+                    combo = self._config_combos.get(target_file)
+                    if combo and combo.winfo_exists():
+                        combo.configure(values=opts)
+                        curr = combo.get()
+                        if curr not in opts:
+                            combo.set("- Sin Seleccionar -")
                     self._update_header_hints()
+                elif hasattr(self, '_config_combo') and self._config_combo.winfo_exists():
+                    self._config_combo.configure(values=opts)
+                    curr = self._config_combo.get()
+                    if curr not in opts:
+                        self._config_combo.set("- Sin Seleccionar -")
+                        self._update_header_hints()
+            self.after(0, _do_update)
 
         RepoConfigManagerDialog(
-            self.winfo_toplevel(), 
-            repo=self._repo, 
+            self.winfo_toplevel(),
+            repo=self._repo,
             config_key=config_key,
             log_callback=self._log,
-            on_close_callback=_on_configs_updated
+            on_close_callback=_on_configs_updated,
+            source_dir=source_dir,
         )
 
     def _on_db_change(self, preset_name: str):
@@ -1317,14 +1305,23 @@ class RepoCard(ctk.CTkFrame):
                                 is_ok = False
                                 break
                     if is_ok:
+                        _ok_style = theme.btn_style("neutral_alt")
                         self._install_btn.configure(
-                            text=success_text, fg_color="#334155", border_color="#64748b", hover_color="#475569"
+                            text=success_text,
+                            fg_color=_ok_style["fg_color"],
+                            border_color=_ok_style["border_color"],
+                            hover_color=_ok_style["hover_color"]
                         )
+                        self._update_header_hints()
                         if self._log:
                             self._log(f"[{self._repo.name}] Instalación finalizada ✓")
                     else:
+                        _fail_style = theme.btn_style("danger_alt")
                         self._install_btn.configure(
-                            text=fail_text, fg_color="#7f1d1d", border_color="#b91c1c", hover_color="#991b1b"
+                            text=fail_text,
+                            fg_color=_fail_style["fg_color"],
+                            border_color=_fail_style["border_color"],
+                            hover_color=_fail_style["hover_color"]
                         )
                         if self._log:
                             self._log(f"[{self._repo.name}] Fallo al instalar. Archivos clave no encontrados.")
@@ -1543,8 +1540,14 @@ class RepoCard(ctk.CTkFrame):
             self.master.master if hasattr(self, 'master') and hasattr(self.master, 'master') else self,
             compose_file=compose_file,
             log_callback=self._log,
-            on_status_change=self._update_compose_counts_now
+            on_status_change=self._update_compose_counts_now,
+            profile_services=self._docker_profile_services.get(compose_file, []),
+            on_profile_change=self._on_docker_profile_change,
         )
+
+    def _on_docker_profile_change(self, compose_file: str, services: list):
+        """Called by DockerComposeDialog when the user toggles profile checkboxes."""
+        self._docker_profile_services[compose_file] = services
 
     def _update_compose_counts_now(self):
         """Immediate trigger for the background count updater."""
@@ -1580,11 +1583,11 @@ class RepoCard(ctk.CTkFrame):
                             if not b.winfo_exists(): return
                             b.configure(text=t)
                             if r > 0:
-                                b.configure(border_color="#10b981") # Green if any running
+                                b.configure(border_color=theme.C.docker_border_running)
                             elif f in self._active_compose_files:
-                                b.configure(border_color="#3b82f6") # Blue if active but 0 running
+                                b.configure(border_color=theme.C.docker_border_active)
                             else:
-                                b.configure(border_color="#334155") # Gray
+                                b.configure(border_color=theme.C.docker_border_stopped)
                         
                         self.after(0, _update_btn)
                     except Exception:
@@ -1595,11 +1598,11 @@ class RepoCard(ctk.CTkFrame):
                     def _update_global_status(r=total_running):
                         if not self.winfo_exists(): return
                         if r > 0:
-                            self._status_label.configure(text="🔴", text_color="#10b981")
-                            self._status_text.configure(text=f"En ejecución ({r} servicios)", text_color="#10b981")
+                            self._status_label.configure(text="🔴", text_color=theme.C.docker_border_running)
+                            self._status_text.configure(text=f"En ejecución ({r} servicios)", text_color=theme.C.docker_border_running)
                         else:
-                            self._status_label.configure(text="🔴", text_color="#ef4444")
-                            self._status_text.configure(text="Detenido", text_color="#888")
+                            self._status_label.configure(text="🔴", text_color=theme.C.status_error)
+                            self._status_text.configure(text="Detenido", text_color=theme.C.text_placeholder)
                     self.after(0, _update_global_status)
                         
                 self._compose_stop_event.wait(timeout=15)
@@ -1701,9 +1704,9 @@ class RepoCard(ctk.CTkFrame):
                 def _update():
                     if hasattr(self, '_pull_btn'):
                         if commits > 0:
-                            self._pull_btn.configure(text=f"⬇ Pull ({commits})", fg_color="#1d4ed8")
+                            self._pull_btn.configure(text=f"⬇ Pull ({commits})", fg_color=theme.btn_style("blue_active")["fg_color"])
                         else:
-                            self._pull_btn.configure(text="⬇ Pull", fg_color="#172554")
+                            self._pull_btn.configure(text="⬇ Pull", fg_color=theme.btn_style("blue")["fg_color"])
                 self.after(0, _update)
         import threading
         threading.Thread(target=_run, daemon=True).start()
@@ -1770,7 +1773,7 @@ class RepoCard(ctk.CTkFrame):
         popup.grab_set()
 
         ctk.CTkLabel(popup, text="Seleccionar archivo para editar:",
-                     font=(FONT_FAMILY, 12, "bold")).pack(pady=(15, 10))
+                     font=theme.font("base", bold=True)).pack(pady=(15, 10))
 
         scroll = ctk.CTkScrollableFrame(popup)
         scroll.pack(fill="both", expand=True, padx=15, pady=5)
@@ -1778,10 +1781,10 @@ class RepoCard(ctk.CTkFrame):
         for f in files:
             btn = ctk.CTkButton(
                 scroll, text=os.path.basename(f),
-                font=(FONT_FAMILY, 11), height=32,
+                font=theme.font("md"), height=32,
                 fg_color="transparent",
-                text_color=("#333", "#ddd"),
-                hover_color=("#E3F2FD", "#1a2332"),
+                text_color=(theme.C.file_btn_light, theme.C.file_btn_dark),
+                hover_color=(theme.C.file_btn_hover_light, theme.C.file_btn_hover_dark),
                 anchor="w",
                 command=lambda fp=f: (popup.destroy(),
                                       self._on_edit_config(fp) if self._on_edit_config else None)
@@ -1793,9 +1796,9 @@ class RepoCard(ctk.CTkFrame):
         self._status = status
 
         def _update():
-            color = STATUS_ICONS.get(status, '#ef4444')
+            color = theme.STATUS_ICONS.get(status, theme.C.status_error)
             if status == 'logging':
-                color = STATUS_ICONS.get('logging', '#f97316')
+                color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)
             status_texts = {
                 'running': f"Ejecutando :{self._repo.server_port or '?'}",
@@ -1808,6 +1811,17 @@ class RepoCard(ctk.CTkFrame):
                 text_color=COLORS.get(status, '#888')
             )
             self._update_button_visibility()
+            # Update detached log window icon to match running state
+            if getattr(self, '_detached_log_window', None) and self._detached_log_window.winfo_exists():
+                try:
+                    app_dir = getattr(self.winfo_toplevel(), '_app_dir', None)
+                    if app_dir:
+                        _icon_color = "green" if status in ('running', 'starting') else "red"
+                        _icon_path = os.path.join(app_dir, f"icon_{_icon_color}.ico")
+                        if os.path.exists(_icon_path):
+                            self._detached_log_window.iconbitmap(_icon_path)
+                except Exception:
+                    pass
 
         try:
             self.after(0, _update)
@@ -1866,9 +1880,9 @@ class RepoCard(ctk.CTkFrame):
         
         def _update():
             # Basic info updater that was decoupled
-            color = STATUS_ICONS.get(status, '#ef4444')
+            color = theme.STATUS_ICONS.get(status, theme.C.status_error)
             if status == 'logging':
-                color = STATUS_ICONS.get('logging', '#f97316')
+                color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)
             
             status_text = {
@@ -1930,6 +1944,22 @@ class RepoCard(ctk.CTkFrame):
     def get_docker_compose_active(self) -> list:
         return list(self._active_compose_files)
 
+    def get_docker_profile_services(self) -> dict:
+        return dict(self._docker_profile_services)
+
+    def set_docker_profile_services(self, services_map: dict):
+        """Restore docker profile services selection from a loaded profile."""
+        if not services_map:
+            return
+        resolved = {}
+        for f, svc_list in services_map.items():
+            # Match by full path or basename
+            for repo_f in self._repo.docker_compose_files:
+                if repo_f == f or os.path.basename(repo_f) == os.path.basename(f):
+                    resolved[repo_f] = list(svc_list)
+                    break
+        self._docker_profile_services = resolved
+
     def set_docker_compose_active(self, active_files: list):
         """Apply active compose files from profile, modifying UI and stopping old ones."""
         old_active = self._active_compose_files.copy()
@@ -1959,10 +1989,10 @@ class RepoCard(ctk.CTkFrame):
         # Update UI borders
         for dc_file, btn in self._docker_compose_buttons.items():
             if dc_file in new_active:
-                btn.configure(fg_color="#0f172a", border_color="#3b82f6")
+                btn.configure(fg_color=theme.C.docker_active_fg, border_color=theme.C.docker_border_active)
                 ToolTip(btn, "Haga clic para gestionar servicios (Activo en perfil)")
             else:
-                btn.configure(fg_color="#1e293b", border_color="#334155")
+                btn.configure(fg_color=theme.C.docker_stopped_fg, border_color=theme.C.docker_border_stopped)
                 ToolTip(btn, "Haga clic para gestionar servicios")
 
     def do_pull(self):
