@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")/.."
 if [ "$#" -eq 0 ]; then
     echo "Usa: ./run_compiled.sh <ruta_del_workspace>"
     exit 1

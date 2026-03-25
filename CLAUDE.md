@@ -26,8 +26,8 @@ There is no build step. No test suite or linter configuration exists in the proj
 
 ```bash
 # Automated
-install.bat    # Windows
-./install.sh   # Unix
+scripts\install.bat    # Windows
+./scripts/install.sh   # Unix
 
 # Manual
 python -m venv .venv
@@ -45,7 +45,7 @@ The codebase follows a layered DDD-influenced architecture:
 - **`gui/`** — All UI code: `app.py` (main window) + `app_profile.py` (profile mixin), `repo_card/` package (per-repo accordion widget split into focused mixins), `dialogs/` package (9 dialog classes with shared `BaseDialog`), `global_panel.py` (batch controls), `constants.py` (shared magic strings/numbers), `log_helpers.py` (shared log insertion), `tooltip.py`, `theme.py` (UI theme loader).
 - **`config/repo_types/`** — YAML definitions that drive repository detection and available commands (one file per framework).
 - **`config/ui_theme.yml`** — Editable UI theme: colors, fonts, sizes, button variants. Overrides the defaults embedded in `gui/theme.py`.
-- **`ui/presenters/`** — MVP presenters stub (currently minimal).
+- **`scripts/`** — Shell scripts for install (`install.bat/sh`), run (`run.bat/sh`), Nuitka compilation (`compile.bat/sh`), and running the compiled binary (`run_compiled.bat/sh`).
 
 ## Key Design Decisions
 

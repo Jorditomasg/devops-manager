@@ -27,16 +27,16 @@ Para asegurar que las dependencias de este proyecto (como `customtkinter`, `PyYA
 Hemos incluido scripts preparados para inicializar el entorno virtual y descargar todas las dependencias de manera automática:
 
 **Para Windows:**
-Haz doble clic sobre el archivo `install.bat` o ejecútalo desde tu consola:
+Haz doble clic sobre el archivo `scripts\install.bat` o ejecútalo desde tu consola:
 ```cmd
-install.bat
+scripts\install.bat
 ```
 
 **Para Linux / macOS:**
 Dale permisos de ejecución al script y lánzalo:
 ```bash
-chmod +x install.sh
-./install.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 ### Opción 2: Instalación Manual
@@ -64,8 +64,8 @@ Una vez instalado, asegúrate de tener activo tu entorno virtual antes de ejecut
 ### Ejecución Rápida
 
 Puedes utilizar los scripts predefinidos para iniciar la aplicación cómodamente:
-* **Windows:** Ejecuta `run.bat`
-* **Linux/macOS:** Ejecuta `./run.sh`
+* **Windows:** Ejecuta `scripts\run.bat`
+* **Linux/macOS:** Ejecuta `./scripts/run.sh`
 
 ### Ejecución Manual
 

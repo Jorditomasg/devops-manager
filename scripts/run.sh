@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")/.."
 
 echo "Iniciando DevOps Manager..."
 if [ ! -f ".venv/bin/activate" ]; then
