@@ -611,7 +611,6 @@ class ImportOptionsDialog(ctk.CTkToplevel):
         
         self._apply_btn = ctk.CTkButton(
             self._btn_frame, text="✅ Aceptar y Aplicar", width=150,
-            font=theme.font("base", bold=True),
             command=self._apply, **theme.btn_style("success", height="lg")
         )
         self._apply_btn.pack(side="right", padx=(10, 0))
@@ -1114,14 +1113,12 @@ class SettingsDialog(ctk.CTkToplevel):
 
             ctk.CTkButton(
                 row, text="✏", width=28,
-                font=theme.font("md"),
                 command=lambda n=name: self._edit_java(n),
                 **theme.btn_style("warning", height="sm")
             ).pack(side="right", padx=(2, 0))
 
             ctk.CTkButton(
                 row, text="🗑", width=28,
-                font=theme.font("md"),
                 command=lambda n=name: self._delete_java(n),
                 **theme.btn_style("danger_deep", height="sm")
             ).pack(side="right")
@@ -1392,10 +1389,6 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
         
         from core.config_manager import load_repo_configs
         self._configs = load_repo_configs(self._config_key)
-        if not self._configs:
-            legacy_configs = load_repo_configs(self._repo.name)
-            if legacy_configs:
-                self._configs = legacy_configs.copy()
         
         self._current_selected = None
         
@@ -1473,7 +1466,6 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
         # Save btn
         self._btn_save = ctk.CTkButton(
             right_panel, text="💾 Guardar Cambios en Entorno",
-            font=theme.font("xl", bold=True),
             command=self._cmd_save_text, state="disabled",
             **theme.btn_style("success")
         )
@@ -1616,6 +1608,7 @@ class RepoConfigManagerDialog(ctk.CTkToplevel):
             self._repo.path,
             self._repo.repo_type,
             environment_files=selected_files,
+            env_patterns=getattr(self._repo, 'env_patterns', None) or None,
         )
         if not imported:
             messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")

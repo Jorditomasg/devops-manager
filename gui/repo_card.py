@@ -128,22 +128,21 @@ class RepoCard(ctk.CTkFrame):
                 pass
 
     def get_config_key(self, target_file: str) -> str:
-        """Get the unique config key for a specific module's target file."""
+        """Get the unique config key for a specific module's target file.
+        Format: 'repo-name::relative/dir/path'
+        e.g. 'boa2-backend-configuracion::src/main/resources'
+        """
         import os
         repo_path = self._repo.path
         if not target_file:
             return self._repo.name
-        
+
         rel_path = os.path.relpath(target_file, repo_path).replace('\\', '/')
-        parts = rel_path.split('/')
-        
-        ignored_names = {'src', 'environments', 'main', 'resources', 'config'}
-        # Filter out ignored directories and the file name itself (parts[:-1])
-        valid_dirs = [p for p in parts[:-1] if p not in ignored_names and p != '.']
-        
-        mod_name = "_".join(valid_dirs) if valid_dirs else "App"
-            
-        return f"{self._repo.name}::{mod_name}"
+        dir_path = '/'.join(rel_path.split('/')[:-1])  # strip filename
+        if not dir_path or dir_path == '.':
+            dir_path = 'root'
+
+        return f"{self._repo.name}::{dir_path}"
 
     def _refresh_badge_loop(self):
         """Periodically refresh the unsigned changes badge."""
@@ -779,12 +778,6 @@ class RepoCard(ctk.CTkFrame):
                 # Load config values for THIS specific target file
                 config_key = self.get_config_key(target_file)
                 configs = load_repo_configs(config_key)
-                
-                # Check for legacy configs stored on the old main repo name
-                legacy_configs = load_repo_configs(repo.name)
-                # If the submodule logic doesn't have anything, auto-feed from global name to assist migration
-                if not configs and legacy_configs:
-                    configs = legacy_configs
                     
                 opts = ["- Sin Seleccionar -"] + list(configs.keys())
                 
@@ -1154,9 +1147,6 @@ class RepoCard(ctk.CTkFrame):
                 return
 
             configs = load_repo_configs(config_key)
-            if not configs:
-                configs = load_repo_configs(repo.name) or {}
-                
             self._apply_config_data(target_file, config_name, configs.get(config_name), skip_log, is_real_change)
 
         import threading

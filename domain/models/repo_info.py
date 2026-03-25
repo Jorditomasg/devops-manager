@@ -33,6 +33,7 @@ class RepoInfo:
     env_config_writer_type: str = "raw"
     env_pull_ignore_patterns: List[str] = field(default_factory=list)
     env_main_config_filename: str = ""
+    env_patterns: List[str] = field(default_factory=list)  # glob patterns from YAML definition
 
     # UI configuration mapped from yaml
     ui_config: dict = field(default_factory=dict)

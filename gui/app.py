@@ -722,9 +722,13 @@ class DevOpsManagerApp(ctk.CTk):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     existing = json.load(f)
             
-            # Prevent stale in-memory active_configs from overwriting fresh disk ones
+            # Prevent stale in-memory from overwriting fresh disk ones
             if 'active_configs' in existing:
                 settings['active_configs'] = existing['active_configs']
+            if 'repo_configs' in existing:
+                settings['repo_configs'] = existing['repo_configs']
+            if 'db_presets' in existing:
+                settings['db_presets'] = existing['db_presets']
             
             existing.update(settings)
             

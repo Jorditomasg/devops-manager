@@ -255,19 +255,35 @@ def write_config_file_raw(filepath: str, content: str) -> bool:
         return False
 
 # ─── Repo Configs (Env/App) ─────────────────────────────────────────────────
+#
+# Storage format:
+#   repo_configs = {
+#       "repo-name": {
+#           "module-key": { "config-name": "content..." }
+#       }
+#   }
+# config_key is always "repo-name::module-key" (produced by RepoCard.get_config_key).
 
-def load_repo_configs(repo_name: str, config_path: str = '') -> dict:
-    """Load the custom environments/profiles for a specific repository.
-    Returns a dict like:
-      { 'dev': 'content of environment.dev.ts...', 'prod': '...' }
+
+def load_repo_configs(config_key: str, config_path: str = '') -> dict:
+    """Load the custom environments/profiles for a specific config key.
+    config_key is 'repo-name::module-key'.
+    Returns a dict like: { 'dev': 'content...', 'prod': '...' }
     """
     if not config_path:
         config_path = get_config_path()
-    return _load_config_cached(config_path).get('repo_configs', {}).get(repo_name, {})
+    repo_configs = _load_config_cached(config_path).get('repo_configs', {})
+    if '::' in config_key:
+        repo, module = config_key.split('::', 1)
+        return repo_configs.get(repo, {}).get(module, {})
+    return repo_configs.get(config_key, {})
 
 
-def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = ''):
-    """Save the custom environments/profiles for a specific repository."""
+def save_repo_configs(config_key: str, configs_dict: dict, config_path: str = ''):
+    """Save the custom environments/profiles under the nested format:
+       repo_configs[repo][module] = configs_dict
+    config_key is 'repo-name::module-key'.
+    """
     if not config_path:
         config_path = get_config_path()
     try:
@@ -280,7 +296,14 @@ def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = '')
         if 'repo_configs' not in config:
             config['repo_configs'] = {}
 
-        config['repo_configs'][repo_name] = configs_dict
+        if '::' in config_key:
+            repo, module = config_key.split('::', 1)
+            if repo not in config['repo_configs'] or not isinstance(config['repo_configs'][repo], dict):
+                config['repo_configs'][repo] = {}
+            config['repo_configs'][repo][module] = configs_dict
+        else:
+            config['repo_configs'][config_key] = configs_dict
+
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         _invalidate_config_cache(config_path)
@@ -288,12 +311,49 @@ def save_repo_configs(repo_name: str, configs_dict: dict, config_path: str = '')
         pass
 
 
-def auto_import_configs(repo_path: str, repo_type: str, environment_files: list = None) -> dict:
+def _profile_name_from_file(basename: str, env_patterns: list) -> str:
+    """Derive a profile/environment name from a filename using config-driven glob patterns.
+
+    For each pattern we strip the wildcard parts to find what the basename
+    adds on top of the fixed prefix/suffix, e.g.:
+      pattern "application*.yml", file "application-dev.yml" → "dev"
+      pattern "environment*.ts",  file "environment.production.ts" → "production"
+      pattern ".env*",            file ".env.local" → "local"
+    Falls back to 'default' when no extra segment is found.
+    """
+    import fnmatch
+    import re
+
+    for pattern in env_patterns:
+        if not fnmatch.fnmatch(basename, pattern):
+            continue
+
+        # Convert the glob pattern to a regex that captures the wildcard portion
+        # e.g. "application*.yml" → r"^application(.*)\.yml$"
+        escaped = re.escape(pattern).replace(r'\*', '(.*)')
+        m = re.match(f'^{escaped}$', basename)
+        if not m:
+            continue
+
+        wildcard_part = m.group(1)  # e.g. "-dev", ".production", ".local", ""
+        # Strip leading separator characters (-, ., _) to get the bare name
+        name = wildcard_part.lstrip('-._')
+        return name if name else 'default'
+
+    return 'default'
+
+
+def auto_import_configs(repo_path: str, repo_type: str, environment_files: list = None,
+                        env_patterns: list = None) -> dict:
     """Scan a repository for existing configuration files and import them.
     Returns a dict of found configs: { 'profile_name': 'content ...' }
     Keys are simple profile names (e.g. 'default', 'local', 'test').
     The caller is responsible for scoping environment_files to a single directory
     to avoid key collisions across multiple source directories.
+
+    env_patterns: glob patterns from the repo-type YAML definition (env_files.patterns).
+    When provided, profile names are derived from those patterns (config-driven).
+    Falls back to a legacy heuristic when not provided.
     """
     imported = {}
 
@@ -304,21 +364,25 @@ def auto_import_configs(repo_path: str, repo_type: str, environment_files: list 
         if not os.path.isfile(file_path):
             continue
 
-        name = 'default'
         basename = os.path.basename(file_path)
 
-        if 'environment' in basename:
-            parts = basename.split('.')
-            if len(parts) > 2:
-                name = parts[1]
-        elif 'application' in basename:
-            base = os.path.splitext(basename)[0]
-            if '-' in base:
-                name = base.split('-', 1)[1]
-        elif basename.startswith('.env.'):
-            name = basename[5:]
-        elif basename == '.env':
+        if env_patterns:
+            name = _profile_name_from_file(basename, env_patterns)
+        else:
+            # Legacy fallback (kept for backward compatibility)
             name = 'default'
+            if 'environment' in basename:
+                parts = basename.split('.')
+                if len(parts) > 2:
+                    name = parts[1]
+            elif 'application' in basename:
+                base = os.path.splitext(basename)[0]
+                if '-' in base:
+                    name = base.split('-', 1)[1]
+            elif basename.startswith('.env.'):
+                name = basename[5:]
+            elif basename == '.env':
+                name = 'default'
 
         content = read_config_file_raw(file_path)
         if content:
