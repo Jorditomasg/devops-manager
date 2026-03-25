@@ -14,7 +14,17 @@ class BaseDialog(ctk.CTkToplevel):
         self.title(title)
         self.geometry(f"{width}x{height}")
         self.transient(parent)
+        self.resizable(False, False)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.after(10, self._grab_and_focus)
+
+    def _grab_and_focus(self):
+        """Delayed grab/focus — force deiconify then grab, since CTkToplevel defers its own show."""
+        if not self.winfo_exists():
+            return
+        if not self.winfo_ismapped():
+            self.deiconify()
+        self.attributes('-topmost', True)
         self.grab_set()
         self.lift()
         self.focus_force()
-        self.resizable(False, False)

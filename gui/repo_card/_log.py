@@ -57,11 +57,19 @@ class LogMixin:
         self.after(100, lambda: self._detached_log_window.lift())
         self.after(110, lambda: self._detached_log_window.focus_force())
 
+        header = ctk.CTkFrame(self._detached_log_window, fg_color="transparent")
+        header.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkButton(
+            header, text="🗑 Limpiar", width=60,
+            command=self._clear_logs,
+            **theme.btn_style("log_action", height="sm", font_size="sm")
+        ).pack(side="left")
+
         self._detached_log_textbox = ctk.CTkTextbox(
             self._detached_log_window,
             **theme.log_textbox_style(detached=True)
         )
-        self._detached_log_textbox.pack(fill="both", expand=True)
+        self._detached_log_textbox.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
         # Copy current content
         current_logs = self._log_textbox.get("1.0", "end")

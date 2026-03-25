@@ -167,7 +167,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             ("➕ Clonar",  95, "blue",    self._show_clone_dialog,   "Clonar nuevo repositorio"),
             ("🔄 Rescan",  95, "warning", self._scan_repos,           "Re-escanear workspace"),
             ("⚙",          38, "neutral", self._show_settings,        "Abrir configuración"),
-            ("📜",         38, "neutral", self._toggle_global_log,    "Mostrar/Ocultar Log Global"),
+            ("📜",         38, "neutral", self._detach_global_log,    "Abrir Log Global en Ventana"),
         ]
 
         from core.profile_manager import list_profiles
@@ -312,11 +312,20 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self.after(100, lambda: self._detached_global_log_window.lift())
         self.after(110, lambda: self._detached_global_log_window.focus_force())
         
+        header = ctk.CTkFrame(self._detached_global_log_window, fg_color="transparent")
+        header.pack(fill="x", padx=8, pady=(6, 0))
+        log_btn_s = theme.btn_style("log_action", height="sm", font_size="sm")
+        ctk.CTkButton(
+            header, text="🗑 Limpiar", width=60,
+            command=self._clear_global_log,
+            **log_btn_s
+        ).pack(side="left")
+
         self._detached_global_log_textbox = ctk.CTkTextbox(
             self._detached_global_log_window,
             **theme.log_textbox_style(detached=True)
         )
-        self._detached_global_log_textbox.pack(fill="both", expand=True)
+        self._detached_global_log_textbox.pack(fill="both", expand=True, padx=8, pady=(4, 8))
         
         # Copy current content
         current_logs = self._global_log_textbox.get("1.0", "end")
