@@ -15,6 +15,8 @@ class ConfigEditorDialog(BaseDialog):
         super().__init__(parent, f"Editor: {os.path.basename(filepath)}", 700, 550)
         self._filepath = filepath
         self._log = log_callback
+        self._dirty = False
+        self._base_title = f"Editor: {os.path.basename(filepath)}"
 
         # Header with file path
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -36,6 +38,9 @@ class ConfigEditorDialog(BaseDialog):
         content = read_config_file_raw(filepath)
         self._editor.insert("1.0", content)
 
+        # Track changes via the underlying tk.Text <<Modified>> virtual event
+        self._editor._textbox.bind("<<Modified>>", self._on_editor_modified)
+
         # Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=15, pady=10)
@@ -47,13 +52,33 @@ class ConfigEditorDialog(BaseDialog):
 
         ctk.CTkButton(
             btn_frame, text="Cancelar", width=100,
-            command=self.destroy, **theme.btn_style("neutral")
+            command=self._on_close, **theme.btn_style("neutral")
         ).pack(side="right")
 
         ctk.CTkButton(
             btn_frame, text="↩ Recargar", width=100,
             command=self._reload, **theme.btn_style("warning")
         ).pack(side="right", padx=(0, 10))
+
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_editor_modified(self, event=None):
+        """Called by tk.Text <<Modified>> when the content changes."""
+        if not self._dirty:
+            self._dirty = True
+            self.title(self._base_title + " *")
+        # Reset the modified flag so subsequent edits keep triggering the event
+        self._editor._textbox.edit_modified(False)
+
+    def _on_close(self):
+        """Prompt for confirmation when closing with unsaved changes."""
+        if self._dirty and not messagebox.askyesno(
+            "Cambios sin guardar",
+            "Hay cambios sin guardar. ¿Deseas cerrar sin guardar?",
+            parent=self,
+        ):
+            return
+        self.destroy()
 
     def _save(self):
         content = self._editor.get("1.0", "end").rstrip('\n')
@@ -62,6 +87,7 @@ class ConfigEditorDialog(BaseDialog):
             if self._log:
                 self._log(f"Guardado: {os.path.basename(self._filepath)}")
             messagebox.showinfo("Guardado", "Archivo guardado correctamente (backup creado)")
+            self._dirty = False
             self.destroy()
         else:
             messagebox.showerror("Error", "No se pudo guardar el archivo")
@@ -71,3 +97,5 @@ class ConfigEditorDialog(BaseDialog):
         content = read_config_file_raw(self._filepath)
         self._editor.delete("1.0", "end")
         self._editor.insert("1.0", content)
+        self._dirty = False
+        self.title(self._base_title)

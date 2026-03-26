@@ -13,7 +13,7 @@ commands:
   # This uses a variable `{main_app}` that will be resolved by the python script reading the 'apps' folder
   start_cmd: "npx nx serve {main_app}"
   profile_flag: "--configuration="
-  ready_pattern: "compiled successfully|Listening on|localhost:\\d+"
+  ready_pattern: "localhost:\\d+|Local:.*http|compiled|Listening on"
   error_pattern: "Error:"
 
 env_files:

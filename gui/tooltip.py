@@ -7,6 +7,9 @@ import tkinter as tk
 
 from gui import theme
 
+# Cache delay once at import time — avoids a dict lookup on every mouse-enter event
+_TOOLTIP_DELAY_MS: int = theme.tooltip_delay()
+
 
 class ToolTip:
     """
@@ -27,7 +30,7 @@ class ToolTip:
 
     def _schedule(self, event=None):
         self._cancel()
-        self._after_id = self._widget.after(theme.tooltip_delay(), self._show)
+        self._after_id = self._widget.after(_TOOLTIP_DELAY_MS, self._show)
 
     def _cancel(self, event=None):
         if self._after_id:

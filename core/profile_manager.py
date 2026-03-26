@@ -194,57 +194,19 @@ def apply_config_files(repo_path: str, repo_type: str, config_files: dict, targe
     if not config_files:
         return
 
-    # Check if this uses the new directory-based format (dict of dicts)
-    is_new_format = any(isinstance(v, dict) for v in config_files.values())
+    for rel_dir, files in config_files.items():
+        if not isinstance(files, dict):
+            continue
 
-    if is_new_format:
-        for rel_dir, files in config_files.items():
-            if not isinstance(files, dict):
-                continue
+        dir_path = os.path.join(repo_path, os.path.normpath(rel_dir)) if rel_dir else repo_path
+        os.makedirs(dir_path, exist_ok=True)
 
-            dir_path = os.path.join(repo_path, os.path.normpath(rel_dir)) if rel_dir else repo_path
-            os.makedirs(dir_path, exist_ok=True)
-
-            for fname, content in files.items():
-                fpath = os.path.join(dir_path, fname)
-                if os.path.isfile(fpath):
-                    backup_file(fpath)
-                try:
-                    with open(fpath, 'w', encoding='utf-8') as f:
-                        f.write(content)
-                except OSError:
-                    pass
-    else:
-        # Legacy flat structural support
-        basenames = {os.path.basename(k) for k in config_files.keys()}
-        file_locations = _find_existing_config_files(repo_path, basenames)
-
-        for path_key, content in config_files.items():
-            local_path_key = os.path.normpath(path_key)
-            fpath = os.path.join(repo_path, local_path_key)
-
-            if not os.path.isfile(fpath):
-                basename = os.path.basename(path_key)
-                if basename in file_locations:
-                    fpath = file_locations[basename]
-
+        for fname, content in files.items():
+            fpath = os.path.join(dir_path, fname)
             if os.path.isfile(fpath):
                 backup_file(fpath)
-
             try:
-                os.makedirs(os.path.dirname(fpath), exist_ok=True)
                 with open(fpath, 'w', encoding='utf-8') as f:
                     f.write(content)
             except OSError:
                 pass
-
-
-def _find_existing_config_files(repo_path: str, target_files: set) -> dict:
-    """Helper purely for walking the directory to find existing config files."""
-    file_locations = {}
-    for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', 'dist', 'target')]
-        for fname in target_files:
-            if fname in files:
-                file_locations[fname] = os.path.join(root, fname)
-    return file_locations

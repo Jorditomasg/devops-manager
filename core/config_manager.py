@@ -14,20 +14,28 @@ from typing import Optional
 
 _CONFIG_CACHE: dict = {}
 _CONFIG_CACHE_MTIME: dict = {}
+_CONFIG_CACHE_LOCK = __import__('threading').RLock()   # guards both dicts for concurrent access
+_CONFIG_CACHE_MAX = 30   # discard oldest entry when over this limit
 
 
 def _load_config_cached(config_path: str) -> dict:
     """Return the parsed JSON for config_path, using a cached copy when the file
-    has not changed since last read."""
+    has not changed since last read.  Thread-safe via RLock."""
     try:
         mtime = os.path.getmtime(config_path)
-        if (config_path in _CONFIG_CACHE
-                and _CONFIG_CACHE_MTIME.get(config_path) == mtime):
-            return _CONFIG_CACHE[config_path]
+        with _CONFIG_CACHE_LOCK:
+            if (config_path in _CONFIG_CACHE
+                    and _CONFIG_CACHE_MTIME.get(config_path) == mtime):
+                return _CONFIG_CACHE[config_path]
         with open(config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        _CONFIG_CACHE[config_path] = data
-        _CONFIG_CACHE_MTIME[config_path] = mtime
+        with _CONFIG_CACHE_LOCK:
+            if len(_CONFIG_CACHE) >= _CONFIG_CACHE_MAX:
+                oldest = next(iter(_CONFIG_CACHE))
+                _CONFIG_CACHE.pop(oldest, None)
+                _CONFIG_CACHE_MTIME.pop(oldest, None)
+            _CONFIG_CACHE[config_path] = data
+            _CONFIG_CACHE_MTIME[config_path] = mtime
         return data
     except (OSError, json.JSONDecodeError):
         return {}
@@ -35,8 +43,9 @@ def _load_config_cached(config_path: str) -> dict:
 
 def _invalidate_config_cache(config_path: str) -> None:
     """Bust the cache entry after a write so the next read goes to disk."""
-    _CONFIG_CACHE.pop(config_path, None)
-    _CONFIG_CACHE_MTIME.pop(config_path, None)
+    with _CONFIG_CACHE_LOCK:
+        _CONFIG_CACHE.pop(config_path, None)
+        _CONFIG_CACHE_MTIME.pop(config_path, None)
 
 
 # ─── Config Path ────────────────────────────────────────────────────────────
@@ -261,12 +270,12 @@ def auto_import_configs(repo_path: str, repo_type: str, environment_files: list 
     to avoid key collisions across multiple source directories.
 
     env_patterns: glob patterns from the repo-type YAML definition (env_files.patterns).
-    When provided, profile names are derived from those patterns (config-driven).
-    Falls back to a legacy heuristic when not provided.
+    Profile names are derived from those patterns (config-driven).
+    Files without matching patterns are skipped.
     """
     imported = {}
 
-    if not environment_files:
+    if not environment_files or not env_patterns:
         return imported
 
     for file_path in environment_files:
@@ -274,24 +283,7 @@ def auto_import_configs(repo_path: str, repo_type: str, environment_files: list 
             continue
 
         basename = os.path.basename(file_path)
-
-        if env_patterns:
-            name = _profile_name_from_file(basename, env_patterns)
-        else:
-            # Legacy fallback (kept for backward compatibility)
-            name = 'default'
-            if 'environment' in basename:
-                parts = basename.split('.')
-                if len(parts) > 2:
-                    name = parts[1]
-            elif 'application' in basename:
-                base = os.path.splitext(basename)[0]
-                if '-' in base:
-                    name = base.split('-', 1)[1]
-            elif basename.startswith('.env.'):
-                name = basename[5:]
-            elif basename == '.env':
-                name = 'default'
+        name = _profile_name_from_file(basename, env_patterns)
 
         content = read_config_file_raw(file_path)
         if content:

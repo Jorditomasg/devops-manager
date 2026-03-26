@@ -1,5 +1,6 @@
 """app_profile.py — ProfileManagerMixin extracted from app.py."""
 from __future__ import annotations
+import os
 from gui.constants import NO_PROFILE_TEXT, PROFILE_DIRTY_SUFFIX
 from gui import theme
 
@@ -139,31 +140,55 @@ class ProfileManagerMixin:
             return False
 
         target_repos = self._current_profile_data.get('repos', {})
-
-        # Build a name→card map for O(1) lookup
         card_by_name = {card.get_name(): card for card in self._repo_cards}
 
         if len(target_repos) != len(card_by_name):
             return True
 
-        for r_name, t_cfg in target_repos.items():
-            if r_name not in card_by_name:
-                return True
-            card = card_by_name[r_name]
+        return any(
+            self._card_differs_from_saved(card_by_name, r_name, t_cfg)
+            for r_name, t_cfg in target_repos.items()
+        )
 
-            if card.get_branch() != t_cfg.get('branch'):
-                return True
+    def _card_differs_from_saved(self, card_by_name: dict, r_name: str, t_cfg: dict) -> bool:
+        """Returns True if the card for r_name deviates from the saved config t_cfg."""
+        if r_name not in card_by_name:
+            return True
+        card = card_by_name[r_name]
 
-            if card.get_current_profile() != t_cfg.get('profile'):
-                return True
-            if card.get_custom_command() != t_cfg.get('custom_command', ''):
-                return True
-
+        if card.get_branch() != t_cfg.get('branch'):
+            return True
+        if card.get_current_profile() != t_cfg.get('profile'):
+            return True
+        if card.get_custom_command() != t_cfg.get('custom_command', ''):
+            return True
+        if self._docker_active_differs(card, t_cfg):
+            return True
+        if self._docker_services_differ(card, t_cfg):
+            return True
         return False
 
-    def _apply_config(self, profile_data: dict):
+    @staticmethod
+    def _docker_active_differs(card, t_cfg: dict) -> bool:
+        if not hasattr(card, 'get_docker_compose_active'):
+            return False
+        current = {os.path.basename(f) for f in card.get_docker_compose_active()}
+        saved = {os.path.basename(f) for f in t_cfg.get('docker_compose_active', [])}
+        return current != saved
+
+    @staticmethod
+    def _docker_services_differ(card, t_cfg: dict) -> bool:
+        if not hasattr(card, 'get_docker_profile_services'):
+            return False
+        current = {os.path.basename(k): sorted(v) for k, v in card.get_docker_profile_services().items()}
+        saved = {os.path.basename(k): sorted(v) for k, v in t_cfg.get('docker_profile_services', {}).items()}
+        return current != saved
+
+    def _apply_config(self, profile_data: dict, _skip_dirty_check: bool = False):
         """Apply a loaded configuration to all repos.
-        Suppresses per-card change callbacks during the loop; runs one check at the end."""
+        Suppresses per-card change callbacks during the loop; runs one check at the end.
+        Pass _skip_dirty_check=True on startup to avoid false-positive dirty state
+        while async branch loads are still in flight."""
         self._applying_profile = True
         try:
             repos_config = profile_data.get('repos', {})
@@ -174,7 +199,8 @@ class ProfileManagerMixin:
             self._log("[config] Configuración aplicada a todos los repos")
         finally:
             self._applying_profile = False
-            self._do_check_profile_changes()
+            if not _skip_dirty_check:
+                self._do_check_profile_changes()
 
     def _apply_config_to_card(self, card, config: dict):
         """Apply a single repo config to a card."""

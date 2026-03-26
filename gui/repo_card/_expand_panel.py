@@ -6,6 +6,7 @@ import tkinter as tk
 from gui import theme
 from gui.tooltip import ToolTip
 from gui.constants import BADGE_REFRESH_MS, BTN_CONFIG_TEXT, BTN_CONFIG_TOOLTIP, REINSTALL_LBL
+from gui.log_helpers import insert_log_line
 
 
 class ExpandPanelMixin:
@@ -64,6 +65,12 @@ class ExpandPanelMixin:
             state="disabled", **theme.log_textbox_style()
         )
         self._log_textbox.pack(fill="x", pady=(4, 0))
+
+        # Flush log lines that arrived before the panel was first opened
+        if self._pre_panel_log_buffer:
+            for buffered_line in self._pre_panel_log_buffer:
+                insert_log_line(self._log_textbox, buffered_line, count_ref=self._log_line_count)
+            self._pre_panel_log_buffer.clear()
 
     def _build_branch_row(self, content, repo):
         """Build branch + secondary buttons row."""
@@ -388,12 +395,21 @@ class ExpandPanelMixin:
             if dc_name == 'all':
                 continue
 
-            # Default assume stopped styling
-            btn_color = theme.C.docker_stopped_fg if dc_file not in self._active_compose_files else theme.C.docker_active_fg
-            border_color = theme.C.docker_border_stopped if dc_file not in self._active_compose_files else theme.C.docker_border_active
+            cached = self._docker_status_cache.get(dc_file)
+            initial_text = f"🐳 {dc_name.title()} [{cached[0]}/{cached[1]}]" if cached else f"🐳 {dc_name.title()} [?/?]"
 
+            # Border reflects running containers if we already have cached data
+            if cached and cached[0] > 0:
+                btn_color = theme.C.docker_active_fg
+                border_color = theme.C.docker_border_running
+            elif dc_file in self._active_compose_files:
+                btn_color = theme.C.docker_active_fg
+                border_color = theme.C.docker_border_active
+            else:
+                btn_color = theme.C.docker_stopped_fg
+                border_color = theme.C.docker_border_stopped
             btn = ctk.CTkButton(
-                docker_frame, text=f"🐳 {dc_name.title()} [?/?]",
+                docker_frame, text=initial_text,
                 font=theme.font("md"), height=26,
                 fg_color=btn_color, hover_color=theme.C.subtle_border,
                 border_width=theme.G.border_width, border_color=border_color,
@@ -483,7 +499,11 @@ class ExpandPanelMixin:
         self._status = status
 
         def _update():
-            color = theme.STATUS_ICONS.get(status, theme.C.status_error)
+            # Cancel any pending log-flash revert so it doesn't override the new status color
+            if hasattr(self, '_log_flash_timer') and self._log_flash_timer:
+                self.after_cancel(self._log_flash_timer)
+                self._log_flash_timer = None
+            color = theme.STATUS_ICONS.get(status, theme.C.status_stopped)
             if status == 'logging':
                 color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)
@@ -513,7 +533,7 @@ class ExpandPanelMixin:
 
         def _update():
             # Basic info updater that was decoupled
-            color = theme.STATUS_ICONS.get(status, theme.C.status_error)
+            color = theme.STATUS_ICONS.get(status, theme.C.status_stopped)
             if status == 'logging':
                 color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)

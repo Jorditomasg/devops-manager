@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import tkinter as tk
 import customtkinter as ctk
 
@@ -59,11 +60,19 @@ class RepoCard(
         self._active_compose_files = set()
         self._docker_compose_buttons = {}
         self._docker_profile_services: dict = {}   # compose_file -> [service_names]
+        self._docker_status_cache: dict = {}        # dc_file -> (running, total)
         self._compose_status_thread_running = False
         self._compose_stop_event = threading.Event()
         self._badge_timer = None
-        self._log_line_count = 0
-        self._detached_log_line_count = 0
+        # Bounded pool for user-triggered actions (start/stop/pull/install/clean).
+        # max_workers=3: handles the common case of concurrent ops without unbounded growth.
+        self._action_pool = ThreadPoolExecutor(
+            max_workers=3,
+            thread_name_prefix=f'act-{repo_info.name[:12]}',
+        )
+        self._log_line_count = [0]          # mutable list ref for O(1) log trimming
+        self._detached_log_line_count = [0]
+        self._pre_panel_log_buffer: list = []   # log lines buffered before expand panel exists
         self._expand_panel_built = False
         self._pending_profile = None    # profile value set before expand panel exists
         self._pending_custom_command = ''  # custom command set before expand panel exists
@@ -83,8 +92,12 @@ class RepoCard(
         self._branch_load_id = self.after(200, self._refresh_branch)
         self._badge_timer = self.after(3000, self._refresh_badge_loop)
 
+        if getattr(self._repo, 'docker_compose_files', None):
+            self.after(500, self._prefetch_docker_status)
+
     def destroy(self):
         """Cancel pending timers and stop background threads before destroying."""
+        self._action_pool.shutdown(wait=False)
         self._compose_stop_event.set()
         self._compose_status_thread_running = False
         if self._badge_timer:
@@ -125,7 +138,9 @@ class RepoCard(
 
     def set_branch(self, branch: str) -> bool:
         def _run():
-            from core.git_manager import has_branch
+            from core.git_manager import has_branch, get_current_branch
+            if get_current_branch(self._repo.path) == branch:
+                return  # Already on target branch — skip checkout and dirty trigger
             if has_branch(self._repo.path, branch):
                 self._on_branch_change(branch)
         threading.Thread(target=_run, daemon=True).start()

@@ -65,55 +65,63 @@ class GlobalPanel(ctk.CTkFrame):
         )
         self._branch_entry.pack(side="left", padx=(4, 4))
 
-        apply_branch_btn = ctk.CTkButton(
+        self._apply_branch_btn = ctk.CTkButton(
             row, text="Aplicar", width=70,
             command=self._apply_branch_all,
             **theme.btn_style("blue")
         )
-        apply_branch_btn.pack(side="left", padx=(0, 0))
-        ToolTip(apply_branch_btn, "Aplicar esta rama a todos los repos seleccionados")
+        self._apply_branch_btn.pack(side="left", padx=(0, 0))
+        ToolTip(self._apply_branch_btn, "Aplicar esta rama a todos los repos seleccionados")
 
-        pull_btn = ctk.CTkButton(
+        self._pull_btn = ctk.CTkButton(
             row, text="⬇ Pull All", width=90,
             command=self._pull_all,
             **theme.btn_style("blue", font_size="md")
         )
-        pull_btn.pack(side="left", padx=(3, 0))
-        ToolTip(pull_btn, "Descargar cambios de todos los repos seleccionados")
+        self._pull_btn.pack(side="left", padx=(3, 0))
+        ToolTip(self._pull_btn, "Descargar cambios de todos los repos seleccionados")
 
-        install_btn = ctk.CTkButton(
+        self._install_btn = ctk.CTkButton(
             row, text="📦 Install All", width=95,
             command=self._install_all,
             **theme.btn_style("neutral_alt", font_size="md")
         )
-        install_btn.pack(side="left", padx=(3, 0))
-        ToolTip(install_btn, "Instalar dependencias de todos los proyectos seleccionados")
+        self._install_btn.pack(side="left", padx=(3, 0))
+        ToolTip(self._install_btn, "Instalar dependencias de todos los proyectos seleccionados")
 
         # Action buttons — right-aligned
-        restart_btn = ctk.CTkButton(
+        self._restart_btn = ctk.CTkButton(
             row, text="🔄 Restart", width=90,
             command=self._restart_selected,
             **theme.btn_style("warning", font_size="md")
         )
-        restart_btn.pack(side="right", padx=(3, 0))
-        ToolTip(restart_btn, "Reiniciar todos los servicios seleccionados")
+        self._restart_btn.pack(side="right", padx=(3, 0))
+        ToolTip(self._restart_btn, "Reiniciar todos los servicios seleccionados")
 
-        stop_btn = ctk.CTkButton(
+        self._stop_btn = ctk.CTkButton(
             row, text="⬛ Stop", width=80,
             command=self._stop_selected,
             **theme.btn_style("danger", font_size="md")
         )
-        stop_btn.pack(side="right", padx=(3, 0))
-        ToolTip(stop_btn, "Detener todos los servicios seleccionados")
+        self._stop_btn.pack(side="right", padx=(3, 0))
+        ToolTip(self._stop_btn, "Detener todos los servicios seleccionados")
 
-        start_btn = ctk.CTkButton(
+        self._start_btn = ctk.CTkButton(
             row, text="▶ Start", width=80,
             command=self._start_selected,
             **theme.btn_style("start", font_size="md")
         )
-        start_btn.pack(side="right", padx=(3, 0))
-        ToolTip(start_btn, "Iniciar todos los servicios seleccionados")
+        self._start_btn.pack(side="right", padx=(3, 0))
+        ToolTip(self._start_btn, "Iniciar todos los servicios seleccionados")
 
+
+    def _set_async_btns_state(self, state: str):
+        """Enable or disable the buttons that trigger async background operations."""
+        for btn in (self._apply_branch_btn, self._pull_btn, self._install_btn):
+            try:
+                btn.configure(state=state)
+            except Exception:
+                pass
 
     def _toggle_select_all(self):
         """Toggle all repo card checkboxes."""
@@ -137,30 +145,31 @@ class GlobalPanel(ctk.CTkFrame):
             messagebox.showwarning("Aviso", "No hay repos seleccionados")
             return
 
-        def _run():
-            not_found = []
-            for card in selected:
-                success = card.set_branch(branch)
-                if not success:
-                    not_found.append(card.get_name())
+        self._set_async_btns_state("disabled")
+        threading.Thread(
+            target=self._run_apply_branch,
+            args=(branch, selected),
+            daemon=True,
+        ).start()
 
-            if not_found:
-                def _alert():
-                    repos_str = "\n".join([f"  • {r}" for r in not_found])
-                    messagebox.showwarning(
-                        "⚠ Rama no encontrada",
-                        f"La rama '{branch}' no se encontró en:\n{repos_str}\n\n"
-                        "Estos repos mantienen su rama actual."
-                    )
-                self.after(0, _alert)
+    def _run_apply_branch(self, branch: str, selected: list):
+        """Background worker for _apply_branch_all."""
+        not_found = [card.get_name() for card in selected if not card.set_branch(branch)]
+        self.after(0, lambda: self._on_apply_branch_done(branch, selected, not_found))
 
-            if self._log:
-                total = len(selected)
-                changed = total - len(not_found)
-                self._log(f"[global] Rama '{branch}' aplicada a {changed}/{total} repos"
-                          + (f" ({len(not_found)} sin la rama)" if not_found else ""))
-
-        threading.Thread(target=_run, daemon=True).start()
+    def _on_apply_branch_done(self, branch: str, selected: list, not_found: list):
+        self._set_async_btns_state("normal")
+        if not_found:
+            repos_str = "\n".join(f"  • {r}" for r in not_found)
+            messagebox.showwarning(
+                "⚠ Rama no encontrada",
+                f"La rama '{branch}' no se encontró en:\n{repos_str}\n\n"
+                "Estos repos mantienen su rama actual.",
+            )
+        if self._log:
+            changed = len(selected) - len(not_found)
+            suffix = f" ({len(not_found)} sin la rama)" if not_found else ""
+            self._log(f"[global] Rama '{branch}' aplicada a {changed}/{len(selected)} repos{suffix}")
 
     def _pull_all(self):
         """Pull all selected repos."""
@@ -171,11 +180,14 @@ class GlobalPanel(ctk.CTkFrame):
         if self._log:
             self._log(f"[global] Pulling {len(selected)} repos...")
 
+        self._set_async_btns_state("disabled")
+
         def _run():
             from core.git_manager import pull
             for card in selected:
                 repo = card.get_repo_info()
                 pull(repo.path, self._log)
+            self.after(0, lambda: self._set_async_btns_state("normal"))
 
         threading.Thread(target=_run, daemon=True).start()
 

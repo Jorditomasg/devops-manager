@@ -28,6 +28,7 @@ class RepoConfigManagerDialog(BaseDialog):
         self._configs = load_repo_configs(self._config_key)
 
         self._current_selected = None
+        self._config_btns: dict = {}   # config_name -> CTkButton
 
         self._build_ui()
 
@@ -114,6 +115,7 @@ class RepoConfigManagerDialog(BaseDialog):
     def _refresh_list(self):
         for widget in self._list_frame.winfo_children():
             widget.destroy()
+        self._config_btns.clear()
 
         _blue = theme.btn_style("blue")
         for name in sorted(self._configs.keys()):
@@ -124,14 +126,27 @@ class RepoConfigManagerDialog(BaseDialog):
                 command=lambda n=name: self._select_config(n)
             )
             btn.pack(fill="x", pady=2)
-        self.update_idletasks()
+            self._config_btns[name] = btn
 
     def _select_config(self, name: str):
         if self._current_selected and self._current_selected != name:
             self._check_unsaved_changes()
 
+        prev = self._current_selected
         self._current_selected = name
-        self._refresh_list()
+
+        # Update only the two affected button colors — no full list rebuild needed
+        _blue = theme.btn_style("blue")
+        if prev and prev in self._config_btns:
+            try:
+                self._config_btns[prev].configure(fg_color="transparent")
+            except Exception:
+                pass
+        if name in self._config_btns:
+            try:
+                self._config_btns[name].configure(fg_color=_blue["fg_color"])
+            except Exception:
+                pass
 
         if name and name in self._configs:
             self._title_var.set(f"Editando: {name}")

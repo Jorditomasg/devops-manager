@@ -1,11 +1,17 @@
 """BaseDialog — shared boilerplate for all CTkToplevel dialog windows."""
+import os
 import customtkinter as ctk
+
+_ICON_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "assets", "icons", "icon_red.ico",
+)
 
 
 class BaseDialog(ctk.CTkToplevel):
     """Mixin/base for all application dialogs.
 
-    Handles: transient parent binding, grab_set, geometry centering.
+    Handles: transient parent binding, grab_set, geometry centering, window icon.
     Subclasses call super().__init__(parent, title, width, height) then build their UI.
     """
 
@@ -16,6 +22,8 @@ class BaseDialog(ctk.CTkToplevel):
         self.transient(parent)
         self.resizable(False, False)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
+        if os.path.exists(_ICON_PATH):
+            self.after(200, lambda: self.iconbitmap(_ICON_PATH))
         self.after(10, self._grab_and_focus)
 
     def _grab_and_focus(self):
@@ -24,7 +32,6 @@ class BaseDialog(ctk.CTkToplevel):
             return
         if not self.winfo_ismapped():
             self.deiconify()
-        self.attributes('-topmost', True)
         self.grab_set()
         self.lift()
         self.focus_force()

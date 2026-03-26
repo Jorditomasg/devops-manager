@@ -18,7 +18,7 @@ heuristics:
 commands:
   install_cmd: "mvn clean install -DskipTests -B"
   start_cmd: "mvn spring-boot:run"
-  windows_start_cmd: "mvnw.cmd spring-boot:run"
+  windows_start_cmd: "mvn spring-boot:run"
   unix_start_cmd: "./mvnw spring-boot:run"
   profile_flag: "-Dspring-boot.run.profiles="
   ready_pattern: "Started \\w+ in"

@@ -90,6 +90,7 @@ class ProfileDialog(BaseDialog):
         self._profile_list_frame.pack(fill="x", padx=10, pady=5)
 
         self._selected_profile = ctk.StringVar(value="")
+        self._profile_btns: dict = {}   # profile_name -> CTkButton (avoids full list rebuild on selection)
         self._refresh_list()
 
         btn_row = ctk.CTkFrame(load_frame, fg_color="transparent")
@@ -343,20 +344,28 @@ class ProfileDialog(BaseDialog):
 
         for widget in self._profile_list_frame.winfo_children():
             widget.destroy()
+        self._profile_btns.clear()
 
         if not profiles:
             ctk.CTkLabel(
                 self._profile_list_frame,
-                text="(Sin configs guardadas)",
+                text="Sin perfiles guardados aún.",
                 font=theme.font("md"), text_color=theme.C.text_placeholder
-            ).pack(pady=10)
+            ).pack(pady=(10, 4))
+            ctk.CTkButton(
+                self._profile_list_frame,
+                text="💾 Crear primer perfil",
+                command=self._save_profile,
+                **theme.btn_style("success")
+            ).pack(pady=(0, 6))
             self._selected_profile.set("")
             return
 
         _blue = theme.btn_style("blue")
         _neutral = theme.btn_style("neutral")
+        current_sel = self._selected_profile.get()
         for profile in profiles:
-            is_sel = self._selected_profile.get() == profile
+            is_sel = current_sel == profile
             fg = _blue["fg_color"] if is_sel else _neutral["fg_color"]
             btn = ctk.CTkButton(
                 self._profile_list_frame, text=profile,
@@ -365,17 +374,31 @@ class ProfileDialog(BaseDialog):
                 command=lambda p=profile: self._select_profile_item(p)
             )
             btn.pack(fill="x", pady=2)
+            self._profile_btns[profile] = btn
 
         # Ensure selection is valid
-        if self._selected_profile.get() not in profiles:
+        if current_sel not in profiles:
             self._select_profile_item(profiles[0])
 
     def _select_profile_item(self, profile):
+        prev = self._selected_profile.get()
         self._selected_profile.set(profile)
         # Populate save text input so it's easy to overwrite
         self._save_name.delete(0, "end")
         self._save_name.insert(0, profile)
-        self._refresh_list()  # trigger re-render to update selection color
+        # Only update the two affected buttons instead of rebuilding the whole list
+        _blue = theme.btn_style("blue")
+        _neutral = theme.btn_style("neutral")
+        if prev and prev in self._profile_btns:
+            try:
+                self._profile_btns[prev].configure(fg_color=_neutral["fg_color"])
+            except Exception:
+                pass
+        if profile in self._profile_btns:
+            try:
+                self._profile_btns[profile].configure(fg_color=_blue["fg_color"])
+            except Exception:
+                pass
 
 
 class ImportOptionsDialog(BaseDialog):

@@ -1,6 +1,7 @@
 """_actions.py — Service action methods mixin for RepoCard."""
 from __future__ import annotations
 import os
+import re
 import threading
 import subprocess
 import time
@@ -8,6 +9,8 @@ from tkinter import messagebox
 from gui.constants import REINSTALL_LBL
 from gui.log_helpers import insert_log_line
 from gui import theme
+
+_ANSI_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
 def _create_subprocess(cmd_str: str, cwd: str, env: dict = None, shell: bool = True) -> subprocess.Popen:
@@ -139,11 +142,7 @@ class ActionsMixin:
         self._update_button_visibility()
 
         env = self._build_install_env(repo)
-        threading.Thread(
-            target=self._run_install_thread,
-            args=(cmd_str, env, check_dirs, success_text, fail_text),
-            daemon=True,
-        ).start()
+        self._action_pool.submit(self._run_install_thread, cmd_str, env, check_dirs, success_text, fail_text)
 
     def _run_install_thread(self, cmd_str, env, check_dirs, success_text, fail_text):
         """Thread body: run the install subprocess, stream output, then report completion."""
@@ -217,21 +216,31 @@ class ActionsMixin:
 
     def _stream_start_output(self, proc, repo):
         """Read stdout line-by-line, detecting port/status patterns, until EOF."""
-        for line in iter(proc.stdout.readline, ''):
-            if not line:
-                break
-            decoded_line = line.strip()
-            self._detect_port_from_log(decoded_line)
-            self._detect_status_from_log(decoded_line)
-            if self._log:
-                self._log(decoded_line)
+        try:
+            for line in iter(proc.stdout.readline, ''):
+                if not line:
+                    break
+                decoded_line = _ANSI_RE.sub('', line).strip()
+                self._detect_port_from_log(decoded_line)
+                self._detect_status_from_log(decoded_line)
+                if self._log:
+                    self._log(decoded_line)
+        except (OSError, ValueError):
+            pass  # Process killed — expected when stopping manually
 
     def _start(self):
         """Start the service using the config-driven run_command from the YAML definition."""
         repo = self._repo
 
         if 'docker_checkboxes' in repo.features:
-            self._start_docker_services()
+            def _check_and_start():
+                from core.db_manager import is_docker_available
+                if not is_docker_available():
+                    self.after(0, self._show_docker_unavailable_alert)
+                    return
+                self.after(0, lambda: self._update_status(repo.name, 'starting'))
+                self._start_docker_services()
+            threading.Thread(target=_check_and_start, daemon=True).start()
             return
 
         # Check for custom command entered by user
@@ -267,12 +276,7 @@ class ActionsMixin:
         if self._log:
             self._log(f"[{repo.name}] ▶ {cmd}")
 
-        threading.Thread(
-            target=self._run_start_thread,
-            args=(cmd, env, profile),
-            daemon=True,
-            name=f'svc-{repo.name}',
-        ).start()
+        self._action_pool.submit(self._run_start_thread, cmd, env, profile)
 
     def _run_start_thread(self, cmd, env, profile):
         """Thread body: launch the service subprocess, stream output, then update status."""
@@ -358,7 +362,19 @@ class ActionsMixin:
                 if self._log:
                     self._log(f"Error: {e}")
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_pool.submit(_run)
+
+    def _show_docker_unavailable_alert(self):
+        """Show an error dialog when Docker daemon is not reachable."""
+        messagebox.showerror(
+            "Docker no disponible",
+            "No se puede conectar con el daemon de Docker.\n\n"
+            "Asegúrate de que Docker esté en ejecución:\n"
+            "  • Windows/Mac — inicia Docker Desktop\n"
+            "  • Linux — sudo systemctl start docker\n"
+            "  • WSL2 — inicia Docker Desktop o ejecuta\n"
+            "    'sudo service docker start' dentro de WSL"
+        )
 
     def _stop(self):
         """Stop the service using the service launcher."""
@@ -372,19 +388,23 @@ class ActionsMixin:
 
     def _stop_docker_services(self):
         """Stop active docker-compose services."""
+        self._update_status(self._repo.name, 'stopped')
+
         def _run():
             from core.db_manager import docker_compose_down
             for dc_file in self._active_compose_files:
                 docker_compose_down(dc_file, log=self._log)
-            self._update_compose_counts_now()
+            self.after(0, self._update_compose_counts_now)
+            self.after(3000, self._update_compose_counts_now)
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_pool.submit(_run)
 
     def _restart(self):
         """Restart the service using the service launcher."""
         repo = self._repo
         if 'docker_checkboxes' in repo.features:
             self._stop_docker_services()
+            self.after(2000, lambda: self._update_status(repo.name, 'starting'))
             self.after(2000, self._start_docker_services)
             return
 
@@ -393,7 +413,7 @@ class ActionsMixin:
             time.sleep(0.3)
             self.after(0, self._start)
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_pool.submit(_run)
 
     def _pull(self):
         """Pull latest changes."""
@@ -424,7 +444,7 @@ class ActionsMixin:
                         "Confirmar Pull",
                         f"Hay {commits} nuevo(s) commit(s) en '{branch}'. ¿Quieres descargarlos ahora?",
                     ):
-                        threading.Thread(target=_do_pull, daemon=True).start()
+                        self._action_pool.submit(_do_pull)
                 self.after(0, _ask)
             else:
                 _do_pull()
@@ -436,7 +456,7 @@ class ActionsMixin:
             self._check_pull_status()
             self._refresh_badge()
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_pool.submit(_run)
 
     def _check_pull_status(self):
         """Update pull button state with commits behind count."""
@@ -461,7 +481,7 @@ class ActionsMixin:
 
                 self.after(0, _update)
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_pool.submit(_run)
 
     def _clean_repo(self):
         """Clean all local untracked and modified files, removing env overrides."""
@@ -492,5 +512,5 @@ class ActionsMixin:
 
                 self.after(500, _restore)
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._action_pool.submit(_run)
 

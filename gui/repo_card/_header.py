@@ -43,8 +43,10 @@ class HeaderMixin:
         self._header.pack(fill="x", padx=6, pady=4)
         self._header.bind(BTN_CLICK, self._toggle_expand)
 
-        self._build_header_left(self._header)
+        # Right section must be packed first so it reserves space before the
+        # left section's expanding branch-hint label fills the remainder.
         self._build_header_right(self._header)
+        self._build_header_left(self._header)
 
     def _build_header_left(self, frame):
         """Build the checkbox + name label section of the header."""
@@ -116,25 +118,16 @@ class HeaderMixin:
         self._branch_hint.bind(BTN_CLICK, self._toggle_expand)
 
     def _build_header_right(self, frame):
-        """Build the status + action buttons section of the header."""
+        """Build the status + action buttons section of the header.
+
+        All widgets use side="right" and are packed in reverse visual order
+        (rightmost first) so they reserve their space before the left section's
+        expanding branch-hint fills the remainder.  Visual result (left→right):
+        [status_text] [port] [action_btns] [📁] [▼]
+        """
         repo = self._repo
 
-        # Status text
-        self._status_text = ctk.CTkLabel(
-            frame, text="Detenido",
-            font=theme.font("base"), text_color=theme.C.text_muted
-        )
-        self._status_text.pack(side="left", padx=(0, 4))
-
-        if repo.server_port:
-            ctk.CTkLabel(
-                frame, text=f":{repo.server_port}",
-                font=theme.font("md", bold=True, mono=True), text_color=theme.C.text_accent
-            ).pack(side="left", padx=(0, 8))
-
-        self._build_action_buttons(frame)
-
-        # Expand toggle
+        # Expand toggle (rightmost) — packed first
         self._toggle_btn = ctk.CTkButton(
             frame, text="▼", width=28,
             text_color=theme.C.text_accent_bright,
@@ -151,10 +144,27 @@ class HeaderMixin:
         self._explorer_btn.pack(side="right", padx=(4, 2))
         ToolTip(self._explorer_btn, "Abrir en el explorador")
 
+        # Action buttons frame
+        self._build_action_buttons(frame)
+
+        # Port label
+        if repo.server_port:
+            ctk.CTkLabel(
+                frame, text=f":{repo.server_port}",
+                font=theme.font("md", bold=True, mono=True), text_color=theme.C.text_accent
+            ).pack(side="right", padx=(0, 8))
+
+        # Status text (leftmost of the right group)
+        self._status_text = ctk.CTkLabel(
+            frame, text="Detenido",
+            font=theme.font("base"), text_color=theme.C.text_muted
+        )
+        self._status_text.pack(side="right", padx=(0, 4))
+
     def _build_action_buttons(self, frame):
         """Build the start/stop/restart action buttons."""
         self._action_btns_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        self._action_btns_frame.pack(side="left", padx=(0, 4))
+        self._action_btns_frame.pack(side="right", padx=(0, 4))
 
         self._start_btn = ctk.CTkButton(
             self._action_btns_frame, text="▶", width=32,
@@ -193,14 +203,21 @@ class HeaderMixin:
         if not hasattr(self, '_start_btn'):
             return
 
+        is_installing = getattr(self, '_is_installing', False)
+        is_running = self._status in ('running', 'starting')
+
+        # Skip costly relayout if nothing changed since the last call
+        new_state = (is_installing, is_running)
+        if getattr(self, '_last_btn_vis_state', None) == new_state:
+            return
+        self._last_btn_vis_state = new_state
+
         self._start_btn.pack_forget()
         self._stop_btn.pack_forget()
         self._restart_btn.pack_forget()
 
-        is_installing = getattr(self, '_is_installing', False)
-
         if is_installing:
-            if self._status in ('running', 'starting'):
+            if is_running:
                 self._stop_btn.pack(side="left", padx=(0, 2))
                 self._stop_btn.configure(state="disabled")
                 self._restart_btn.pack(side="left", padx=(0, 2))
@@ -209,7 +226,7 @@ class HeaderMixin:
                 self._start_btn.pack(side="left", padx=(0, 2))
                 self._start_btn.configure(state="disabled")
         else:
-            if self._status in ('running', 'starting'):
+            if is_running:
                 self._stop_btn.pack(side="left", padx=(0, 2))
                 self._stop_btn.configure(state="normal")
                 self._restart_btn.pack(side="left", padx=(0, 2))
@@ -218,7 +235,6 @@ class HeaderMixin:
                 self._start_btn.pack(side="left", padx=(0, 2))
                 self._start_btn.configure(state="normal")
 
-        is_running = self._status in ('running', 'starting')
         if hasattr(self, '_install_btn'):
             if is_running:
                 self._install_btn.configure(state="disabled")
@@ -268,9 +284,16 @@ class HeaderMixin:
 
         if not is_installed and self._repo.run_install_cmd:
             deps_text = install_cfg.get('status_label_deps_missing', '⚠ Falta instalar')
-            self._branch_hint_warn.configure(text=deps_text)
+            warn_text = deps_text
             hint_text = ("   " + "   ".join(parts)) if parts else ""
-            self._branch_hint.configure(text=hint_text)
         else:
-            self._branch_hint_warn.configure(text="")
-            self._branch_hint.configure(text="   ".join(parts))
+            warn_text = ""
+            hint_text = "   ".join(parts)
+
+        # Only push to widgets when content actually changed (avoids redundant redraws)
+        new_hints = (warn_text, hint_text)
+        if getattr(self, '_last_header_hints_state', None) == new_hints:
+            return
+        self._last_header_hints_state = new_hints
+        self._branch_hint_warn.configure(text=warn_text)
+        self._branch_hint.configure(text=hint_text)

@@ -165,7 +165,7 @@ class SettingsDialog(BaseDialog):
             if not app_dir:
                 messagebox.showerror("Error", "No se pudo determinar el directorio de la aplicación.", parent=self)
                 return
-            run_bat = os.path.join(app_dir, "run.bat")
+            run_bat = os.path.join(app_dir, "scripts", "run.bat")
             icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
 
             # Resolve real Desktop path (handles OneDrive-redirected desktops)

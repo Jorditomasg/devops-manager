@@ -24,11 +24,13 @@ class LogMixin:
             self._log_textbox.configure(state="normal")
             self._log_textbox.delete("1.0", "end")
             self._log_textbox.configure(state="disabled")
+            self._log_line_count[0] = 0
 
         if getattr(self, '_detached_log_textbox', None) and self._detached_log_textbox.winfo_exists():
             self._detached_log_textbox.configure(state="normal")
             self._detached_log_textbox.delete("1.0", "end")
             self._detached_log_textbox.configure(state="disabled")
+            self._detached_log_line_count[0] = 0
 
         self._has_logs = False
 
@@ -71,11 +73,19 @@ class LogMixin:
         )
         self._detached_log_textbox.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
-        # Copy current content
-        current_logs = self._log_textbox.get("1.0", "end")
-        self._detached_log_textbox.insert("end", current_logs)
-        self._detached_log_textbox.configure(state="disabled")
-        self._detached_log_textbox.see("end")
+        # Copy current content (deferred so the window can render first)
+        def _copy_content():
+            if not hasattr(self, '_log_textbox'):
+                return
+            current_logs = self._log_textbox.get("1.0", "end")
+            self._detached_log_textbox.configure(state="normal")
+            self._detached_log_textbox.insert("end", current_logs)
+            self._detached_log_textbox.configure(state="disabled")
+            self._detached_log_textbox.see("end")
+            # Sync line counter with the copied content
+            self._detached_log_line_count[0] = self._log_line_count[0]
+
+        self._detached_log_window.after(0, _copy_content)
 
     def _repo_log(self, message: str):
         """Add a timestamped log message to this repo's console. Thread-safe."""
@@ -90,10 +100,12 @@ class LogMixin:
             self._has_logs = True
 
             if hasattr(self, '_log_textbox'):
-                insert_log_line(self._log_textbox, line)
+                insert_log_line(self._log_textbox, line, count_ref=self._log_line_count)
+            else:
+                self._pre_panel_log_buffer.append(line)
 
             if getattr(self, '_detached_log_textbox', None) and self._detached_log_textbox.winfo_exists():
-                insert_log_line(self._detached_log_textbox, line)
+                insert_log_line(self._detached_log_textbox, line, count_ref=self._detached_log_line_count)
 
             self._flash_log_icon()
 

@@ -20,6 +20,13 @@ def detect_repos(workspace_dir: str) -> list[RepoInfo]:
     if not os.path.isdir(workspace_dir):
         return repos
 
+    # Instantiate the analyzer once — loading all YAML repo-type definitions is O(m),
+    # not O(n*m) where n = number of repos and m = number of YAML definitions.
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_dir = os.path.join(base_dir, 'config')
+    from application.services.project_analyzer import ProjectAnalyzerService
+    analyzer = ProjectAnalyzerService(config_dir=config_dir)
+
     for entry in sorted(os.listdir(workspace_dir)):
         full_path = os.path.join(workspace_dir, entry)
         if not os.path.isdir(full_path):
@@ -36,21 +43,21 @@ def detect_repos(workspace_dir: str) -> list[RepoInfo]:
                 repos.append(repo)
             continue
 
-        repo = _classify_repo(entry, full_path)
+        repo = _classify_repo(entry, full_path, analyzer)
         if repo:
             repos.append(repo)
 
     return repos
 
 
-def _classify_repo(name: str, path: str) -> Optional[RepoInfo]:
+def _classify_repo(name: str, path: str, analyzer=None) -> Optional[RepoInfo]:
     """Classify a repo based on its contents using YAML configs."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    config_dir = os.path.join(base_dir, 'config')
-    
-    from application.services.project_analyzer import ProjectAnalyzerService
-    analyzer = ProjectAnalyzerService(config_dir=config_dir)
-    
+    if analyzer is None:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_dir = os.path.join(base_dir, 'config')
+        from application.services.project_analyzer import ProjectAnalyzerService
+        analyzer = ProjectAnalyzerService(config_dir=config_dir)
+
     files_in_root = set()
     for item in os.listdir(path):
         if os.path.isfile(os.path.join(path, item)):

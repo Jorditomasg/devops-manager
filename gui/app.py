@@ -97,6 +97,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
             self.after(200, lambda: self.iconbitmap(icon_path))
+        self._current_icon_color = "red"
 
         # Handle close
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -141,20 +142,24 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
         ctk.CTkFrame(self, height=2, corner_radius=0, fg_color=theme.C.divider).pack(fill="x")
 
+        # Right buttons must be packed first to reserve their space before the
+        # path label fills the remainder — prevents buttons being pushed off screen.
+        self._build_topbar_buttons(topbar)
+
         ctk.CTkLabel(
             topbar, text="🚀 DevOps Manager",
             font=theme.font("h1", bold=True), text_color=theme.C.text_primary
         ).pack(side="left", padx=20)
 
-        path_label = ctk.CTkLabel(
+        self._path_label = ctk.CTkLabel(
             topbar, text=self._workspace_dir,
-            font=theme.font("base", mono=True), text_color=theme.C.text_accent, cursor="hand2"
+            font=theme.font("base", mono=True), text_color=theme.C.text_accent,
+            cursor="hand2", anchor="w"
         )
-        path_label.pack(side="left", padx=10)
-        path_label.bind("<Button-1>", lambda e: self._open_workspace())
-        ToolTip(path_label, "Abrir carpeta en el explorador")
-
-        self._build_topbar_buttons(topbar)
+        self._path_label.pack(side="left", padx=10, fill="x", expand=True)
+        self._path_label.bind("<Button-1>", lambda e: self._open_workspace())
+        self._path_label.bind("<Configure>", self._update_path_label)
+        ToolTip(self._path_label, f"📁 {self._workspace_dir}\nAbrir en el explorador")
 
     def _build_topbar_buttons(self, topbar):
         """Build the right-side action buttons in the top bar."""
@@ -329,6 +334,35 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._detached_global_log_textbox.configure(state="disabled")
         self._detached_global_log_textbox.see("end")
 
+    def _update_path_label(self, event=None):
+        """Truncate workspace path with ellipsis to fit available label width."""
+        if getattr(self, '_updating_path_label', False):
+            return
+        if not hasattr(self, '_path_label'):
+            return
+        available_w = self._path_label.winfo_width()
+        if available_w <= 1:
+            return
+        full_text = self._workspace_dir
+        self._updating_path_label = True
+        try:
+            import tkinter.font as tkfont
+            f = tkfont.Font(font=theme.font("base", mono=True))
+            if f.measure(full_text) <= available_w - 10:
+                self._path_label.configure(text=full_text)
+                return
+            ellipsis = "..."
+            ell_w = f.measure(ellipsis)
+            for i in range(len(full_text), 0, -1):
+                if f.measure(full_text[:i]) + ell_w <= available_w - 10:
+                    self._path_label.configure(text=full_text[:i] + ellipsis)
+                    return
+            self._path_label.configure(text=ellipsis)
+        except Exception:
+            pass
+        finally:
+            self._updating_path_label = False
+
     def _open_workspace(self):
         """Open the workspace directory in the system file explorer."""
         try:
@@ -456,6 +490,12 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         # Update global panel
         self._global_panel.set_cards(self._repo_cards)
 
+        # Re-apply active profile after (re)building cards.
+        # _skip_dirty_check=True because branches are still loading async at this point;
+        # the per-card _trigger_change_callback will fire once they settle.
+        if self._current_profile_data:
+            self._apply_config(self._current_profile_data, _skip_dirty_check=True)
+
     def _open_config_editor(self, filepath: str):
         """Open the config editor dialog for a file."""
         ConfigEditorDialog(self, filepath, self._log)
@@ -579,10 +619,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             color = "green" if any_running else "red"
             image = self._tray_icon_images.get(color, Image.new('RGB', (64, 64), color='red'))
 
-            menu = pystray.Menu(
-                item('Mostrar', self._restore_window, default=True),
-                item('Salir', self._quit_app)
-            )
+            menu = pystray.Menu(self._build_tray_menu)
             self._tray_icon = pystray.Icon("devops_manager", image, "DevOps Manager", menu)
             
             # run_detached handles the background thread natively in pystray
@@ -611,12 +648,20 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self.after(0, self._do_update_tray_status)
 
     def _do_update_tray_status(self):
-        """Update tray icon based on running services. Window icon stays fixed (icon_red)."""
-        any_running = any(
-            getattr(card, '_status', '') in ('running', 'starting')
-            for card in self._repo_cards
-        )
-        color = "green" if any_running else "red"
+        """Update tray icon color and tooltip based on running services."""
+        running = [
+            card for card in self._repo_cards
+            if getattr(card, '_status', '') in ('running', 'starting')
+        ]
+        color = "green" if running else "red"
+        if color != self._current_icon_color:
+            self._current_icon_color = color
+            win_icon_path = os.path.join(self._icons_dir, f"icon_{color}.ico")
+            if os.path.exists(win_icon_path):
+                try:
+                    self.iconbitmap(win_icon_path)
+                except Exception:
+                    pass
         if self._tray_icon:
             img = self._tray_icon_images.get(color)
             if img:
@@ -624,7 +669,48 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                     self._tray_icon.icon = img
                 except (OSError, ValueError):
                     pass
+            try:
+                self._tray_icon.title = f"DevOps Manager — {len(running)}/{len(self._repo_cards)} corriendo"
+            except (OSError, ValueError):
+                pass
         self.after(5000, self._check_tray_status)
+
+    def _build_tray_menu(self):
+        """Build the tray context menu dynamically at open time."""
+        running = [c for c in self._repo_cards if getattr(c, '_status', '') in ('running', 'starting')]
+        selected = [c for c in self._repo_cards if c.is_selected()]
+        items = []
+        if selected:
+            items.append(item(f'▶  Iniciar seleccionados ({len(selected)})', self._tray_start_selected))
+        if running:
+            items.append(item(f'■  Parar todos corriendo ({len(running)})', self._tray_stop_running))
+        if running:
+            items.append(pystray.Menu.SEPARATOR)
+            for card in running:
+                name = card.get_name()
+                status = getattr(card, '_status', '')
+                label = f'● {name}' + (' (arrancando)' if status == 'starting' else '')
+                items.append(item(label, None, enabled=False))
+        items.append(pystray.Menu.SEPARATOR)
+        items.append(item('Mostrar', self._restore_window, default=True))
+        items.append(item('Salir', self._quit_app))
+        return items
+
+    def _tray_start_selected(self, icon, menu_item):
+        self.after(0, self._do_tray_start_selected)
+
+    def _do_tray_start_selected(self):
+        for card in list(self._repo_cards):
+            if card.is_selected():
+                card.do_start()
+
+    def _tray_stop_running(self, icon, menu_item):
+        self.after(0, self._do_tray_stop_running)
+
+    def _do_tray_stop_running(self):
+        for card in list(self._repo_cards):
+            if getattr(card, '_status', '') in ('running', 'starting'):
+                card.do_stop()
 
     def _on_close(self):
         """Handle window close."""

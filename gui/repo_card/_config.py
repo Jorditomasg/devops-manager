@@ -56,7 +56,8 @@ class ConfigMixin:
             subprocess.run(['git', 'checkout', '--', target_file], cwd=self._repo.path, capture_output=True, creationflags=flags)
 
         self.after(0, self._update_header_hints)
-        self._trigger_change_callback()
+        if is_real_change:
+            self._trigger_change_callback()
 
     def _write_spring_config(self, repo, target_file: str, config_data) -> tuple[bool, str]:
         """Write Spring Boot specific configuration."""
@@ -115,7 +116,8 @@ class ConfigMixin:
             self.after(0, lambda tf=target_file: messagebox.showerror("Error", f"No se pudo escribir en '{tf}'"))
 
         self.after(0, self._update_header_hints)
-        self._trigger_change_callback()
+        if is_real_change:
+            self._trigger_change_callback()
 
     def _on_config_change(self, config_name: str, target_file: str = None, skip_log: bool = False):
         """Handle env/app change and overwrite target config file."""
