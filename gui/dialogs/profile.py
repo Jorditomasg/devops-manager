@@ -39,7 +39,7 @@ class ProfileDialog(BaseDialog):
         self._build_action_buttons(self._main_scroll)
 
         ctk.CTkLabel(
-            self._main_scroll, text="💡 Guardar: guarda repos (URL, rama, env, cmd) + opciones BD/configs.\n"
+            self._main_scroll, text="💡 Guardar: guarda repos (URL, rama, env, cmd) + configs.\n"
                        "    Importar: permite clonar repos, instalar deps, aplicar configs.",
             font=theme.font("sm"), text_color=theme.C.text_placeholder,
             justify="left"
@@ -249,10 +249,7 @@ class ProfileDialog(BaseDialog):
 
         self._describe_branch_changes(changes, target_repos, current_repos, missing_names)
 
-        # 3. Presets BD
-        self._describe_profile_changes(changes, data)
-
-        # 4. Config files
+        # 3. Config files
         self._describe_command_changes(changes, target_repos)
 
         if not changes:
@@ -575,7 +572,7 @@ class ImportOptionsDialog(BaseDialog):
         if self._base_changes_text and "Ningún cambio detectado" not in self._base_changes_text:
             lines.append("--- CAMBIOS EN REPOSITORIOS (RAMA / PERFIL) ---")
             for line in self._base_changes_text.splitlines():
-                if "Clonar nuevo repo" not in line and "Importar presets de BD" not in line and "Sobrescribir archivos" not in line and line.strip() != "":
+                if "Clonar nuevo repo" not in line and "Sobrescribir archivos" not in line and line.strip() != "":
                     lines.append(line)
             lines.append("")
 

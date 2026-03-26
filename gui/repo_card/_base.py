@@ -156,7 +156,8 @@ class RepoCard(
         elif hasattr(self, '_config_combos') and self._config_combos:
             if isinstance(profile, dict):
                 for target_file, combo in self._config_combos.items():
-                    val = profile.get(target_file, '- Sin Seleccionar -')
+                    rel = os.path.relpath(target_file, self._repo.path).replace('\\', '/')
+                    val = profile.get(rel) or profile.get(target_file) or '- Sin Seleccionar -'
                     combo.set(val)
                     self._update_header_hints()
                     self._on_config_change(val, target_file, skip_log=True)
@@ -190,7 +191,8 @@ class RepoCard(
             for tf, combo in self._config_combos.items():
                 v = combo.get()
                 if v and v not in ('- Sin Seleccionar -', ''):
-                    res[tf] = v
+                    rel = os.path.relpath(tf, self._repo.path).replace('\\', '/')
+                    res[rel] = v
             return res
         # Expand panel not built yet — return the pending value set by set_profile()
         return self._pending_profile if self._pending_profile is not None else ''
