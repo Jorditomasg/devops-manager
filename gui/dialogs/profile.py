@@ -568,6 +568,13 @@ class ImportOptionsDialog(BaseDialog):
         self._progress.pack(fill="x", padx=10, pady=(0, 10))
         self._progress.set(0)
 
+        # ── Live log (hidden until _apply() is called) ──
+        self._log_detail_label = ctk.CTkLabel(parent, text="📋 Progreso detallado:",
+                                              font=theme.font("base", bold=True))
+        self._log_box = ctk.CTkTextbox(parent, font=theme.font("sm", mono=True),
+                                       wrap="none", height=120, state="disabled")
+        # start hidden — shown when execution begins
+
     def _update_preview(self):
         """Update the preview textbox dynamically based on selected checkboxes."""
         self._preview_box.configure(state="normal")
@@ -601,24 +608,47 @@ class ImportOptionsDialog(BaseDialog):
         self._preview_box.insert("1.0", "\n".join(lines).strip())
         self._preview_box.configure(state="disabled")
 
+    def _log_to_dialog(self, text: str):
+        """Append a line to the in-dialog live log box (thread-safe)."""
+        def _do():
+            try:
+                self._log_box.configure(state="normal")
+                self._log_box.insert("end", text.rstrip() + "\n")
+                self._log_box.see("end")
+                self._log_box.configure(state="disabled")
+            except tk.TclError:
+                pass
+        self.after(0, _do)
+
     def _apply_repos(self, selected_repos: list, _update_progress):
         """Clone missing repos using ThreadPoolExecutor."""
         from core.git_manager import clone, checkout
         from concurrent.futures import ThreadPoolExecutor
 
+        def _combined_log(text: str):
+            if self._log:
+                self._log(text)
+            self._log_to_dialog(text)
+
         def _clone_repo(m):
             if not m['git_url']:
-                if self._log:
-                    self._log(f"[import] ⚠ {m['name']}: sin URL de repositorio, clonación omitida")
+                _combined_log(f"[import] ⚠ {m['name']}: sin URL de repositorio, clonación omitida")
                 _update_progress(f"⚠ {m['name']}: sin URL")
                 return
             dest = os.path.join(self._workspace_dir, m['name'])
-            if self._log:
-                self._log(f"[import] Clonando {m['name']}...")
-            success, msg = clone(m['git_url'], dest, self._log)
+            try:
+                self.after(0, lambda name=m['name']: self._progress_label.configure(
+                    text=f"⏳ Clonando: {name}..."
+                ))
+            except tk.TclError:
+                pass
+            _combined_log(f"[import] Clonando {m['name']}...")
+            success, msg = clone(m['git_url'], dest, _combined_log)
             if success and m.get('branch'):
-                checkout(dest, m['branch'], self._log)
-            _update_progress(f"✅ Clonado: {m['name']}")
+                checkout(dest, m['branch'], _combined_log)
+            if not success:
+                _combined_log(f"[import] ❌ Error al clonar {m['name']}: {msg[:200]}")
+            _update_progress(f"✅ {m['name']}" if success else f"❌ Error: {m['name']}")
             self._did_clone = True
 
         with ThreadPoolExecutor(max_workers=5) as executor:
@@ -694,8 +724,24 @@ class ImportOptionsDialog(BaseDialog):
 
         if settings['clone']:
             self._did_clone = True
+            n = len(self._missing)
+            names = ", ".join(m['name'] for m in self._missing)
+            try:
+                self.after(0, lambda: self._progress_label.configure(
+                    text=f"⏳ Iniciando clonación de {n} repositorio{'s' if n != 1 else ''}..."
+                ))
+            except tk.TclError:
+                pass
+            self._log_to_dialog(f"[import] Iniciando clonación: {names}")
             self._apply_repos(self._missing, _update_progress)
         if settings['overwrite_configs']:
+            try:
+                self.after(0, lambda: self._progress_label.configure(
+                    text="⏳ Aplicando archivos de configuración..."
+                ))
+            except tk.TclError:
+                pass
+            self._log_to_dialog("[import] Aplicando archivos de configuración...")
             self._run_config_files_step(_update_progress)
 
         self._schedule_import_done()
@@ -716,8 +762,10 @@ class ImportOptionsDialog(BaseDialog):
                     apply_config_files(repo_path, repo_cfg.get('type', ''), cf, target_env=target_env)
                 except TypeError:
                     apply_config_files(repo_path, repo_cfg.get('type', ''), cf)
+                msg = f"[import] Config files aplicados: {repo_name}"
                 if self._log:
-                    self._log(f"[import] Config files aplicados: {repo_name}")
+                    self._log(msg)
+                self._log_to_dialog(msg)
 
         with ThreadPoolExecutor(max_workers=5) as executor:
             for repo_name, repo_cfg in self._profile_data.get('repos', {}).items():
@@ -728,6 +776,8 @@ class ImportOptionsDialog(BaseDialog):
     def _apply(self):
         """Run all selected import operations."""
         self._apply_btn.configure(state="disabled", text="⏳ Aplicando...")
+        self._log_detail_label.pack(anchor="w", padx=10, pady=(5, 0))
+        self._log_box.pack(fill="x", padx=10, pady=(0, 10))
 
         settings = self._collect_import_settings()
 
