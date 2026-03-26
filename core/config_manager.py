@@ -229,6 +229,66 @@ def save_repo_configs(config_key: str, configs_dict: dict, config_path: str = ''
         pass
 
 
+def merge_repo_configs(config_key: str, configs_dict: dict, config_path: str = '') -> dict:
+    """Merge configs_dict into existing repo_configs with smart conflict resolution.
+
+    For each config name in configs_dict:
+    - Not present in existing → add it directly.
+    - Present with identical content → skip (no duplicate).
+    - Present with different content → add with a unique name 'repetido1', 'repetido2', etc.
+
+    config_key is 'repo-name::module-key'.
+    Returns a dict of renames: {original_name: new_name} for any conflicts resolved by renaming.
+    """
+    if not config_path:
+        config_path = get_config_path()
+    renames: dict = {}
+    try:
+        if os.path.isfile(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        else:
+            config = {}
+
+        if 'repo_configs' not in config:
+            config['repo_configs'] = {}
+
+        def _merge(existing: dict, incoming: dict) -> dict:
+            merged = dict(existing)
+            for name, content in incoming.items():
+                if name not in merged:
+                    merged[name] = content
+                elif merged[name] == content:
+                    pass  # identical content – skip
+                else:
+                    i = 1
+                    while True:
+                        candidate = f"repetido{i}"
+                        if candidate not in merged:
+                            merged[candidate] = content
+                            renames[name] = candidate
+                            break
+                        i += 1
+            return merged
+
+        if '::' in config_key:
+            repo, module = config_key.split('::', 1)
+            if repo not in config['repo_configs'] or not isinstance(config['repo_configs'][repo], dict):
+                config['repo_configs'][repo] = {}
+            existing = config['repo_configs'][repo].get(module, {})
+            config['repo_configs'][repo][module] = _merge(existing, configs_dict)
+        else:
+            existing = config['repo_configs'].get(config_key, {})
+            config['repo_configs'][config_key] = _merge(existing, configs_dict)
+
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        _invalidate_config_cache(config_path)
+    except (OSError, json.JSONDecodeError):
+        pass
+    return renames
+
+
 def _profile_name_from_file(basename: str, env_patterns: list) -> str:
     """Derive a profile/environment name from a filename using config-driven glob patterns.
 

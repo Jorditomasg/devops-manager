@@ -432,17 +432,25 @@ class ImportOptionsDialog(BaseDialog):
 
         self._build_buttons_frame(self._main_container)
 
-        main_scroll = ctk.CTkScrollableFrame(self._main_container, fg_color="transparent")
-        main_scroll.pack(side="top", fill="both", expand=True, padx=5, pady=(5, 0))
+        self._content_area = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._content_area.pack(side="top", fill="both", expand=True, padx=5, pady=(5, 0))
 
-        self._build_header_frame(main_scroll)
+        # --- STEP 1 ---
+        self._step1_scroll = ctk.CTkScrollableFrame(self._content_area, fg_color="transparent")
+        self._step1_scroll.pack(fill="both", expand=True)
 
-        options_frame = ctk.CTkFrame(main_scroll, corner_radius=8)
+        self._build_header_frame(self._step1_scroll)
+
+        options_frame = ctk.CTkFrame(self._step1_scroll, corner_radius=8)
         options_frame.pack(fill="x", padx=10, pady=(0, 15))
 
         self._build_checkboxes_section(options_frame, has_config_files, profile_data)
         self._build_java_mappings_section(options_frame, profile_data)
-        self._build_preview_section(main_scroll)
+        self._build_preview_section(self._step1_scroll)
+
+        # --- STEP 2 ---
+        self._step2_frame = ctk.CTkFrame(self._content_area, fg_color="transparent")
+        self._build_progress_section(self._step2_frame)
 
         self._base_changes_text = changes_text
         self._update_preview()
@@ -479,10 +487,11 @@ class ImportOptionsDialog(BaseDialog):
         )
         self._apply_btn.pack(side="right", padx=(10, 0))
 
-        ctk.CTkButton(
+        self._cancel_btn = ctk.CTkButton(
             self._btn_frame, text="Cancelar", width=100,
             command=self.destroy, **theme.btn_style("neutral", height="lg")
-        ).pack(side="right")
+        )
+        self._cancel_btn.pack(side="right")
 
     def _build_checkboxes_section(self, frame, has_config_files: bool, profile_data: dict):
         """Build repo selection checkboxes for clone, install, config files."""
@@ -545,28 +554,31 @@ class ImportOptionsDialog(BaseDialog):
             ctk.CTkLabel(frame, text="").pack(pady=2)
 
     def _build_preview_section(self, parent):
-        """Build changes preview textbox and progress bar."""
-        # ── Changes Preview ──
+        """Build changes preview textbox for step 1."""
         ctk.CTkLabel(parent, text="📋 Resumen de Cambios",
                      font=theme.font("xl", bold=True)).pack(anchor="w", padx=10, pady=(5, 5))
 
         self._preview_box = ctk.CTkTextbox(parent, font=theme.font("md", mono=True), wrap="none", height=150)
-        self._preview_box.pack(fill="x", padx=10, pady=(0, 10))
+        self._preview_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # ── Progress ──
-        self._progress_label = ctk.CTkLabel(parent, text="", font=theme.font("sm"),
-                                            text_color=theme.C.text_muted)
-        self._progress_label.pack(anchor="w", padx=10, pady=(5, 0))
+    def _build_progress_section(self, parent):
+        """Build progress bar and log textbox for step 2."""
+        ctk.CTkLabel(parent, text="⚙️ Aplicando Configuración...",
+                     font=theme.font("xxl", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
+
+        self._progress_label = ctk.CTkLabel(parent, text="Preparando...", font=theme.font("base", bold=True),
+                                            text_color=theme.C.text_primary)
+        self._progress_label.pack(anchor="w", padx=10, pady=(10, 0))
         self._progress = ctk.CTkProgressBar(parent)
-        self._progress.pack(fill="x", padx=10, pady=(0, 10))
+        self._progress.pack(fill="x", padx=10, pady=(5, 15))
         self._progress.set(0)
 
-        # ── Live log (hidden until _apply() is called) ──
-        self._log_detail_label = ctk.CTkLabel(parent, text="📋 Progreso detallado:",
+        self._log_detail_label = ctk.CTkLabel(parent, text="📋 Log detallado:",
                                               font=theme.font("base", bold=True))
+        self._log_detail_label.pack(anchor="w", padx=10, pady=(5, 0))
         self._log_box = ctk.CTkTextbox(parent, font=theme.font("sm", mono=True),
-                                       wrap="none", height=120, state="disabled")
-        # start hidden — shown when execution begins
+                                       wrap="none", state="disabled")
+        self._log_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
     def _update_preview(self):
         """Update the preview textbox dynamically based on selected checkboxes."""
@@ -688,16 +700,24 @@ class ImportOptionsDialog(BaseDialog):
         def _done():
             self._progress.set(1.0)
             self._progress_label.configure(text="✅ Importación completada")
-            if self._on_complete:
-                self._on_complete(self._profile_data, self._did_clone)
+            
+            def _close():
+                if self._on_complete:
+                    self._on_complete(self._profile_data, self._did_clone)
+                else:
+                    self.destroy()
+
+            self._apply_btn.pack_forget()
+            self._cancel_btn.configure(state="normal", text="✅ Cerrar", command=_close, **theme.btn_style("success", height="lg"))
+            
             messagebox.showinfo("Completado", "Configuración importada y aplicada correctamente")
-            self.destroy()
         self.after(0, _done)
 
     def _execute_import_steps(self, settings: dict):
         """Run all selected import steps and schedule the completion callback."""
         steps_total = sum([
             len(self._missing) if settings['clone'] else 0,
+            1,  # always: merge saved_environments + config_files → repo_configs
             1 if settings['overwrite_configs'] else 0,
         ])
         steps_total = max(steps_total, 1)
@@ -727,6 +747,9 @@ class ImportOptionsDialog(BaseDialog):
                 pass
             self._log_to_dialog(f"[import] Iniciando clonación: {names}")
             self._apply_repos(self._missing, _update_progress)
+
+        self._run_import_repo_configs_step(_update_progress)
+
         if settings['overwrite_configs']:
             try:
                 self.after(0, lambda: self._progress_label.configure(
@@ -738,6 +761,39 @@ class ImportOptionsDialog(BaseDialog):
             self._run_config_files_step(_update_progress)
 
         self._schedule_import_done()
+
+    def _run_import_repo_configs_step(self, _update_progress):
+        """Always merge saved_environments and config_files from the profile into
+        devops_manager_config.json (repo_configs), with smart rename-on-conflict logic.
+        Updates active_configs when a rename affects the currently selected environment."""
+        from core.profile_manager import (
+            apply_saved_environments, apply_config_files_to_repo_configs,
+            update_active_configs_for_renames,
+        )
+        all_renames: dict = {}
+        for repo_name, repo_cfg in self._profile_data.get('repos', {}).items():
+            saved_envs = repo_cfg.get('saved_environments', {})
+            if saved_envs:
+                renames = apply_saved_environments(repo_name, saved_envs)
+                for k, v in renames.items():
+                    all_renames.setdefault(k, {}).update(v)
+
+            cf = repo_cfg.get('config_files', {})
+            if cf:
+                renames = apply_config_files_to_repo_configs(repo_name, cf)
+                for k, v in renames.items():
+                    all_renames.setdefault(k, {}).update(v)
+
+        if all_renames:
+            update_active_configs_for_renames(all_renames)
+            renamed_summary = ", ".join(
+                f"{k}: {list(v.keys())}→{list(v.values())}" for k, v in all_renames.items()
+            )
+            self._log_to_dialog(f"[import] Renombres por conflicto: {renamed_summary}")
+            if self._log:
+                self._log(f"[import] Configs renombrados por conflicto: {renamed_summary}")
+
+        _update_progress("🗂 Entornos guardados importados")
 
     def _run_config_files_step(self, _update_progress):
         """Overwrite local config files with those stored in the profile."""
@@ -769,8 +825,11 @@ class ImportOptionsDialog(BaseDialog):
     def _apply(self):
         """Run all selected import operations."""
         self._apply_btn.configure(state="disabled", text="⏳ Aplicando...")
-        self._log_detail_label.pack(anchor="w", padx=10, pady=(5, 0))
-        self._log_box.pack(fill="x", padx=10, pady=(0, 10))
+        self._cancel_btn.configure(state="disabled")
+
+        # Transition to Step 2
+        self._step1_scroll.pack_forget()
+        self._step2_frame.pack(fill="both", expand=True)
 
         settings = self._collect_import_settings()
 

@@ -276,7 +276,15 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         """Central log function."""
         print(message)
         if hasattr(self, '_statusbar') and len(message) < 100:
-            self._statusbar.configure(text=message)
+            def _update_statusbar():
+                try:
+                    self._statusbar.configure(text=message)
+                except Exception:
+                    pass
+            try:
+                self.after(0, _update_statusbar)
+            except Exception:
+                pass
 
     def _toggle_global_log(self):
         if self._global_log_frame.winfo_ismapped():

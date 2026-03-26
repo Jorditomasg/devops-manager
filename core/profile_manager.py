@@ -156,8 +156,29 @@ def _build_single_repo_profile(card, include_config_files: bool) -> tuple[str, d
 
     if include_config_files:
         repo_data['config_files'] = _capture_config_files(repo)
+        repo_data['saved_environments'] = _capture_saved_environments(repo)
 
     return repo.name, repo_data
+
+
+def _capture_saved_environments(repo) -> dict:
+    """Capture alternative environments stored in config manager."""
+    from core.config_manager import load_repo_configs
+    envs_by_file = {}
+    for target_file in getattr(repo, 'environment_files', []):
+        try:
+            if hasattr(repo, 'path') and repo.path:
+                rel_path = os.path.relpath(target_file, repo.path).replace(os.sep, '/')
+                dir_path = '/'.join(rel_path.split('/')[:-1])
+                if not dir_path or dir_path == '.':
+                    dir_path = 'root'
+                config_key = f"{repo.name}::{dir_path}"
+                configs = load_repo_configs(config_key)
+                if configs:
+                    envs_by_file[rel_path] = configs
+        except ValueError:
+            pass
+    return envs_by_file
 
 
 def _capture_config_files(repo) -> dict:
@@ -211,3 +232,128 @@ def apply_config_files(repo_path: str, repo_type: str, config_files: dict, targe
                     f.write(content)
             except OSError:
                 pass
+
+
+def apply_saved_environments(repo_name: str, saved_environments: dict) -> dict:
+    """Merge alternative environments from a profile into config manager.
+
+    Returns a dict of renames per config_key:
+    { "repo::module": {"original_name": "repetido1", ...}, ... }
+    """
+    from core.config_manager import merge_repo_configs
+    all_renames: dict = {}
+    if not saved_environments:
+        return all_renames
+    for rel_path, configs_dict in saved_environments.items():
+        if not isinstance(configs_dict, dict):
+            continue
+        dir_path = '/'.join(rel_path.split('/')[:-1])
+        if not dir_path or dir_path == '.':
+            dir_path = 'root'
+        config_key = f"{repo_name}::{dir_path}"
+        renames = merge_repo_configs(config_key, configs_dict)
+        if renames:
+            all_renames[config_key] = renames
+    return all_renames
+
+
+def _derive_profile_name_from_filename(filename: str) -> str:
+    """Heuristically derive a profile/environment name from a config filename.
+
+    Examples:
+      application.yml          → default
+      application-local.yml   → local
+      application-dev.yml     → dev
+      environment.ts           → default
+      environment.local.ts     → local
+      .env                     → default
+      .env.local               → local
+    """
+    import re
+    base = filename
+    # Strip common extensions
+    for ext in ('.yml', '.yaml', '.ts', '.js', '.properties', '.json'):
+        if base.lower().endswith(ext):
+            base = base[:-len(ext)]
+            break
+    # Strip leading dot
+    if base.startswith('.'):
+        base = base[1:]
+
+    # Known prefixes: everything after the prefix separator is the profile name
+    for prefix in ('application-', 'application.', 'environment.', 'environment-', 'env-', 'env.'):
+        if base.lower().startswith(prefix):
+            rest = base[len(prefix):]
+            return rest if rest else 'default'
+
+    # If base equals a known base name, it is the default
+    if base.lower() in ('application', 'environment', 'env'):
+        return 'default'
+
+    return 'default'
+
+
+def apply_config_files_to_repo_configs(repo_name: str, config_files: dict) -> dict:
+    """Save config_files entries as repo_configs, merging with existing data.
+
+    config_files format: { rel_dir: { filename: content } }
+
+    For each directory, derive a profile name from each filename and merge
+    into repo_configs using the same smart merge logic (rename on conflict).
+
+    Returns a dict of renames per config_key:
+    { "repo::module": {"original_name": "repetido1", ...}, ... }
+    """
+    from core.config_manager import merge_repo_configs
+    all_renames: dict = {}
+    if not config_files:
+        return all_renames
+    for rel_dir, files in config_files.items():
+        if not isinstance(files, dict):
+            continue
+        module = rel_dir if rel_dir else 'root'
+        config_key = f"{repo_name}::{module}"
+        configs_dict = {
+            _derive_profile_name_from_filename(fname): content
+            for fname, content in files.items()
+            if isinstance(content, str)
+        }
+        if not configs_dict:
+            continue
+        renames = merge_repo_configs(config_key, configs_dict)
+        if renames:
+            all_renames[config_key] = renames
+    return all_renames
+
+
+def update_active_configs_for_renames(renames_by_key: dict, config_path: str = ''):
+    """Update active_configs entries when config names were renamed during import.
+
+    renames_by_key: { "repo::module": {"original_name": "repetido1"}, ... }
+    If active_configs["repo::module"] == "original_name", update it to "repetido1".
+    """
+    from core.config_manager import get_config_path, _invalidate_config_cache
+    import json
+    if not renames_by_key:
+        return
+    if not config_path:
+        config_path = get_config_path()
+    try:
+        if not os.path.isfile(config_path):
+            return
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        active = config.get('active_configs', {})
+        changed = False
+        for config_key, renames in renames_by_key.items():
+            current_active = active.get(config_key)
+            if current_active and current_active in renames:
+                active[config_key] = renames[current_active]
+                changed = True
+        if changed:
+            config['active_configs'] = active
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            _invalidate_config_cache(config_path)
+    except (OSError, json.JSONDecodeError):
+        pass
