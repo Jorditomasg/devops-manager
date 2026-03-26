@@ -57,6 +57,7 @@ class GitMixin:
                 self._update_header_hints()
                 self._check_pull_status()
                 self._refresh_badge()
+                self._trigger_change_callback()
             self.after(0, _update)
 
         threading.Thread(target=_run, daemon=True).start()
