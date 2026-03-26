@@ -46,7 +46,8 @@ class ExpandPanelMixin:
         header = ctk.CTkFrame(self._log_frame, fg_color="transparent")
         header.pack(fill="x")
 
-        ctk.CTkLabel(header, text="📋 Logs del Repositorio", font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
+        self._log_section_label = ctk.CTkLabel(header, text="📋 Logs del Repositorio", font=theme.font("base", bold=True), text_color=theme.C.text_secondary)
+        self._log_section_label.pack(side="left")
 
         clear_btn = ctk.CTkButton(
             header, text="🗑 Limpiar", width=60,
@@ -545,14 +546,16 @@ class ExpandPanelMixin:
             if status == 'logging':
                 color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)
-
             status_text = {
-                'running': 'En ejecución',
+                'running': 'Ejecutando',
                 'starting': 'Iniciando...',
                 'stopped': 'Detenido',
                 'error': 'Error'
             }.get(status, status)
-            self._status_text.configure(text=status_text)
+            self._status_text.configure(
+                text=status_text,
+                text_color=theme.COLORS.get(status, '#888')
+            )
             self._update_button_visibility()
 
         try:

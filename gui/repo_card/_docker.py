@@ -135,8 +135,8 @@ class DockerMixin:
             self.after_cancel(self._log_flash_timer)
             self._log_flash_timer = None
         if total_running > 0:
-            self._status_label.configure(text="🔴", text_color=theme.C.docker_border_running)
-            self._status_text.configure(text=f"En ejecución ({total_running} servicios)", text_color=theme.C.docker_border_running)
+            self._status_label.configure(text="🔴", text_color=theme.C.status_running)
+            self._status_text.configure(text=f"Ejecutando ({total_running} servicios)", text_color=theme.C.status_running)
             self._status = "running"
         else:
             self._status_label.configure(text="🔴", text_color=theme.C.status_stopped)

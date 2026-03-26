@@ -170,7 +170,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             ("➕ Clonar",  95, "blue",    self._show_clone_dialog,   "Clonar nuevo repositorio"),
             ("🔄 Rescan",  95, "warning", self._scan_repos,           "Re-escanear workspace"),
             ("⚙",          38, "neutral", self._show_settings,        "Abrir configuración"),
-            ("📜",         38, "neutral", self._detach_global_log,    "Abrir Log Global en Ventana"),
+            ("📋",         38, "neutral", self._detach_global_log,    "Abrir Log Global en Ventana"),
         ]
 
         profiles = self._profile_dropdown_values()
@@ -259,7 +259,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         log_header = ctk.CTkFrame(self._global_log_frame, fg_color="transparent")
         log_header.pack(fill="x", padx=10, pady=(5, 0))
 
-        ctk.CTkLabel(log_header, text="📜 Log Global", font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
+        ctk.CTkLabel(log_header, text="📋 Log Global", font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
 
         log_btn_s = theme.btn_style("log_action", height="sm", font_size="sm")
         ctk.CTkButton(log_header, text="🗗 Desacoplar", width=80, command=self._detach_global_log, **log_btn_s).pack(side="right", padx=(0, 6))
@@ -316,7 +316,16 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._detached_global_log_window = ctk.CTkToplevel(self)
         self._detached_global_log_window.title("Log Global - DevOps Manager")
         self._detached_global_log_window.geometry("800x600")
-        
+
+        # Set window icon matching the current app icon color
+        try:
+            color = getattr(self, '_current_icon_color', 'red')
+            _icon_path = os.path.join(self._icons_dir, f"icon_{color}.ico")
+            if os.path.exists(_icon_path):
+                self._detached_global_log_window.after(200, lambda p=_icon_path: self._detached_global_log_window.iconbitmap(p))
+        except Exception:
+            pass
+
         # Bring window to front
         self.after(100, lambda: self._detached_global_log_window.lift())
         self.after(110, lambda: self._detached_global_log_window.focus_force())
@@ -670,6 +679,12 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                     self.iconbitmap(win_icon_path)
                 except Exception:
                     pass
+                for child in self.winfo_children():
+                    if isinstance(child, ctk.CTkToplevel) and child.winfo_exists():
+                        try:
+                            child.iconbitmap(win_icon_path)
+                        except Exception:
+                            pass
         if self._tray_icon:
             img = self._tray_icon_images.get(color)
             if img:

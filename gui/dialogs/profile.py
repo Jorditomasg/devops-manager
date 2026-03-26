@@ -177,9 +177,9 @@ class ProfileDialog(BaseDialog):
         changes_text = self._build_changes_text(data)
 
         if changes_text == "✅ Ningún cambio detectado respecto al estado actual.":
-            # If nothing really changes (or everything is identical), we can just proceed
-            # but usually the user wants to know it loaded.
-            _continue_import()
+            # If nothing really changes (or everything is identical), apply directly.
+            self._apply_basic_config(data)
+            return
         else:
             from core.profile_manager import get_missing_repos
             missing = get_missing_repos(self._workspace_dir, data)
@@ -704,8 +704,7 @@ class ImportOptionsDialog(BaseDialog):
             def _close():
                 if self._on_complete:
                     self._on_complete(self._profile_data, self._did_clone)
-                else:
-                    self.destroy()
+                self.destroy()
 
             self._apply_btn.pack_forget()
             self._cancel_btn.configure(state="normal", text="✅ Cerrar", command=_close, **theme.btn_style("success", height="lg"))

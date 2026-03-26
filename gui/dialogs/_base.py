@@ -2,7 +2,7 @@
 import os
 import customtkinter as ctk
 
-_ICON_PATH = os.path.join(
+_FALLBACK_ICON_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "assets", "icons", "icon_red.ico",
 )
@@ -22,8 +22,15 @@ class BaseDialog(ctk.CTkToplevel):
         self.transient(parent)
         self.resizable(False, False)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
-        if os.path.exists(_ICON_PATH):
-            self.after(200, lambda: self.iconbitmap(_ICON_PATH))
+        root = parent.winfo_toplevel()
+        color = getattr(root, '_current_icon_color', 'red')
+        icons_dir = getattr(root, '_icons_dir', None)
+        if icons_dir:
+            icon_path = os.path.join(icons_dir, f"icon_{color}.ico")
+        else:
+            icon_path = _FALLBACK_ICON_PATH
+        if os.path.exists(icon_path):
+            self.after(200, lambda p=icon_path: self.iconbitmap(p))
         self.after(10, self._grab_and_focus)
 
     def _grab_and_focus(self):

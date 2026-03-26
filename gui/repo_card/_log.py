@@ -45,11 +45,12 @@ class LogMixin:
         self._detached_log_window.title(f"Logs - {self._repo.name}")
         self._detached_log_window.geometry("800x600")
 
-        # Set window icon (always red for consistency)
+        # Set window icon based on current service status
         try:
             app_dir = getattr(self.winfo_toplevel(), '_app_dir', None)
             if app_dir:
-                _icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
+                color = "green" if getattr(self, '_status', 'stopped') in ('running', 'starting') else "red"
+                _icon_path = os.path.join(app_dir, "assets", "icons", f"icon_{color}.ico")
                 if os.path.exists(_icon_path):
                     self._detached_log_window.after(200, lambda p=_icon_path: self._detached_log_window.iconbitmap(p))
         except Exception:
