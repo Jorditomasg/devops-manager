@@ -262,7 +262,7 @@ def get_local_changes(repo_path: str, ignore_files: list[str] = None) -> list[st
                 # Status is 2 chars, then space, then filename
                 file_path = line[3:].strip()
                 filename = os.path.basename(file_path)
-                
+
                 if filename not in ignore_files:
                     changes.append(file_path)
     except (subprocess.SubprocessError, OSError):

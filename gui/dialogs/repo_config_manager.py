@@ -227,6 +227,7 @@ class RepoConfigManagerDialog(BaseDialog):
                 return
             self._configs[name] = ""
             self._persist_to_db()
+            self._refresh_list()
             self._select_config(name)
 
     def _cmd_rename(self):
@@ -245,6 +246,7 @@ class RepoConfigManagerDialog(BaseDialog):
             # Transfer data
             self._configs[new_name] = self._configs.pop(self._current_selected)
             self._persist_to_db()
+            self._refresh_list()
             self._select_config(new_name)
 
     def _cmd_duplicate(self):
@@ -262,6 +264,7 @@ class RepoConfigManagerDialog(BaseDialog):
 
             self._configs[new_name] = self._configs[self._current_selected]
             self._persist_to_db()
+            self._refresh_list()
             self._select_config(new_name)
 
     def _cmd_delete(self):
@@ -271,6 +274,7 @@ class RepoConfigManagerDialog(BaseDialog):
             del self._configs[self._current_selected]
             self._persist_to_db()
             self._current_selected = None
+            self._refresh_list()
             self._select_config(None)
 
     def _cmd_auto_import(self):
