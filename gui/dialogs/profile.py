@@ -79,6 +79,7 @@ class ProfileDialog(BaseDialog):
         """Build the scrollable list of saved profiles with load/delete/export buttons."""
         load_frame = ctk.CTkFrame(scroll, corner_radius=8)
         load_frame.pack(fill="x", padx=20, pady=5)
+        self._list_section_frame = load_frame
 
         ctk.CTkLabel(load_frame, text="Configuraciones guardadas:",
                      font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
@@ -355,19 +356,11 @@ class ProfileDialog(BaseDialog):
         self._profile_btns.clear()
 
         if not profiles:
-            ctk.CTkLabel(
-                self._profile_list_frame,
-                text="Sin perfiles guardados aún.",
-                font=theme.font("md"), text_color=theme.C.text_placeholder
-            ).pack(pady=(10, 4))
-            ctk.CTkButton(
-                self._profile_list_frame,
-                text="💾 Crear primer perfil",
-                command=self._save_profile,
-                **theme.btn_style("success")
-            ).pack(pady=(0, 6))
+            self._list_section_frame.pack_forget()
             self._selected_profile.set("")
             return
+
+        self._list_section_frame.pack(fill="x", padx=20, pady=5)
 
         _blue = theme.btn_style("blue")
         _neutral = theme.btn_style("neutral")
