@@ -608,6 +608,8 @@ class ImportOptionsDialog(BaseDialog):
 
         def _clone_repo(m):
             if not m['git_url']:
+                if self._log:
+                    self._log(f"[import] ⚠ {m['name']}: sin URL de repositorio, clonación omitida")
                 _update_progress(f"⚠ {m['name']}: sin URL")
                 return
             dest = os.path.join(self._workspace_dir, m['name'])
@@ -703,9 +705,9 @@ class ImportOptionsDialog(BaseDialog):
 
     def _run_install_step(self, _update_progress):
         """Install dependencies for newly cloned repos."""
-        app_instance = self.master if hasattr(self, 'master') else None
-        launcher = getattr(app_instance, '_launcher', None)
-        analyzer = getattr(app_instance, '_analyzer', None)
+        app_instance = getattr(self.master, 'master', None) if hasattr(self, 'master') else None
+        launcher = getattr(app_instance, '_service_launcher', None)
+        analyzer = getattr(app_instance, 'project_analyzer', None)
         if launcher and analyzer:
             for m in self._missing:
                 dest = os.path.join(self._workspace_dir, m['name'])
@@ -714,6 +716,11 @@ class ImportOptionsDialog(BaseDialog):
                 java_ver = repo_cfg.get('java_version', '')
                 r_def = next((t for t in analyzer.repo_types if t.get('type') == rtype), {})
                 cmd_str = r_def.get('commands', {}).get('install_cmd')
+                if not os.path.isdir(dest):
+                    if self._log:
+                        self._log(f"[import] ⚠ {m['name']}: directorio no encontrado, instalación omitida ({dest})")
+                    _update_progress(f"⚠ {m['name']}: directorio no encontrado")
+                    continue
                 if cmd_str:
                     _update_progress(f"Iniciando instalación para {m['name']}...")
                     launcher.start_generic_install(m['name'], dest, cmd_str, log=self._log, java_home=java_ver)

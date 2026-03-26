@@ -3,6 +3,7 @@ import re
 from typing import List, Optional, Dict, Any
 from domain.models.repo_info import RepoInfo
 from infrastructure.config.yaml_parser import YamlParser
+from core.git_manager import get_remote_url
 
 class ProjectAnalyzerService:
     """
@@ -151,7 +152,8 @@ class ProjectAnalyzerService:
         """Build a RepoInfo instance from the matched configuration."""
         
         repo = RepoInfo(name=name, path=path, repo_type=r_type.get('type'))
-        
+        repo.git_remote_url = get_remote_url(path)
+
         commands = r_type.get('commands', {})
         repo.run_command = self._resolve_run_command(path, commands)
         repo.run_profile_flag = commands.get('profile_flag')

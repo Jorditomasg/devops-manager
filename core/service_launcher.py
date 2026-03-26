@@ -51,6 +51,11 @@ class ServiceLauncher:
                 log(f"[svc] No install command defined for {name}")
             return False
 
+        if not os.path.isdir(repo_path):
+            if log:
+                log(f"[svc] {name}: repo path is not a valid directory: {repo_path}")
+            return False
+
         # Build environment - only use JAVA_HOME if supplied
         env = None
         if java_home:
