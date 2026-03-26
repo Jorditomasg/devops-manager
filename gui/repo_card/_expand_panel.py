@@ -257,7 +257,14 @@ class ExpandPanelMixin:
         # Prefer pending profile value (set by _apply_config before panel was built)
         pending = getattr(self, '_pending_profile', None)
         if pending is not None:
-            pending_val = pending.get(target_file, None) if isinstance(pending, dict) else pending
+            if isinstance(pending, dict):
+                try:
+                    rel_tf = os.path.relpath(target_file, repo.path).replace('\\', '/')
+                    pending_val = pending.get(rel_tf) or pending.get(target_file)
+                except ValueError:
+                    pending_val = pending.get(target_file)
+            else:
+                pending_val = pending
         else:
             pending_val = None
 

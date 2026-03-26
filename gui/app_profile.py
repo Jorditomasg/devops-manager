@@ -158,9 +158,15 @@ class ProfileManagerMixin:
 
         if card.get_branch() != t_cfg.get('branch'):
             return True
-        if card.get_current_profile() != t_cfg.get('profile'):
+        cur_prof = card.get_current_profile()
+        tgt_prof = t_cfg.get('profile')
+        if not cur_prof and not tgt_prof:
+            pass # treat None, '', and {} as perfectly equal
+        elif cur_prof != tgt_prof:
             return True
         if card.get_custom_command() != t_cfg.get('custom_command', ''):
+            return True
+        if card.is_selected() != t_cfg.get('selected', True):
             return True
         if self._docker_active_differs(card, t_cfg):
             return True
@@ -207,8 +213,8 @@ class ProfileManagerMixin:
         branch = config.get('branch', '')
         if branch:
             card.set_branch(branch)
-        profile = config.get('profile', '')
-        if profile:
+        profile = config.get('profile')
+        if profile is not None:
             card.set_profile(profile)
         custom_cmd = config.get('custom_command')
         if custom_cmd is not None:
@@ -216,6 +222,9 @@ class ProfileManagerMixin:
         java_version = config.get('java_version')
         if java_version is not None and hasattr(card, 'selected_java_var'):
             card.selected_java_var.set(java_version)
+        selected = config.get('selected')
+        if selected is not None:
+            card.set_selected(selected)
         if hasattr(card, 'set_docker_compose_active'):
             active = config.get('docker_compose_active', [])
             if active:

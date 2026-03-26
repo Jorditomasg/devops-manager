@@ -145,6 +145,7 @@ def _build_single_repo_profile(card, include_config_files: bool) -> tuple[str, d
         'profile': card.get_current_profile(),
         'custom_command': card.get_custom_command(),
         'java_version': card.selected_java_var.get() if hasattr(card, 'selected_java_var') else "Sistema (Por Defecto)",
+        'selected': card.is_selected(),
     }
 
     if hasattr(card, 'get_docker_compose_active'):

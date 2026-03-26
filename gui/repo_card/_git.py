@@ -48,6 +48,7 @@ class GitMixin:
             self._branches_cache = branches
 
             def _update():
+                if not self.winfo_exists(): return
                 self._current_branch = current
                 if branches:
                     if hasattr(self, '_branch_combo'):
@@ -71,6 +72,7 @@ class GitMixin:
             self._branches_cache = branches
 
             def _update():
+                if not self.winfo_exists(): return
                 self._branch_combo.configure(values=branches)
             self.after(0, _update)
 
@@ -89,6 +91,7 @@ class GitMixin:
 
             if success and actual_branch == branch:
                 def _update():
+                    if not self.winfo_exists(): return
                     self._current_branch = branch
                     if hasattr(self, '_branch_combo'):
                         self._branch_combo.set(branch)
@@ -99,6 +102,7 @@ class GitMixin:
                 self.after(0, _update)
             else:
                 def _err():
+                    if not self.winfo_exists(): return
                     messagebox.showerror("Error al cambiar de rama", f"No se pudo cambiar a '{branch}'.\nComprueba si hay ficheros modificados en conflicto.\n\nDetalles:\n{msg}")
                     if hasattr(self, '_branch_combo'):
                         self._branch_combo.set(actual_branch)
@@ -119,7 +123,7 @@ class GitMixin:
                     port = int(match.group(1))
                     if self._repo.server_port != port:
                         self._repo.server_port = port
-                        self.after(0, lambda: self._update_status(self._repo.name, self._status))
+                        self.after(0, lambda: self.winfo_exists() and self._update_status(self._repo.name, self._status))
                 except ValueError:
                     pass
                 break
@@ -133,8 +137,8 @@ class GitMixin:
         error = self._repo.error_pattern
 
         if error and re.search(error, line):
-            self.after(0, lambda: self._update_status(self._repo.name, 'error'))
+            self.after(0, lambda: self.winfo_exists() and self._update_status(self._repo.name, 'error'))
             return
 
         if ready and re.search(ready, line):
-            self.after(0, lambda: self._update_status(self._repo.name, 'running'))
+            self.after(0, lambda: self.winfo_exists() and self._update_status(self._repo.name, 'running'))

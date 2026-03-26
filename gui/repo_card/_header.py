@@ -56,7 +56,8 @@ class HeaderMixin:
         # Checkbox
         ctk.CTkCheckBox(
             frame, text="", variable=self.selected_var,
-            checkbox_width=18, checkbox_height=18, width=20, corner_radius=4
+            checkbox_width=18, checkbox_height=18, width=20, corner_radius=4,
+            command=self._trigger_change_callback
         ).pack(side="left", padx=(4, 4))
 
         # Status dot
@@ -243,6 +244,8 @@ class HeaderMixin:
 
     def _update_header_hints(self):
         """Update the branch + profile hint text in the header."""
+        if not self.winfo_exists():
+            return
         parts = []
         # Branch
         if hasattr(self, '_branch_combo'):
@@ -262,6 +265,15 @@ class HeaderMixin:
                 if v and v not in ('- Sin Seleccionar -', ''):
                     parts.append(f"⚙ {v}")
                     break
+        else:
+            pending = getattr(self, '_pending_profile', None)
+            if isinstance(pending, dict):
+                for v in pending.values():
+                    if v and v not in ('- Sin Seleccionar -', ''):
+                        parts.append(f"⚙ {v}")
+                        break
+            elif isinstance(pending, str) and pending:
+                parts.append(f"⚙ {pending}")
         # Custom command
         if hasattr(self, '_cmd_entry'):
             cmd = self._cmd_entry.get().strip()
