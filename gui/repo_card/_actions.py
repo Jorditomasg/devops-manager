@@ -31,12 +31,14 @@ class ActionsMixin:
 
     # ─── Install ──────────────────────────────────────────────────
 
-    def install_dependencies(self, skip_if_installed=False):
+    def install_dependencies(self, skip_if_installed=False, on_complete=None):
         """Method to trigger dependency installation via YAML commands."""
         install_cfg = getattr(self._repo, 'ui_config', {}).get('install', {})
         check_dirs = install_cfg.get('check_dirs', [])
 
         if not self._repo.run_install_cmd:
+            if on_complete:
+                on_complete()
             return
 
         is_installed = False
@@ -50,9 +52,11 @@ class ActionsMixin:
             is_installed = True
 
         if skip_if_installed and is_installed:
+            if on_complete:
+                on_complete()
             return
 
-        self._run_install_cmd(bypass_confirm=True)
+        self._run_install_cmd(bypass_confirm=True, on_complete=on_complete)
 
     def _build_install_env(self, repo_info) -> dict | None:
         """Build environment dict for the install subprocess (Java override if needed)."""
@@ -78,33 +82,41 @@ class ActionsMixin:
             if log_fn:
                 log_fn(line.strip())
 
-    def _on_install_complete(self, success: bool, check_dirs: list, success_text: str, fail_text: str):
+    def _on_install_complete(self, success: bool, check_dirs: list, success_text: str, fail_text: str, on_complete=None):
         """Update install button style and status after the install process finishes."""
         self._is_installing = False
         if success:
             _ok_style = theme.btn_style("neutral_alt")
-            self._install_btn.configure(
-                text=success_text,
-                fg_color=_ok_style["fg_color"],
-                border_color=_ok_style["border_color"],
-                hover_color=_ok_style["hover_color"],
-            )
+            if hasattr(self, '_install_btn'):
+                self._install_btn.configure(
+                    text=success_text,
+                    fg_color=_ok_style["fg_color"],
+                    border_color=_ok_style["border_color"],
+                    hover_color=_ok_style["hover_color"],
+                )
             self._update_header_hints()
             if self._log:
                 self._log(f"[{self._repo.name}] Instalación finalizada ✓")
         else:
             _fail_style = theme.btn_style("danger_alt")
-            self._install_btn.configure(
-                text=fail_text,
-                fg_color=_fail_style["fg_color"],
-                border_color=_fail_style["border_color"],
-                hover_color=_fail_style["hover_color"],
-            )
+            if hasattr(self, '_install_btn'):
+                self._install_btn.configure(
+                    text=fail_text,
+                    fg_color=_fail_style["fg_color"],
+                    border_color=_fail_style["border_color"],
+                    hover_color=_fail_style["hover_color"],
+                )
             if self._log:
                 self._log(f"[{self._repo.name}] Fallo al instalar. Archivos clave no encontrados.")
+        # Revert card status indicator back to stopped (or running if service is up)
+        final_status = 'running' if self._status == 'installing' else self._status
+        if self._status == 'installing':
+            self._update_status(self._repo.name, 'stopped')
         self._update_button_visibility()
+        if on_complete:
+            on_complete()
 
-    def _run_install_cmd(self, bypass_confirm=False):
+    def _run_install_cmd(self, bypass_confirm=False, on_complete=None):
         """Run the appropriate install command."""
         repo = self._repo
         path = repo.path
@@ -122,6 +134,8 @@ class ActionsMixin:
 
         if hasattr(self, '_install_btn') and already_installed and not bypass_confirm:
             if not messagebox.askyesno("Reinstalar", "¿Estás seguro de que deseas volver a instalar dependencias?"):
+                if on_complete:
+                    on_complete()
                 return
 
         if already_installed and repo.run_reinstall_cmd:
@@ -129,6 +143,8 @@ class ActionsMixin:
         elif repo.run_install_cmd:
             cmd_str = repo.run_install_cmd
         else:
+            if on_complete:
+                on_complete()
             return
 
         success_text = install_cfg.get('label_ok', REINSTALL_LBL)
@@ -137,14 +153,16 @@ class ActionsMixin:
         if self._log:
             self._log(f"Running {cmd_str}...")
 
-        self._install_btn.configure(text="Installing...", state="disabled")
+        if hasattr(self, '_install_btn'):
+            self._install_btn.configure(text="Installing...", state="disabled")
         self._is_installing = True
-        self._update_button_visibility()
+        # Update the card status indicator to 'installing' (purple dot)
+        self._update_status(repo.name, 'installing')
 
         env = self._build_install_env(repo)
-        self._action_pool.submit(self._run_install_thread, cmd_str, env, check_dirs, success_text, fail_text)
+        self._action_pool.submit(self._run_install_thread, cmd_str, env, check_dirs, success_text, fail_text, on_complete)
 
-    def _run_install_thread(self, cmd_str, env, check_dirs, success_text, fail_text):
+    def _run_install_thread(self, cmd_str, env, check_dirs, success_text, fail_text, on_complete=None):
         """Thread body: run the install subprocess, stream output, then report completion."""
         try:
             process = _create_subprocess(cmd_str, cwd=self._repo.path, env=env, shell=True)
@@ -168,7 +186,7 @@ class ActionsMixin:
                         is_ok = False
                         break
 
-            self.after(0, lambda ok=is_ok: self._on_install_complete(ok, check_dirs, success_text, fail_text))
+            self.after(0, lambda ok=is_ok: self._on_install_complete(ok, check_dirs, success_text, fail_text, on_complete))
 
         except Exception as e:
             if self._log:
@@ -176,8 +194,12 @@ class ActionsMixin:
 
             def _err():
                 self._is_installing = False
-                self._install_btn.configure(text=fail_text, state="normal")
+                if hasattr(self, '_install_btn'):
+                    self._install_btn.configure(text=fail_text, state="normal")
+                self._update_status(self._repo.name, 'stopped')
                 self._update_button_visibility()
+                if on_complete:
+                    on_complete()
 
             self.after(0, _err)
 

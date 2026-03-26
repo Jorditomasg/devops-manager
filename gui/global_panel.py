@@ -192,16 +192,43 @@ class GlobalPanel(ctk.CTkFrame):
         threading.Thread(target=_run, daemon=True).start()
 
     def _install_all(self):
-        """Install dependencies for all selected repos."""
+        """Install dependencies for all selected repos, in parallel, skipping already-installed ones."""
         selected = self._get_selected_cards()
         if not selected:
             return
 
-        if self._log:
-            self._log(f"[global] Installing dependencies for {len(selected)} repos...")
+        # Only install repos that actually need it
+        to_install = [
+            card for card in selected
+            if card.get_repo_info().run_install_cmd
+        ]
+        if not to_install:
+            if self._log:
+                self._log("[global] Todos los repos ya están instalados.")
+            return
 
-        for card in selected:
+        if self._log:
+            self._log(f"[global] Installing dependencies for {len(to_install)} repos...")
+
+        self._set_async_btns_state("disabled")
+
+        remaining = [len(to_install)]  # mutable counter
+        lock = threading.Lock()
+
+        def _on_card_done():
+            with lock:
+                remaining[0] -= 1
+                if remaining[0] == 0:
+                    self.after(0, lambda: self._set_async_btns_state("normal"))
+                    if self._log:
+                        self._log("[global] ✓ Install All completado.")
+
+        def _install_card(card):
             card.install_dependencies(skip_if_installed=True)
+            _on_card_done()
+
+        for card in to_install:
+            threading.Thread(target=_install_card, args=(card,), daemon=True).start()
 
     def _start_selected(self):
         """Start all selected repos."""

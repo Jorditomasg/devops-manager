@@ -202,18 +202,20 @@ G: types.SimpleNamespace = _build_geometry(_raw)
 
 # ── Dicts de estado (compatibilidad con repo_card.py) ─────────────────────────
 STATUS_ICONS: dict[str, str] = {
-    "running": C.status_running,
-    "starting": C.status_starting,
-    "stopped":  C.status_stopped,
-    "error":    C.status_error,
-    "logging":  C.status_logging,
+    "running":    C.status_running,
+    "starting":   C.status_starting,
+    "stopped":    C.status_stopped,
+    "error":      C.status_error,
+    "logging":    C.status_logging,
+    "installing": "#7c3aed",  # purple — distinct from start/stop states
 }
 
 COLORS: dict[str, str] = {
-    "running": C.status_running,
-    "starting": C.status_starting,
-    "stopped":  C.status_stopped,
-    "error":    C.status_error,
+    "running":    C.status_running,
+    "starting":   C.status_starting,
+    "stopped":    C.status_stopped,
+    "error":      C.status_error,
+    "installing": "#7c3aed",
 }
 
 # ── Helpers de estilos de widgets ─────────────────────────────────────────────

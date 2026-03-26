@@ -508,10 +508,11 @@ class ExpandPanelMixin:
                 color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)
             status_texts = {
-                'running': f"Ejecutando :{self._repo.server_port or '?'}",
-                'starting': "Iniciando...",
-                'stopped': "Detenido",
-                'error': "Error",
+                'running':    f"Ejecutando :{self._repo.server_port or '?'}",
+                'starting':   "Iniciando...",
+                'installing': "Instalando...",
+                'stopped':    "Detenido",
+                'error':      "Error",
             }
             self._status_text.configure(
                 text=status_texts.get(status, status),
