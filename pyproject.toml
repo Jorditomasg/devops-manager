@@ -1,0 +1,19 @@
+[project]
+name = "devops-manager"
+version = "1.0.0"
+description = "Desktop application for managing development services"
+requires-python = ">=3.13"
+dependencies = [
+    "customtkinter>=5.2.0",
+    "PyYAML>=6.0",
+    "gitpython>=3.1.0",
+    "Pillow>=10.0.0",
+    "pystray>=0.19.4",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "nuitka>=2.4",
+    "ordered-set>=4.1.0",
+    "zstandard>=0.23.0",
+]

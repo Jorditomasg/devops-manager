@@ -9,29 +9,31 @@ A Python desktop application (customtkinter GUI) for managing and launching mult
 ## Running the Application
 
 ```bash
-# Activate venv first
+# Run via uv (manages Python version automatically)
+uv run python main.py
+
+# Or activate venv first (after install)
 .venv\Scripts\activate          # Windows
 source .venv/bin/activate       # Unix
-
-# Run (uses parent directory as workspace)
 python main.py
 
 # Run with explicit workspace
-python main.py /path/to/workspace
+uv run python main.py /path/to/workspace
 ```
 
 There is no build step. No test suite or linter configuration exists in the project.
 
 ## Installation
 
+Requires [uv](https://docs.astral.sh/uv/) — installs Python automatically if needed (Python >=3.9).
+
 ```bash
-# Automated
+# Automated (installs uv if not present)
 scripts\install.bat    # Windows
 ./scripts/install.sh   # Unix
 
-# Manual
-python -m venv .venv
-pip install -r requirements.txt
+# Manual (with uv already installed)
+uv sync
 ```
 
 ## Architecture

@@ -15,21 +15,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       - name: Install dependencies
-        run: |
-          python -m venv .venv
-          .venv\Scripts\activate
-          pip install -r requirements.txt
-          pip install -r requirements-build.txt
+        run: uv sync
 
       - name: Compile with Nuitka
         run: |
-          .venv\Scripts\activate
-          python -m nuitka --standalone --follow-imports `
+          uv run python -m nuitka --standalone --follow-imports `
             --include-package=customtkinter,darkdetect,pystray,PIL,git,yaml `
             --include-package-data=customtkinter `
             --include-data-dir=config=config `

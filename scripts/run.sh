@@ -2,10 +2,9 @@
 cd "$(dirname "$0")/.."
 
 echo "Iniciando DevOps Manager..."
-if [ ! -f ".venv/bin/activate" ]; then
+if [ ! -d ".venv" ]; then
     echo "El entorno virtual no existe. Por favor, ejecuta './install.sh' primero."
     exit 1
 fi
 
-source .venv/bin/activate
-python3 main.py
+uv run python main.py

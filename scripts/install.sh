@@ -6,15 +6,19 @@ echo "DevOps Manager - Instalacion del Entorno Virtual"
 echo "==================================================="
 echo ""
 
-echo "[1/3] Creando el entorno virtual (.venv)..."
-python3 -m venv .venv || { echo "Error al crear el entorno virtual. Asegurate de tener python3-venv instalado."; exit 1; }
+echo "[1/2] Verificando uv..."
+if ! command -v uv &>/dev/null; then
+    echo "uv no encontrado. Instalando uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+    echo "uv instalado correctamente."
+    echo ""
+fi
 
-echo "[2/3] Activando el entorno virtual e instalando dependencias (requirements.txt)..."
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt || { echo "Error durante la instalacion de dependencias."; exit 1; }
+echo "[2/2] Instalando dependencias con uv (descargara Python si es necesario)..."
+uv sync || { echo "Error durante la instalacion de dependencias."; exit 1; }
 
-echo "[3/3] Instalacion completada exitosamente."
 echo ""
+echo "Instalacion completada exitosamente."
 echo "Puedes iniciar la aplicacion ejecutando './run.sh'"
 echo ""
