@@ -46,6 +46,7 @@ The codebase follows a layered DDD-influenced architecture:
 - **`config/repo_types/`** — YAML definitions that drive repository detection and available commands (one file per framework).
 - **`config/ui_theme.yml`** — Editable UI theme: colors, fonts, sizes, button variants. Overrides the defaults embedded in `gui/theme.py`.
 - **`scripts/`** — Shell scripts for install (`install.bat/sh`), run (`run.bat/sh`), Nuitka compilation (`compile.bat/sh`), and running the compiled binary (`run_compiled.bat/sh`).
+- **`.github/workflows/`** — GitHub Actions CI/CD pipeline triggered on `v*` tags or manual dispatch: builds a standalone Windows executable with Nuitka, signs it via SignPath, and publishes it as a GitHub Release.
 
 ## Key Design Decisions
 
@@ -78,7 +79,7 @@ Button variants available: `success`, `start`, `danger`, `danger_alt`, `danger_d
 - `_expand_panel.py` — `ExpandPanelMixin`: `_build_expand_panel`, `_build_*_row`, `_toggle_expand`, `_update_status`, `_on_status_change`
 - `_log.py` — `LogMixin`: `_repo_log`, `_clear_logs`, `_detach_logs`, `_flash_log_icon`
 - `_git.py` — `GitMixin`: badge refresh loop, branch fetching, port/status detection from log
-- `_config.py` — `ConfigMixin`: Spring config file writing, DB preset handling, config manager
+- `_config.py` — `ConfigMixin`: Spring config file writing, environment config management
 - `_docker.py` — `DockerMixin`: docker-compose profile changes, status polling, button updates
 - `_actions.py` — `ActionsMixin`: start/stop/restart/pull/install/clean/seed
 
@@ -86,7 +87,7 @@ Button variants available: `success`, `start`, `danger`, `danger_alt`, `danger_d
 - `_base.py` — `BaseDialog(ctk.CTkToplevel)`: shared title/geometry/transient/grab_set boilerplate
 - `clone.py`, `config_editor.py`, `profile.py`, `settings.py`, `repo_config_manager.py`, `docker_compose.py`
 
-`gui/app.py` manages the scrollable list of repo cards, DB preset management, and system tray integration (pystray). Profile load/save/detect/apply logic lives in `gui/app_profile.py` (`ProfileManagerMixin`).
+`gui/app.py` manages the scrollable list of repo cards and system tray integration (pystray). Profile load/save/detect/apply logic lives in `gui/app_profile.py` (`ProfileManagerMixin`).
 
 `gui/constants.py` centralises all magic strings, timing values, regex patterns, and concurrency limits used across GUI files.
 

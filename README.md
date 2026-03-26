@@ -1,17 +1,16 @@
 # DevOps Manager
 
-**DevOps Manager** es una herramienta de escritorio desarrollada en Python con una interfaz gráfica (basada en `customtkinter`) diseñada para facilitar la administración agrupadad de múltiples repositorios de desarrollo. 
+**DevOps Manager** es una herramienta de escritorio desarrollada en Python con una interfaz gráfica (basada en `customtkinter`) diseñada para facilitar la administración agrupada de múltiples repositorios de desarrollo. 
 
 Esta aplicación te permite visualizar, configurar y ejecutar tus proyectos desde un único panel centralizado, simplificando las tareas repetitivas y estandarizando la gestión de tus entornos de desarrollo.
 
 ## Características Principales
 
 * **Gestión Centralizada de Repositorios:** Visualiza el estado de tus repositorios, agrúpalos y aplica comandos personalizados.
-* **Perfiles de Configuración (Exportar / Importar):** Guarda el estado de tus configuraciones, presintonías de bases de datos y archivos modificados (`.yml`, `.ts`, etc.) para compartirlos y restaurarlos fácilmente.
-* **Presintonías de Bases de Datos:** Aplica configuraciones específicas de base de datos a tus proyectos con un clic.
+* **Perfiles de Configuración (Exportar / Importar):** Guarda el estado de tus configuraciones y archivos modificados (`.yml`, `.ts`, etc.) para compartirlos y restaurarlos fácilmente.
+* **Gestión de Docker Compose:** Inicia, detiene y monitoriza servicios de docker-compose por tarjeta de repositorio, con integración en perfiles para auto-arranque.
 * **Consolidación de Logs:** Visualiza los logs de ejecución de las diferentes herramientas y repositorios en una pestaña dedicada.
-* **Internacionalización (i18n):** Soporte multi-idioma con detección dinámica de archivos de lenguaje.
-* **Interfaz Moderna e Intuitiva:** Rediseñada con tarjetas de repositorios y botones con tooltips.
+* **Interfaz Moderna e Intuitiva:** Tarjetas de repositorios con acordeón expandible, tooltips y tema visual personalizable.
 
 ## Requisitos Previos
 
@@ -78,4 +77,13 @@ Al abrirla, la aplicación autodetectará por defecto el espacio de trabajo basa
 
 ## Configuración
 
-La configuración propia de la herramienta se guarda en `devops_manager_config.json`, donde se almacena el estado visual actual, últimos comandos introducidos, configuración de las bases de datos y la ruta de tu espacio de trabajo.
+La configuración propia de la herramienta se guarda en `devops_manager_config.json`, donde se almacena el estado visual actual, últimos comandos introducidos y la ruta de tu espacio de trabajo.
+
+## Distribución / Releases
+
+Los ejecutables firmados se generan automáticamente mediante GitHub Actions (`.github/workflows/build-and-sign.yml`):
+
+1. Crea y sube un tag con el formato `v*` (por ejemplo `v1.2.0`) para disparar el pipeline.
+2. El workflow compila un `.exe` standalone con **Nuitka** sobre Windows.
+3. El binario se firma automáticamente a través de **SignPath**.
+4. El `.exe` firmado se adjunta al **GitHub Release** correspondiente al tag.
