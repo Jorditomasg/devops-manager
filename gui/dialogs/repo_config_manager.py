@@ -8,6 +8,37 @@ from gui.dialogs._base import BaseDialog
 from gui import theme
 
 
+class _AskNameDialog(BaseDialog):
+    """Small styled dialog to ask for a text name — replaces tkinter.simpledialog.askstring."""
+
+    def __init__(self, parent, title: str, prompt: str, initial_value: str = ""):
+        super().__init__(parent, title, 380, 160)
+        self.result: str | None = None
+
+        ctk.CTkLabel(self, text=prompt, font=theme.font("base")).pack(padx=20, pady=(18, 6))
+
+        self._entry = ctk.CTkEntry(self, width=300, font=theme.font("base"))
+        self._entry.pack(padx=20, pady=(0, 12))
+        self._entry.insert(0, initial_value)
+        self._entry.select_range(0, "end")
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=(0, 14))
+
+        ctk.CTkButton(btn_frame, text="Aceptar", width=110,
+                      command=self._confirm, **theme.btn_style("success")).pack(side="left", padx=8)
+        ctk.CTkButton(btn_frame, text="Cancelar", width=110,
+                      command=self.destroy, **theme.btn_style("neutral")).pack(side="left", padx=8)
+
+        self._entry.bind("<Return>", lambda _e: self._confirm())
+        self._entry.bind("<Escape>", lambda _e: self.destroy())
+        self.wait_window()
+
+    def _confirm(self):
+        self.result = self._entry.get()
+        self.destroy()
+
+
 class RepoConfigManagerDialog(BaseDialog):
     """Dialog to manage Env/App configurations for a repository."""
 
@@ -185,8 +216,8 @@ class RepoConfigManagerDialog(BaseDialog):
         messagebox.showinfo("Guardado", f"El entorno '{self._current_selected}' se ha actualizado correctamente.")
 
     def _cmd_new(self):
-        from tkinter import simpledialog
-        name = simpledialog.askstring("Nuevo Entorno", "Nombre del nuevo entorno/app:", parent=self)
+        dlg = _AskNameDialog(self, "Nuevo Entorno", "Nombre del nuevo entorno/app:")
+        name = dlg.result
         if name:
             name = name.strip()
             if not name:
@@ -201,8 +232,8 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_rename(self):
         if not self._current_selected:
             return
-        from tkinter import simpledialog
-        new_name = simpledialog.askstring("Renombrar Entorno", "Nuevo nombre:", initialvalue=self._current_selected, parent=self)
+        dlg = _AskNameDialog(self, "Renombrar Entorno", "Nuevo nombre:", initial_value=self._current_selected)
+        new_name = dlg.result
         if new_name:
             new_name = new_name.strip()
             if not new_name or new_name == self._current_selected:
@@ -219,8 +250,8 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_duplicate(self):
         if not self._current_selected:
             return
-        from tkinter import simpledialog
-        new_name = simpledialog.askstring("Duplicar Entorno", "Nombre de la copia:", initialvalue=f"{self._current_selected}_copia", parent=self)
+        dlg = _AskNameDialog(self, "Duplicar Entorno", "Nombre de la copia:", initial_value=f"{self._current_selected}_copia")
+        new_name = dlg.result
         if new_name:
             new_name = new_name.strip()
             if not new_name:

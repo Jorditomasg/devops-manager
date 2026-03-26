@@ -11,6 +11,23 @@ from gui import theme
 from gui.constants import NO_PROFILE_TEXT, PROFILE_DIRTY_SUFFIX
 
 
+def _unique_profile_name(base: str, existing: list) -> str:
+    """Return first non-colliding name: base1, base2, …"""
+    n = 1
+    while True:
+        candidate = f"{base}{n}"
+        if candidate not in existing:
+            return candidate
+        n += 1
+
+
+def _profiles_equal(a: dict, b: dict) -> bool:
+    """Compare two profile dicts ignoring 'name' and 'created' metadata."""
+    skip = {'name', 'created'}
+    return {k: v for k, v in a.items() if k not in skip} == \
+           {k: v for k, v in b.items() if k not in skip}
+
+
 class ProfileDialog(BaseDialog):
     """Dialog for managing profiles: save, load, import, export."""
 
@@ -270,6 +287,7 @@ class ProfileDialog(BaseDialog):
     def _on_import_complete(self, data: dict, did_clone: bool):
         """Called when the import options dialog finishes."""
         save_name = getattr(self, '_pending_save_profile_name', None)
+        original_name = getattr(self, '_import_original_name', None)
         if save_name:
             from core.profile_manager import save_profile
             save_profile(save_name, data)
@@ -277,7 +295,7 @@ class ProfileDialog(BaseDialog):
             if self._log:
                 self._log(f"Configuración importada y guardada: {save_name}")
             if self._on_profiles_changed:
-                self._on_profiles_changed(save_name)
+                self._on_profiles_changed(save_name, original_name)
         if self._on_profile_loaded:
             self._on_profile_loaded(data)
         if did_clone and self._on_rescan:
@@ -332,13 +350,28 @@ class ProfileDialog(BaseDialog):
         if not filepath:
             return
 
-        from core.profile_manager import import_profile_from_file
+        from core.profile_manager import import_profile_from_file, list_profiles, load_profile
         data = import_profile_from_file(filepath)
         if not data:
             messagebox.showerror("Error", "Archivo de configuración inválido")
             return
 
-        profile_name = data.get('name', os.path.splitext(os.path.basename(filepath))[0])
+        original_name = data.get('name', os.path.splitext(os.path.basename(filepath))[0])
+        self._import_original_name = original_name  # stored for _on_import_complete
+
+        existing = list_profiles()
+        if original_name in existing:
+            existing_data = load_profile(original_name)
+            if existing_data and _profiles_equal(data, existing_data):
+                messagebox.showinfo(
+                    "Sin cambios",
+                    f"El perfil '{original_name}' ya existe y su contenido es idéntico. No es necesario importar."
+                )
+                return
+            profile_name = _unique_profile_name(original_name, existing)
+        else:
+            profile_name = original_name
+
         data['name'] = profile_name
 
         # Track that this import should be saved on completion

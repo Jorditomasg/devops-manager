@@ -16,13 +16,14 @@ class ProfileManagerMixin:
             return names
         return [NO_PROFILE_TEXT] + names
 
-    def _refresh_profile_dropdown(self, auto_select_name=None):
+    def _refresh_profile_dropdown(self, auto_select_name=None, original_name=None):
         """Reload profile options into topbar dropdown after creation/deletion."""
         profiles = self._profile_dropdown_values()
         if hasattr(self, '_profile_combo'):
             self._profile_combo.configure(values=profiles)
 
-            if auto_select_name and auto_select_name in profiles:
+            was_active = (original_name is None or original_name == self._current_profile_name)
+            if auto_select_name and auto_select_name in profiles and was_active:
                 self._profile_combo.set(auto_select_name)
                 self._on_profile_dropdown_change(auto_select_name)
             elif self._current_profile_name in profiles:
