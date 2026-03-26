@@ -12,9 +12,10 @@ class GitMixin:
 
     def _refresh_badge_loop(self):
         """Periodically refresh the unsigned changes badge."""
+        if not self.winfo_exists():
+            return
         self._refresh_badge()
-        if self.winfo_exists():
-            self._badge_timer = self.after(BADGE_REFRESH_MS, self._refresh_badge_loop)
+        self._badge_timer = self.after(BADGE_REFRESH_MS, self._refresh_badge_loop)
 
     def _refresh_badge(self, event=None):
         """Count modified files and update the badge label."""
@@ -26,12 +27,12 @@ class GitMixin:
                 count = count_modified_files(self._repo.path)
                 if count > 0:
                     def _update():
-                        if hasattr(self, '_changes_count_label'):
+                        if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
                             self._changes_count_label.configure(text=f"📝 {count}")
                     self.after(0, _update)
                 else:
                     def _update():
-                        if hasattr(self, '_changes_count_label'):
+                        if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
                             self._changes_count_label.configure(text="")
                     self.after(0, _update)
             finally:

@@ -268,6 +268,15 @@ class ProfileDialog(BaseDialog):
 
     def _on_import_complete(self, data: dict, did_clone: bool):
         """Called when the import options dialog finishes."""
+        save_name = getattr(self, '_pending_save_profile_name', None)
+        if save_name:
+            from core.profile_manager import save_profile
+            save_profile(save_name, data)
+            self._pending_save_profile_name = None
+            if self._log:
+                self._log(f"Configuración importada y guardada: {save_name}")
+            if self._on_profiles_changed:
+                self._on_profiles_changed(save_name)
         if self._on_profile_loaded:
             self._on_profile_loaded(data)
         if did_clone and self._on_rescan:
@@ -329,8 +338,10 @@ class ProfileDialog(BaseDialog):
             return
 
         profile_name = data.get('name', os.path.splitext(os.path.basename(filepath))[0])
-        # Only parse and optionally import, do not save yet until accepted.
         data['name'] = profile_name
+
+        # Track that this import should be saved on completion
+        self._pending_save_profile_name = profile_name
 
         # Show the import options dialog
         self._apply_profile_data(data)
@@ -484,7 +495,6 @@ class ImportOptionsDialog(BaseDialog):
         """Build repo selection checkboxes for clone, install, config files."""
         # ── Missing repos ──
         self._clone_var = ctk.BooleanVar(value=True if self._missing else False)
-        self._install_var = ctk.BooleanVar(value=True if self._missing else False)
 
         if self._missing:
             ctk.CTkLabel(frame, text="Repositorios faltantes encontrados:",
@@ -499,11 +509,7 @@ class ImportOptionsDialog(BaseDialog):
 
             ctk.CTkCheckBox(frame, text="🔗 Clonar repos faltantes", variable=self._clone_var,
                             command=self._update_preview, checkbox_width=20, checkbox_height=20
-                            ).pack(anchor="w", padx=10, pady=(5, 2))
-
-            ctk.CTkCheckBox(frame, text="📦 Instalar dependencias", variable=self._install_var,
-                            command=self._update_preview, checkbox_width=20, checkbox_height=20
-                            ).pack(anchor="w", padx=10, pady=(2, 10))
+                            ).pack(anchor="w", padx=10, pady=(5, 10))
 
         # ── Config files ──
         self._overwrite_configs_var = ctk.BooleanVar(value=True if has_config_files else False)
@@ -585,12 +591,6 @@ class ImportOptionsDialog(BaseDialog):
                 lines.append(f"➕ Se clonará: {m['name']} (rama: {m.get('branch', 'default')}){req_java_text}")
             lines.append("")
 
-        if self._install_var.get() and self._missing:
-            lines.append("--- INSTALACIÓN ---")
-            for m in self._missing:
-                lines.append(f"📦 Se ejecutarán comandos de instalación en: {m['name']}")
-            lines.append("")
-
         if self._overwrite_configs_var.get():
             n_files = sum(len(r.get('config_files', {})) for r in self._profile_data.get('repos', {}).values())
             lines.append(f"📝 Se sobrescribirán {n_files} archivos de configuración locales.\n")
@@ -657,7 +657,6 @@ class ImportOptionsDialog(BaseDialog):
         """Read all checkbox/combo states and return them as a plain dict."""
         return {
             'clone': self._clone_var.get() and bool(self._missing),
-            'install': self._install_var.get() and bool(self._missing),
             'overwrite_configs': self._overwrite_configs_var.get(),
         }
 
@@ -676,7 +675,6 @@ class ImportOptionsDialog(BaseDialog):
         """Run all selected import steps and schedule the completion callback."""
         steps_total = sum([
             len(self._missing) if settings['clone'] else 0,
-            len(self._missing) if settings['install'] else 0,
             1 if settings['overwrite_configs'] else 0,
         ])
         steps_total = max(steps_total, 1)
@@ -695,40 +693,12 @@ class ImportOptionsDialog(BaseDialog):
                 pass
 
         if settings['clone']:
+            self._did_clone = True
             self._apply_repos(self._missing, _update_progress)
-        if settings['install']:
-            self._run_install_step(_update_progress)
         if settings['overwrite_configs']:
             self._run_config_files_step(_update_progress)
 
         self._schedule_import_done()
-
-    def _run_install_step(self, _update_progress):
-        """Install dependencies for newly cloned repos."""
-        app_instance = getattr(self.master, 'master', None) if hasattr(self, 'master') else None
-        launcher = getattr(app_instance, '_service_launcher', None)
-        analyzer = getattr(app_instance, 'project_analyzer', None)
-        if launcher and analyzer:
-            for m in self._missing:
-                dest = os.path.join(self._workspace_dir, m['name'])
-                repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
-                rtype = repo_cfg.get('type', '')
-                java_ver = repo_cfg.get('java_version', '')
-                r_def = next((t for t in analyzer.repo_types if t.get('type') == rtype), {})
-                cmd_str = r_def.get('commands', {}).get('install_cmd')
-                if not os.path.isdir(dest):
-                    if self._log:
-                        self._log(f"[import] ⚠ {m['name']}: directorio no encontrado, instalación omitida ({dest})")
-                    _update_progress(f"⚠ {m['name']}: directorio no encontrado")
-                    continue
-                if cmd_str:
-                    _update_progress(f"Iniciando instalación para {m['name']}...")
-                    launcher.start_generic_install(m['name'], dest, cmd_str, log=self._log, java_home=java_ver)
-                else:
-                    _update_progress(f"⏭ {m['name']}: sin instalación")
-        else:
-            if self._log:
-                self._log("[import] Error: service launcher not found, cannot install dependencies in background.")
 
     def _run_config_files_step(self, _update_progress):
         """Overwrite local config files with those stored in the profile."""
