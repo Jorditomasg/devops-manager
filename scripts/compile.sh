@@ -10,13 +10,8 @@ if [ ! -f ".venv/bin/activate" ]; then
     exit 1
 fi
 
-echo "[1/2] Activando el entorno virtual e instalando dependencias de compilacion..."
+echo "[1/2] Activando el entorno virtual..."
 source .venv/bin/activate
-pip install -r requirements-build.txt
-if [ $? -ne 0 ]; then
-    echo "Error durante la instalacion de dependencias."
-    exit $?
-fi
 
 echo "[2/2] Compilando la aplicacion (esto puede tardar varios minutos)..."
 python -m nuitka --standalone --follow-imports --include-package=customtkinter,darkdetect,pystray,PIL,git,yaml --include-package-data=customtkinter --include-data-dir=config=config --include-data-dir=assets=assets --output-dir=dist --output-filename=devops-manager --assume-yes-for-downloads main.py
