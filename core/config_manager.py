@@ -5,8 +5,6 @@ import os
 import re
 import json
 import yaml
-import shutil
-from datetime import datetime
 from typing import Optional
 
 
@@ -58,13 +56,6 @@ def get_config_path() -> str:
     )
 
 
-# ─── File Backup ─────────────────────────────────────────────────────────────
-
-def backup_file(filepath: str) -> str:
-    """Create a timestamped backup of a file before modifying it."""
-    return ''
-
-
 # ─── Spring Boot Config ─────────────────────────────────────────────────────
 
 def read_spring_config(resources_dir: str, profile: str = 'default') -> dict:
@@ -92,7 +83,6 @@ def write_spring_config(resources_dir: str, profile: str, config: dict) -> bool:
         filepath = os.path.join(resources_dir, f'application-{profile}.yml')
 
     try:
-        backup_file(filepath)
         with open(filepath, 'w', encoding='utf-8') as f:
             yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
@@ -143,9 +133,8 @@ def read_angular_environment_raw(env_file: str) -> str:
 
 
 def write_angular_environment_raw(env_file: str, content: str) -> bool:
-    """Write raw content to an Angular environment file with backup."""
+    """Write raw content to an Angular environment file."""
     try:
-        backup_file(env_file)
         with open(env_file, 'w', encoding='utf-8') as f:
             f.write(content)
         return True
@@ -163,9 +152,8 @@ def read_config_file_raw(filepath: str) -> str:
 
 
 def write_config_file_raw(filepath: str, content: str) -> bool:
-    """Write any config file with backup."""
+    """Write any config file as raw text."""
     try:
-        backup_file(filepath)
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
         return True

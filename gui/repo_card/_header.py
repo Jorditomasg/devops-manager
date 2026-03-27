@@ -255,11 +255,7 @@ class HeaderMixin:
         elif self._current_branch:
             parts.append(f"⎇ {self._current_branch}")
         # Profile / Env
-        if hasattr(self, '_profile_combo'):
-            parts.append(f"⚙ {self._profile_combo.get()}")
-        elif hasattr(self, '_env_combo'):
-            parts.append(f"🌐 {self._env_combo.get()}")
-        elif hasattr(self, '_config_combos') and self._config_combos:
+        if hasattr(self, '_config_combos') and self._config_combos:
             for _, combo in self._config_combos.items():
                 v = combo.get()
                 if v and v not in ('- Sin Seleccionar -', ''):

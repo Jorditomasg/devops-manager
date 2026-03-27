@@ -112,7 +112,7 @@ class ProfileManagerMixin:
                 button_hover_color=theme.C.profile_accent,
                 font=theme.font("base") + ("italic",),
             )
-            self._profile_combo.set(f"{self._current_profile_name}*")
+            self._profile_combo.set(f"{self._current_profile_name}{PROFILE_DIRTY_SUFFIX}")
         else:
             self._profile_combo.configure(
                 text_color=theme.C.text_primary,

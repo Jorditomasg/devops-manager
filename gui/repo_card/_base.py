@@ -92,8 +92,7 @@ class RepoCard(
         self._branch_load_id = self.after(200, self._refresh_branch)
         self._badge_timer = self.after(3000, self._refresh_badge_loop)
 
-        if getattr(self._repo, 'docker_compose_files', None):
-            self.after(500, self._prefetch_docker_status)
+        # Docker prefetch runs lazily on first expand (see _expand_panel.py)
 
     def destroy(self):
         """Cancel pending timers and stop background threads before destroying."""

@@ -280,9 +280,7 @@ class ActionsMixin:
 
         # Append profile flag if selected
         profile = ''
-        if hasattr(self, '_profile_combo'):
-            profile = self._profile_combo.get()
-        elif hasattr(self, '_config_combos') and self._config_combos:
+        if hasattr(self, '_config_combos') and self._config_combos:
             for _, combo in self._config_combos.items():
                 v = combo.get()
                 if v and v not in ('- Sin Seleccionar -', ''):

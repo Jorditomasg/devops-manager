@@ -8,11 +8,9 @@ import json
 import sys
 import logging
 import threading
-import pystray
 import re
+import queue
 import ctypes
-from PIL import Image
-from pystray import MenuItem as item
 
 class StreamRedirector:
     def __init__(self, callback):
@@ -33,17 +31,13 @@ from gui.tooltip import ToolTip
 from gui.dialogs import CloneDialog, ConfigEditorDialog, ProfileDialog, SettingsDialog
 from gui import theme
 from gui.app_profile import ProfileManagerMixin
+from gui.constants import NO_PROFILE_TEXT
 from core.repo_detector import detect_repos
 from core.service_launcher import ServiceLauncher
 
 
 CONFIG_FILE = 'devops_manager_config.json'
 
-# ── Profile constants ───────────────────────────────────────────
-NO_PROFILE_TEXT = "- Sin Perfil -"
-SAVE_PROFILE_TEXT = "💾 Guardar"
-SAVE_NEW_PROFILE_TEXT = "💾 Guardar Nuevo"
-SAVE_CHANGED_PROFILE_TEXT = "💾 Guardar*"
 
 class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
     def __init__(self, workspace_dir: str = None, project_analyzer=None, process_manager=None):
@@ -52,6 +46,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         ctk.set_appearance_mode('dark')
         ctk.set_default_color_theme("blue")
         super().__init__()
+        self.attributes('-alpha', 0.0)  # invisible until UI is fully built — avoids white-flash
 
         self.project_analyzer = project_analyzer
         self.process_manager = process_manager
@@ -113,6 +108,10 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._scan_repos()
         self._load_initial_profile_data()
 
+        # Show window now that UI is fully constructed (eliminates white-flash)
+        self.update_idletasks()
+        self.attributes('-alpha', 1.0)
+
         # Start background check loop for tray icon status
         self._check_tray_status()
         # Profile changes are detected reactively via on_change_callback on each card
@@ -133,6 +132,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         )
         self._statusbar.pack(fill="x", padx=15, pady=(0, 6))
         self._setup_global_log_redirect()
+        self._poll_global_log()
 
     def _build_topbar(self):
         """Build the top bar with logo, path, and action buttons."""
@@ -271,6 +271,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         )
         self._global_log_textbox.pack(fill="both", expand=True, padx=10, pady=5)
         self._log_line_counts: dict = {}
+        self._global_log_queue: queue.Queue = queue.Queue()
 
     def _log(self, message: str):
         """Central log function."""
@@ -345,7 +346,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         )
         self._detached_global_log_textbox.pack(fill="both", expand=True, padx=8, pady=(4, 8))
         
-        # Copy current content
+        # Flush pending items so the copy includes everything written so far
+        self._drain_global_log_queue()
         current_logs = self._global_log_textbox.get("1.0", "end")
         self._detached_global_log_textbox.insert("end", current_logs)
         self._detached_global_log_textbox.configure(state="disabled")
@@ -406,17 +408,29 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
     def _log_global_stream(self, string):
         if string:
             string = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', string)
+        if string:
+            self._global_log_queue.put(string)
 
-        def _insert():
-            self._insert_log_into_textbox(
-                getattr(self, '_global_log_textbox', None), string, 1000
-            )
-            self._insert_log_into_textbox(
-                getattr(self, '_detached_global_log_textbox', None), string, 1000
-            )
-
+    def _drain_global_log_queue(self):
+        """Drain all pending items from the thread-safe queue into the log textboxes.
+        Safe to call from the main thread at any time (e.g. before copying content)."""
+        items = []
         try:
-            self.after(0, _insert)
+            while True:
+                items.append(self._global_log_queue.get_nowait())
+        except queue.Empty:
+            pass
+        if not items:
+            return
+        text = ''.join(items)
+        self._insert_log_into_textbox(getattr(self, '_global_log_textbox', None), text, 1000)
+        self._insert_log_into_textbox(getattr(self, '_detached_global_log_textbox', None), text, 1000)
+
+    def _poll_global_log(self):
+        """Periodic timer (50 ms) that drains the log queue on the main thread."""
+        self._drain_global_log_queue()
+        try:
+            self.after(50, self._poll_global_log)
         except tk.TclError:
             pass
 
@@ -499,10 +513,16 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             if state.get('java_version'):
                 card.selected_java_var.set(state['java_version'])
 
-            # Stagger branch loading
+            # Stagger branch loading (30ms apart)
             if card._branch_load_id:
                 card.after_cancel(card._branch_load_id)
             card._branch_load_id = card.after(30 * idx, card._refresh_branch)
+
+            # Stagger badge refresh (500ms apart, starting at 3s) so all N cards
+            # don't saturate the git semaphore simultaneously on startup.
+            if card._badge_timer:
+                card.after_cancel(card._badge_timer)
+            card._badge_timer = card.after(3000 + 500 * idx, card._refresh_badge_loop)
 
         # Update global panel
         self._global_panel.set_cards(self._repo_cards)
@@ -540,45 +560,33 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
 
     def _load_settings(self) -> dict:
-        """Load settings from config file."""
-        config_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '..', CONFIG_FILE
-        )
-        config_path = os.path.normpath(config_path)
-
-        if os.path.isfile(config_path):
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
-
+        """Load settings from config file (uses in-memory cache)."""
+        from core.config_manager import _load_config_cached, get_config_path
+        data = _load_config_cached(get_config_path())
+        if data:
+            return data
         return {
             'workspace_dir': self._workspace_dir if hasattr(self, '_workspace_dir') else '',
         }
 
     def _save_settings(self, settings: dict):
-        """Save settings to config file."""
+        """Save settings to config file and invalidate the in-memory cache."""
+        from core.config_manager import _load_config_cached, _invalidate_config_cache, get_config_path
         self._settings = settings
-        config_path = os.path.normpath(os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), '..', CONFIG_FILE
-        ))
+        config_path = get_config_path()
         try:
-            existing = {}
-            if os.path.isfile(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    existing = json.load(f)
-            
+            existing = dict(_load_config_cached(config_path))
+
             # Prevent stale in-memory from overwriting fresh disk ones
             if 'active_configs' in existing:
                 settings['active_configs'] = existing['active_configs']
             if 'repo_configs' in existing:
                 settings['repo_configs'] = existing['repo_configs']
             existing.update(settings)
-            
+
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(existing, f, indent=2, ensure_ascii=False)
+            _invalidate_config_cache(config_path)
         except Exception as e:
             logging.error(f"Error guardando config: {e}", exc_info=True)
             self._log(f"Error guardando config: {e}")
@@ -608,6 +616,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._settings['repo_state'] = state
 
     def _init_tray(self):
+        from PIL import Image
         self._tray_icon = None
         self._tray_icon_images = {}
         for color in ("red", "green"):
@@ -633,6 +642,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                     any_running = True
                     break
                     
+            from PIL import Image
+            import pystray
             color = "green" if any_running else "red"
             image = self._tray_icon_images.get(color, Image.new('RGB', (64, 64), color='red'))
 
@@ -700,6 +711,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _build_tray_menu(self):
         """Build the tray context menu dynamically at open time."""
+        import pystray
+        from pystray import MenuItem as item
         running = [c for c in self._repo_cards if getattr(c, '_status', '') in ('running', 'starting')]
         selected = [c for c in self._repo_cards if c.is_selected()]
         items = []

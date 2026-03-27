@@ -147,7 +147,6 @@ class DockerMixin:
     def _start_compose_status_thread(self):
         """Background thread to poll docker container status for active compose files."""
         def _loop():
-            import time  # noqa: F401 — retained for consistency with original
             while self._compose_status_thread_running and self.winfo_exists():
                 self._poll_compose_status(self._compose_stop_event, DOCKER_POLL_MS // 1000)
                 self._compose_stop_event.wait(timeout=DOCKER_POLL_MS // 1000)

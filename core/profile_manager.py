@@ -6,7 +6,6 @@ Optionally includes global DB presets.
 from __future__ import annotations
 import json
 import os
-import shutil
 from datetime import datetime
 from typing import Optional
 
@@ -211,8 +210,6 @@ def _capture_config_files(repo) -> dict:
 
 def apply_config_files(repo_path: str, repo_type: str, config_files: dict, target_env=None):
     """Overwrite config files in a repo from saved profile data."""
-    from core.config_manager import backup_file
-
     if not config_files:
         return
 
@@ -225,8 +222,6 @@ def apply_config_files(repo_path: str, repo_type: str, config_files: dict, targe
 
         for fname, content in files.items():
             fpath = os.path.join(dir_path, fname)
-            if os.path.isfile(fpath):
-                backup_file(fpath)
             try:
                 with open(fpath, 'w', encoding='utf-8') as f:
                     f.write(content)
