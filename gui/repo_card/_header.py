@@ -100,7 +100,8 @@ class HeaderMixin:
             font=theme.font("md", bold=True), text_color=theme.C.text_warning_badge
         )
         self._changes_count_label.pack(side="left", padx=(4, 4))
-        ToolTip(self._changes_count_label, "Ficheros modificados sin guardar en el directorio vinculados al repo.")
+        self._changes_count_label.bind("<Button-1>", self._show_modified_files)
+        ToolTip(self._changes_count_label, "Ficheros modificados sin guardar. Clic para ver la lista en el log.")
 
         # Warning badge (yellow, shown only when deps missing)
         self._branch_hint_warn = ctk.CTkLabel(

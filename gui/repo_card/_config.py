@@ -56,6 +56,7 @@ class ConfigMixin:
             subprocess.run(['git', 'checkout', '--', target_file], cwd=self._repo.path, capture_output=True, creationflags=flags)
 
         self.after(0, self._update_header_hints)
+        self.after(0, self._refresh_badge)
         if is_real_change:
             self._trigger_change_callback()
 
@@ -116,6 +117,8 @@ class ConfigMixin:
             self.after(0, lambda tf=target_file: messagebox.showerror("Error", f"No se pudo escribir en '{tf}'"))
 
         self.after(0, self._update_header_hints)
+        if res:
+            self.after(0, self._refresh_badge)
         if is_real_change:
             self._trigger_change_callback()
 

@@ -111,6 +111,25 @@ class GitMixin:
 
         threading.Thread(target=_run, daemon=True).start()
 
+    def _show_modified_files(self, event=None):
+        """Show list of modified files in the repo's log panel."""
+        def _run():
+            from core.git_manager import get_local_changes
+            files = get_local_changes(self._repo.path)
+
+            def _log():
+                if not self.winfo_exists():
+                    return
+                if not files:
+                    self._log("📝 Sin cambios locales.")
+                    return
+                self._log(f"📝 {len(files)} fichero(s) modificado(s):")
+                for f in files:
+                    self._log(f"   {f}")
+            self.after(0, _log)
+
+        threading.Thread(target=_run, daemon=True).start()
+
     def _detect_port_from_log(self, line: str):
         """Dynamically detect and update the server port from log output."""
         if self._repo.server_port:

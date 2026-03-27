@@ -95,6 +95,7 @@ class ActionsMixin:
                     hover_color=_ok_style["hover_color"],
                 )
             self._update_header_hints()
+            self._refresh_badge()
             if self._log:
                 self._log(f"[{self._repo.name}] Instalación finalizada ✓")
         else:

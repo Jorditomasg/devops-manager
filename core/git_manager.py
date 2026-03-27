@@ -237,7 +237,7 @@ def get_commits_behind(repo_path: str, branch: str) -> int:
 def count_modified_files(repo_path: str) -> int:
     """Count number of modified/untracked files."""
     try:
-        result = _run_git_command(['git', 'status', '--porcelain'], repo_path, timeout=5)
+        result = _run_git_command(['git', 'status', '--no-optional-locks', '--porcelain'], repo_path, timeout=5)
         if result.returncode == 0:
             lines = [line for line in result.stdout.splitlines() if line.strip()]
             return len(lines)
@@ -254,7 +254,7 @@ def get_local_changes(repo_path: str, ignore_files: list[str] = None) -> list[st
         ignore_files = []
     changes = []
     try:
-        result = _run_git_command(['git', 'status', '--porcelain'], repo_path, timeout=5)
+        result = _run_git_command(['git', 'status', '--no-optional-locks', '--porcelain'], repo_path, timeout=5)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 if not line.strip():
