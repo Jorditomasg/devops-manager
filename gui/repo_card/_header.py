@@ -260,14 +260,14 @@ class HeaderMixin:
         if hasattr(self, '_config_combos') and self._config_combos:
             for _, combo in self._config_combos.items():
                 v = combo.get()
-                if v and v not in ('- Sin Seleccionar -', ''):
+                if v and v not in (t("label.no_selection"), ''):
                     parts.append(f"⚙ {v}")
                     break
         else:
             pending = getattr(self, '_pending_profile', None)
             if isinstance(pending, dict):
                 for v in pending.values():
-                    if v and v not in ('- Sin Seleccionar -', ''):
+                    if v and v not in (t("label.no_selection"), ''):
                         parts.append(f"⚙ {v}")
                         break
             elif isinstance(pending, str) and pending:

@@ -321,7 +321,7 @@ class SettingsDialog(BaseDialog):
         if not self._java_versions:
             ctk.CTkLabel(
                 self._java_list_frame,
-                text="(Sin versiones configuradas. Usa '➕ Añadir Java' o '🔍 Auto-detectar')",
+                text=t("dialog.settings.java_no_versions"),
                 font=theme.font("sm"), text_color=theme.C.text_placeholder
             ).pack(pady=5)
             return
@@ -369,11 +369,11 @@ class SettingsDialog(BaseDialog):
         self._refresh_java_list()
 
         if added_count > 0:
-            messagebox.showinfo("Java Detectado", f"Se han encontrado y añadido {added_count} instalaciones de Java automáticamente.")
+            messagebox.showinfo(t("dialog.settings.java_detected_title"), t("dialog.settings.java_detected_msg", added_count=added_count))
         else:
             res = messagebox.askyesno(
-                "Java No Encontrado",
-                "No se encontraron nuevas instalaciones de Java automáticamente.\n\n¿Deseas añadir la ruta a tu Java manualmente?"
+                t("dialog.settings.java_not_found_title"),
+                t("dialog.settings.java_not_found_msg")
             )
             if res:
                 self._add_java_version()
@@ -395,14 +395,14 @@ class SettingsDialog(BaseDialog):
 
     def _delete_java(self, name: str):
         """Delete a Java version."""
-        if messagebox.askyesno("Confirmar", f"¿Eliminar la configuración de Java '{name}'?"):
+        if messagebox.askyesno(t("dialog.settings.java_delete_title"), t("dialog.settings.java_delete_msg", name=name)):
             del self._java_versions[name]
             self._refresh_java_list()
 
     # ── Workspace / save ──────────────────────────────────────────────────────
 
     def _browse_dir(self):
-        d = filedialog.askdirectory(title="Seleccionar workspace")
+        d = filedialog.askdirectory(title=t("dialog.settings.workspace_select_title"))
         if d:
             self._workspace_entry.delete(0, "end")
             self._workspace_entry.insert(0, d)
@@ -449,12 +449,12 @@ class JavaVersionEditorDialog(BaseDialog):
 
     def __init__(self, parent, version_name: str = '', version_path: str = '',
                  on_save=None):
-        title = "Editar Versión Java" if version_name else "Nueva Versión Java"
+        title = t("dialog.settings.java_edit_title") if version_name else t("dialog.settings.java_new_title")
         super().__init__(parent, title, 520, 220)
 
         self._on_save = on_save
 
-        ctk.CTkLabel(self, text="☕ Configuración de Java",
+        ctk.CTkLabel(self, text=t("dialog.settings.java_config_header"),
                      font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
         form = ctk.CTkFrame(self, fg_color="transparent")
@@ -466,35 +466,35 @@ class JavaVersionEditorDialog(BaseDialog):
         btn_frame.pack(fill="x", padx=20, pady=15)
 
         ctk.CTkButton(
-            btn_frame, text="💾 Guardar", width=120,
+            btn_frame, text=t("btn.save"), width=120,
             command=self._save, **theme.btn_style("success")
         ).pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
-            btn_frame, text="Cancelar", width=100,
+            btn_frame, text=t("btn.cancel"), width=100,
             command=self.destroy, **theme.btn_style("neutral")
         ).pack(side="right")
 
     def _build_fields(self, form, version_name: str, version_path: str):
         """Build the form fields for Java version name and JAVA_HOME path."""
         # Name
-        ctk.CTkLabel(form, text="Nombre:", font=theme.font("md"),
+        ctk.CTkLabel(form, text=t("dialog.settings.java_field_name"), font=theme.font("md"),
                      width=80, anchor="w").grid(row=0, column=0, pady=4, sticky="w")
-        self._name_entry = ctk.CTkEntry(form, width=380, placeholder_text="Ej: Java 17 o Java 8 (Corretto)")
+        self._name_entry = ctk.CTkEntry(form, width=380, placeholder_text=t("dialog.settings.java_name_placeholder"))
         self._name_entry.grid(row=0, column=1, pady=4, sticky="w", columnspan=2)
         if version_name:
             self._name_entry.insert(0, version_name)
 
         # Path (JAVA_HOME)
-        ctk.CTkLabel(form, text="Directorio:", font=theme.font("md"),
+        ctk.CTkLabel(form, text=t("dialog.settings.java_field_path"), font=theme.font("md"),
                      width=80, anchor="w").grid(row=1, column=0, pady=4, sticky="w")
-        self._path_entry = ctk.CTkEntry(form, width=330, placeholder_text="JAVA_HOME path (carpeta principal con /bin)")
+        self._path_entry = ctk.CTkEntry(form, width=330, placeholder_text=t("dialog.settings.java_path_placeholder"))
         self._path_entry.grid(row=1, column=1, pady=4, sticky="w")
         if version_path:
             self._path_entry.insert(0, version_path)
 
         def _browse_path():
-            d = filedialog.askdirectory(title="Seleccionar directorio JAVA_HOME")
+            d = filedialog.askdirectory(title=t("dialog.settings.java_dir_title"))
             if d:
                 self._path_entry.delete(0, "end")
                 self._path_entry.insert(0, d)
@@ -509,17 +509,17 @@ class JavaVersionEditorDialog(BaseDialog):
         path = self._path_entry.get().strip()
 
         if not name:
-            messagebox.showwarning("Error", "El nombre identificativo de la versión Java es obligatorio.")
+            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_name_required"))
             return
 
         if not path or not os.path.isdir(path):
-            messagebox.showwarning("Error", "Debes especificar una ruta válida de un directorio para el JAVA_HOME.")
+            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_path_required"))
             return
 
         # Simple heuristic to make sure it looks like a valid JAVA_HOME
         java_exe = os.path.join(path, "bin", "java.exe" if os.name == 'nt' else "java")
         if not os.path.isfile(java_exe):
-            if not messagebox.askyesno("Advertencia", f"No se ha encontrado el ejecutable java en {java_exe}. ¿Estás seguro de que esta es una ruta JAVA_HOME válida?"):
+            if not messagebox.askyesno(t("dialog.settings.java_exe_warn_title"), t("dialog.settings.java_exe_warn_msg", java_exe=java_exe)):
                 return
 
         if self._on_save:

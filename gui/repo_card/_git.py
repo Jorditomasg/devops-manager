@@ -104,7 +104,7 @@ class GitMixin:
             else:
                 def _err():
                     if not self.winfo_exists(): return
-                    messagebox.showerror("Error al cambiar de rama", f"No se pudo cambiar a '{branch}'.\nComprueba si hay ficheros modificados en conflicto.\n\nDetalles:\n{msg}")
+                    messagebox.showerror(t("dialog.git.checkout_error_title"), t("dialog.git.checkout_error_msg", branch=branch, msg=msg))
                     if hasattr(self, '_branch_combo'):
                         self._branch_combo.set(actual_branch)
                         self._update_header_hints()

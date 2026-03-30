@@ -10,6 +10,7 @@ import customtkinter as ctk
 from gui.log_helpers import insert_log_line
 from gui.constants import LOG_MAX_LINES
 from gui import theme
+from core.i18n import t
 
 
 class LogMixin:
@@ -63,7 +64,7 @@ class LogMixin:
         header = ctk.CTkFrame(self._detached_log_window, fg_color="transparent")
         header.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkButton(
-            header, text="🗑 Limpiar", width=60,
+            header, text=t("btn.clear_log"), width=60,
             command=self._clear_logs,
             **theme.btn_style("log_action", height="sm", font_size="sm")
         ).pack(side="left")

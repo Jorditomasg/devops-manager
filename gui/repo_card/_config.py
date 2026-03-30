@@ -5,6 +5,7 @@ import threading
 from tkinter import messagebox
 import customtkinter as ctk
 from gui import theme
+from core.i18n import t
 
 
 class ConfigMixin:
@@ -114,7 +115,7 @@ class ConfigMixin:
             if self._log and should_log:
                 self._log(f"[{self._repo.name}] Configuración '{config_name}' aplicada.")
         elif should_log:
-            self.after(0, lambda tf=target_file: messagebox.showerror("Error", f"No se pudo escribir en '{tf}'"))
+            self.after(0, lambda tf=target_file: messagebox.showerror(t("misc.error_title"), t("dialog.config.write_error", path=tf)))
 
         self.after(0, self._update_header_hints)
         if res:
@@ -135,7 +136,7 @@ class ConfigMixin:
         save_active_config(config_key, config_name)
 
         def _run_change():
-            if config_name == "- Sin Seleccionar -":
+            if config_name == t("label.no_selection"):
                 self._handle_unselect_config(target_file, skip_log, is_real_change)
                 return
 
@@ -160,20 +161,20 @@ class ConfigMixin:
             def _do_update():
                 from core.config_manager import load_repo_configs
                 configs = load_repo_configs(config_key)
-                opts = ["- Sin Seleccionar -"] + list(configs.keys())
+                opts = [t("label.no_selection")] + list(configs.keys())
                 if hasattr(self, '_config_combos'):
                     combo = self._config_combos.get(target_file)
                     if combo and combo.winfo_exists():
                         combo.configure(values=opts)
                         curr = combo.get()
                         if curr not in opts:
-                            combo.set("- Sin Seleccionar -")
+                            combo.set(t("label.no_selection"))
                     self._update_header_hints()
                 elif hasattr(self, '_config_combo') and self._config_combo.winfo_exists():
                     self._config_combo.configure(values=opts)
                     curr = self._config_combo.get()
                     if curr not in opts:
-                        self._config_combo.set("- Sin Seleccionar -")
+                        self._config_combo.set(t("label.no_selection"))
                         self._update_header_hints()
             self.after(0, _do_update)
 

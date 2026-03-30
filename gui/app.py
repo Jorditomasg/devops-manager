@@ -159,7 +159,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._path_label.pack(side="left", padx=10, fill="x", expand=True)
         self._path_label.bind("<Button-1>", lambda e: self._open_workspace())
         self._path_label.bind("<Configure>", self._update_path_label)
-        ToolTip(self._path_label, f"📁 {self._workspace_dir}\nAbrir en el explorador")
+        ToolTip(self._path_label, t("tooltip.workspace_dir", path=self._workspace_dir))
 
     def _build_topbar_buttons(self, topbar):
         """Build the right-side action buttons in the top bar."""
@@ -167,8 +167,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         btn_frame.pack(side="right", padx=15)
 
         btn_defs = [
-            ("➕ Clonar",  95, "blue",    self._show_clone_dialog,   t("tooltip.clone_btn")),
-            ("🔄 Rescan",  95, "warning", self._scan_repos,           t("tooltip.rescan_btn")),
+            (t("btn.clone"),  95, "blue",    self._show_clone_dialog,   t("tooltip.clone_btn")),
+            (t("btn.rescan"), 95, "warning", self._scan_repos,           t("tooltip.rescan_btn")),
             ("⚙",          38, "neutral", self._show_settings,        t("tooltip.settings_btn")),
             ("📋",         38, "neutral", self._detach_global_log,    t("tooltip.global_log_btn")),
         ]
@@ -190,7 +190,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         else:
             self._profile_combo.set(t("label.no_profile"))
             
-        ToolTip(self._profile_combo, "Seleccionar Perfil de Workspace")
+        ToolTip(self._profile_combo, t("tooltip.profile_selector"))
         
         # Gestionar Perfiles btn (Dynamic, to the right of the selector)
         self._save_profile_btn = ctk.CTkButton(
@@ -199,7 +199,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             **theme.btn_style("neutral", height="lg", font_size="h2")
         )
         self._save_profile_btn.pack(side="left", padx=(0, 20))
-        ToolTip(self._save_profile_btn, "Gestionar Perfiles")
+        ToolTip(self._save_profile_btn, t("tooltip.manage_profiles"))
 
         for text, width, variant, cmd, tip in btn_defs:
             font_size = "base" if len(text) > 2 else "h2"

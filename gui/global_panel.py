@@ -62,7 +62,7 @@ class GlobalPanel(ctk.CTkFrame):
             corner_radius=theme.G.corner_btn,
             fg_color=theme.C.section,
             border_color=theme.C.default_border,
-            placeholder_text="develop"
+            placeholder_text=t("label.branch_placeholder")
         )
         self._branch_entry.pack(side="left", padx=(4, 4))
 

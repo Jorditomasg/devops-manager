@@ -49,7 +49,7 @@ class ProfileDialog(BaseDialog):
         self._main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
-        ctk.CTkLabel(self._main_scroll, text="💾 Configuraciones Guardadas",
+        ctk.CTkLabel(self._main_scroll, text=t("dialog.profile.section_title"),
                      font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
         self._build_save_section(self._main_scroll)
@@ -57,8 +57,7 @@ class ProfileDialog(BaseDialog):
         self._build_action_buttons(self._main_scroll)
 
         ctk.CTkLabel(
-            self._main_scroll, text="💡 Guardar: guarda repos (URL, rama, env, cmd) + configs.\n"
-                       "    Importar: permite clonar repos, instalar deps, aplicar configs.",
+            self._main_scroll, text=t("dialog.profile.help_text"),
             font=theme.font("sm"), text_color=theme.C.text_placeholder,
             justify="left"
         ).pack(padx=20, pady=(10, 15))
@@ -68,18 +67,18 @@ class ProfileDialog(BaseDialog):
         save_frame = ctk.CTkFrame(scroll, corner_radius=8)
         save_frame.pack(fill="x", padx=20, pady=5)
 
-        ctk.CTkLabel(save_frame, text="Guardar configuración actual:",
+        ctk.CTkLabel(save_frame, text=t("dialog.profile.save_current"),
                      font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
         name_row = ctk.CTkFrame(save_frame, fg_color="transparent")
         name_row.pack(fill="x", padx=10, pady=(0, 4))
 
         self._save_name = ctk.CTkEntry(name_row, width=300,
-                                        placeholder_text="Nombre de la configuración...")
+                                        placeholder_text=t("dialog.profile.name_placeholder"))
         self._save_name.pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            name_row, text="💾 Guardar", width=100,
+            name_row, text=t("dialog.profile.btn_save"), width=100,
             command=self._save_profile, **theme.btn_style("success")
         ).pack(side="left")
 
@@ -88,7 +87,7 @@ class ProfileDialog(BaseDialog):
 
         self._include_files_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
-            opts_row, text="Incluir config files (yml/ts)", variable=self._include_files_var,
+            opts_row, text=t("dialog.profile.include_config_files"), variable=self._include_files_var,
             font=theme.font("md"),
             checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size
         ).pack(side="left")
@@ -99,7 +98,7 @@ class ProfileDialog(BaseDialog):
         load_frame.pack(fill="x", padx=20, pady=5)
         self._list_section_frame = load_frame
 
-        ctk.CTkLabel(load_frame, text="Configuraciones guardadas:",
+        ctk.CTkLabel(load_frame, text=t("dialog.profile.saved_list_title"),
                      font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
         self._profile_list_frame = ctk.CTkScrollableFrame(
@@ -116,17 +115,17 @@ class ProfileDialog(BaseDialog):
         btn_row.pack(pady=(0, 10))
 
         ctk.CTkButton(
-            btn_row, text="📂 Cargar", width=100,
+            btn_row, text=t("dialog.profile.btn_load"), width=100,
             command=self._load_profile, **theme.btn_style("blue")
         ).pack(side="left", padx=(0, 5))
 
         ctk.CTkButton(
-            btn_row, text="🗑 Eliminar", width=100,
+            btn_row, text=t("dialog.profile.btn_delete"), width=100,
             command=self._delete_profile, **theme.btn_style("danger_deep")
         ).pack(side="left", padx=(0, 5))
 
         ctk.CTkButton(
-            btn_row, text="📤 Exportar", width=100,
+            btn_row, text=t("dialog.profile.btn_export"), width=100,
             command=self._export_profile, **theme.btn_style("warning")
         ).pack(side="left")
 
@@ -135,18 +134,18 @@ class ProfileDialog(BaseDialog):
         import_frame = ctk.CTkFrame(scroll, corner_radius=8)
         import_frame.pack(fill="x", padx=20, pady=5)
 
-        ctk.CTkLabel(import_frame, text="Importar configuración externa:",
+        ctk.CTkLabel(import_frame, text=t("dialog.profile.import_external"),
                      font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
         ctk.CTkButton(
-            import_frame, text="📥 Importar desde archivo...", width=250,
+            import_frame, text=t("dialog.profile.btn_import"), width=250,
             command=self._import_profile, **theme.btn_style("purple")
         ).pack(padx=10, pady=(0, 10))
 
     def _save_profile(self):
         name = self._save_name.get().strip()
         if not name:
-            messagebox.showwarning("Error", "Introduce un nombre para la configuración")
+            messagebox.showwarning(t("misc.error_title"), t("dialog.profile.error_no_name"))
             return
 
         from core.profile_manager import build_profile_data, save_profile, list_profiles
@@ -154,7 +153,7 @@ class ProfileDialog(BaseDialog):
         # Check if profile with this name already exists
         existing_profiles = list_profiles()
         if name in existing_profiles:
-            if not messagebox.askyesno("Sobrescribir", f"El perfil '{name}' ya existe.\n¿Deseas sobrescribirlo con los cambios actuales?"):
+            if not messagebox.askyesno(t("dialog.profile.overwrite_title"), t("dialog.profile.overwrite_msg", name=name)):
                 return
 
         include_files = self._include_files_var.get()
@@ -170,7 +169,7 @@ class ProfileDialog(BaseDialog):
             extra_str = " (con config files)" if include_files else ""
             self._log(f"Configuración guardada: {name}{extra_str}")
 
-        messagebox.showinfo("Guardado", f"Configuración '{name}' guardada correctamente")
+        messagebox.showinfo(t("dialog.profile.saved_title"), t("dialog.profile.saved_msg", name=name))
         self._refresh_list()
 
         if self._on_profiles_changed:
@@ -179,13 +178,13 @@ class ProfileDialog(BaseDialog):
     def _load_profile(self):
         name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
-            messagebox.showwarning("Aviso", "Selecciona un perfil de la lista primero")
+            messagebox.showwarning(t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
         from core.profile_manager import load_profile
         data = load_profile(name)
         if not data:
-            messagebox.showerror("Error", f"No se pudo cargar la configuración '{name}'")
+            messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_load_failed", name=name))
             return
 
         self._apply_profile_data(data)
@@ -194,7 +193,7 @@ class ProfileDialog(BaseDialog):
         """Apply a profile, showing import options dialog if needed."""
         changes_text = self._build_changes_text(data)
 
-        if changes_text == "✅ Ningún cambio detectado respecto al estado actual.":
+        if changes_text == t("dialog.profile.no_changes"):
             # If nothing really changes (or everything is identical), apply directly.
             self._apply_basic_config(data)
             return
@@ -228,14 +227,14 @@ class ProfileDialog(BaseDialog):
                 # Check branch
                 if target_cfg.get('branch') and cur_cfg.get('branch') != target_cfg.get('branch'):
                     repo_changes.append(
-                        f"Rama: {cur_cfg.get('branch') or 'N/A'} ➔ {target_cfg.get('branch')}"
+                        t("dialog.profile.change_branch", from_val=cur_cfg.get('branch') or 'N/A', to_val=target_cfg.get('branch'))
                     )
 
                 # Check profile
                 cur_profile = cur_cfg.get('profile') or 'N/A'
                 tgt_profile = target_cfg.get('profile') or 'N/A'
                 if tgt_profile != 'N/A' and cur_profile != tgt_profile:
-                    repo_changes.append(f"Perfil: {cur_profile} ➔ {tgt_profile}")
+                    repo_changes.append(t("dialog.profile.change_profile", from_val=cur_profile, to_val=tgt_profile))
 
                 if repo_changes:
                     changes.append(f"🔄 {repo_name}:\n    " + "\n    ".join(repo_changes))
@@ -244,7 +243,7 @@ class ProfileDialog(BaseDialog):
         """Append config files overwrite line to changes if present."""
         n_files = sum(len(r.get('config_files', {})) for r in target_repos.values())
         if n_files > 0:
-            changes.append(f"📝 Sobrescribir archivos de config ({n_files} archivos)")
+            changes.append(t("dialog.profile.changes_overwrite_files", count=n_files))
 
     def _build_changes_text(self, data: dict) -> str:
         """Comparar el data con el estado actual de los repos."""
@@ -259,7 +258,7 @@ class ProfileDialog(BaseDialog):
         # 1. Repos faltantes (to clone)
         missing = get_missing_repos(self._workspace_dir, data)
         for m in missing:
-            changes.append(f"➕ Clonar nuevo repo: {m['name']} (rama: {m['branch']})")
+            changes.append(t("dialog.profile.changes_clone_repo", name=m['name'], branch=m['branch']))
 
         # 2. Diferencias en repositorios existentes
         target_repos = data.get('repos', {})
@@ -272,7 +271,7 @@ class ProfileDialog(BaseDialog):
         self._describe_command_changes(changes, target_repos)
 
         if not changes:
-            return "✅ Ningún cambio detectado respecto al estado actual."
+            return t("dialog.profile.no_changes")
 
         return "\n\n".join(changes)
 
@@ -282,7 +281,7 @@ class ProfileDialog(BaseDialog):
             self._on_profile_loaded(data)
         if self._log:
             self._log(t("log.profile_applied", name=data.get('name', '??')))
-        messagebox.showinfo("Cargado", "Configuración aplicada correctamente")
+        messagebox.showinfo(t("dialog.profile.loaded_title"), t("dialog.profile.loaded_msg"))
         self.destroy()
 
     def _on_import_complete(self, data: dict, did_clone: bool):
@@ -306,10 +305,10 @@ class ProfileDialog(BaseDialog):
     def _delete_profile(self):
         name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
-            messagebox.showwarning("Aviso", "Selecciona un perfil de la lista primero")
+            messagebox.showwarning(t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
-        if messagebox.askyesno("Confirmar", f"¿Eliminar la configuración '{name}'?"):
+        if messagebox.askyesno(t("dialog.profile.confirm_delete_title"), t("dialog.profile.confirm_delete_msg", name=name)):
             from core.profile_manager import delete_profile
             delete_profile(name)
             if self._log:
@@ -322,30 +321,30 @@ class ProfileDialog(BaseDialog):
     def _export_profile(self):
         name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
-            messagebox.showwarning("Aviso", "Selecciona un perfil de la lista primero")
+            messagebox.showwarning(t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
         from core.profile_manager import load_profile, export_profile_to_file
         data = load_profile(name)
         if not data:
-            messagebox.showerror("Error", "No se pudo leer la configuración")
+            messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_export_failed"))
             return
 
         dest = filedialog.asksaveasfilename(
-            title="Exportar configuración",
+            title=t("dialog.profile.export_dialog_title"),
             defaultextension=".json",
             filetypes=[("JSON", "*.json")],
             initialfile=f'{name}.json'
         )
         if dest:
             if export_profile_to_file(data, dest):
-                messagebox.showinfo("Exportado", f"Configuración exportada a:\n{dest}")
+                messagebox.showinfo(t("dialog.profile.exported_title"), t("dialog.profile.exported_msg", path=dest))
             else:
-                messagebox.showerror("Error", "No se pudo exportar la configuración")
+                messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_export_failed"))
 
     def _import_profile(self):
         filepath = filedialog.askopenfilename(
-            title="Importar configuración",
+            title=t("dialog.profile.import_dialog_title"),
             filetypes=[("JSON", "*.json"), ("Todos", "*.*")]
         )
         if not filepath:
@@ -354,7 +353,7 @@ class ProfileDialog(BaseDialog):
         from core.profile_manager import import_profile_from_file, list_profiles, load_profile
         data = import_profile_from_file(filepath)
         if not data:
-            messagebox.showerror("Error", "Archivo de configuración inválido")
+            messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_invalid_file"))
             return
 
         original_name = data.get('name', os.path.splitext(os.path.basename(filepath))[0])
@@ -365,8 +364,8 @@ class ProfileDialog(BaseDialog):
             existing_data = load_profile(original_name)
             if existing_data and _profiles_equal(data, existing_data):
                 messagebox.showinfo(
-                    "Sin cambios",
-                    f"El perfil '{original_name}' ya existe y su contenido es idéntico. No es necesario importar."
+                    t("dialog.profile.no_changes_title"),
+                    t("dialog.profile.no_changes_identical", name=original_name)
                 )
                 return
             profile_name = _unique_profile_name(original_name, existing)
@@ -448,7 +447,7 @@ class ImportOptionsDialog(BaseDialog):
                  workspace_dir: str = '',
                  log_callback=None,
                  on_complete=None):
-        super().__init__(parent, "Revisar y Aplicar Configuración", 580, 650)
+        super().__init__(parent, t("dialog.import.title"), 580, 650)
         self.minsize(500, 500)
         self.resizable(True, True)
 
@@ -507,7 +506,7 @@ class ImportOptionsDialog(BaseDialog):
 
     def _build_header_frame(self, parent):
         """Build the title label for the import options dialog."""
-        ctk.CTkLabel(parent, text="📥 Opciones de Importación",
+        ctk.CTkLabel(parent, text=t("dialog.import.section_title"),
                      font=theme.font("xxl", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
     def _build_buttons_frame(self, container):
@@ -516,13 +515,13 @@ class ImportOptionsDialog(BaseDialog):
         self._btn_frame.pack(side="bottom", fill="x", padx=20, pady=10)
 
         self._apply_btn = ctk.CTkButton(
-            self._btn_frame, text="✅ Aceptar y Aplicar", width=150,
+            self._btn_frame, text=t("dialog.import.btn_accept"), width=150,
             command=self._apply, **theme.btn_style("success", height="lg")
         )
         self._apply_btn.pack(side="right", padx=(10, 0))
 
         self._cancel_btn = ctk.CTkButton(
-            self._btn_frame, text="Cancelar", width=100,
+            self._btn_frame, text=t("btn.cancel"), width=100,
             command=self.destroy, **theme.btn_style("neutral", height="lg")
         )
         self._cancel_btn.pack(side="right")
@@ -533,7 +532,7 @@ class ImportOptionsDialog(BaseDialog):
         self._clone_var = ctk.BooleanVar(value=True if self._missing else False)
 
         if self._missing:
-            ctk.CTkLabel(frame, text="Repositorios faltantes encontrados:",
+            ctk.CTkLabel(frame, text=t("dialog.import.missing_repos_title"),
                          font=theme.font("base", bold=True),
                          text_color=theme.C.status_starting).pack(anchor="w", padx=10, pady=(10, 0))
 
@@ -543,7 +542,7 @@ class ImportOptionsDialog(BaseDialog):
             ctk.CTkLabel(frame, text=f"• {missing_txt}",
                          font=theme.font("md"), text_color=theme.C.text_muted).pack(anchor="w", padx=20)
 
-            ctk.CTkCheckBox(frame, text="🔗 Clonar repos faltantes", variable=self._clone_var,
+            ctk.CTkCheckBox(frame, text=t("dialog.import.clone_missing"), variable=self._clone_var,
                             command=self._update_preview, checkbox_width=20, checkbox_height=20
                             ).pack(anchor="w", padx=10, pady=(5, 10))
 
@@ -551,7 +550,7 @@ class ImportOptionsDialog(BaseDialog):
         self._overwrite_configs_var = ctk.BooleanVar(value=True if has_config_files else False)
         if has_config_files:
             n_files = sum(len(r.get('config_files', {})) for r in profile_data.get('repos', {}).values())
-            ctk.CTkCheckBox(frame, text=f"📝 Sobrescribir {n_files} archivos de config (yml/ts)",
+            ctk.CTkCheckBox(frame, text=t("dialog.import.overwrite_files", count=n_files),
                             variable=self._overwrite_configs_var, command=self._update_preview,
                             checkbox_width=20, checkbox_height=20).pack(anchor="w", padx=10, pady=(5, 10))
 
@@ -559,14 +558,14 @@ class ImportOptionsDialog(BaseDialog):
         """Build Java version mapping table for versions missing locally."""
         self._java_mappings = {}
         if self._missing_javas:
-            ctk.CTkLabel(frame, text="Asociar versiones de Java locales:",
+            ctk.CTkLabel(frame, text=t("dialog.import.map_java_title"),
                          font=theme.font("base", bold=True),
                          text_color=theme.C.status_starting).pack(anchor="w", padx=10, pady=(5, 0))
 
             for missing_jv in self._missing_javas:
                 row = ctk.CTkFrame(frame, fg_color="transparent")
                 row.pack(fill="x", padx=15, pady=2)
-                ctk.CTkLabel(row, text=f"Perfil pide: {missing_jv} ➔", width=140, anchor="e").pack(side="left", padx=(0, 10))
+                ctk.CTkLabel(row, text=t("dialog.import.java_needs", version=missing_jv), width=140, anchor="e").pack(side="left", padx=(0, 10))
                 options = ["Sistema (Por Defecto)"] + self._local_javas
                 var = ctk.StringVar(value="Sistema (Por Defecto)")
                 combo = ctk.CTkComboBox(row, values=options, variable=var, width=170)
@@ -580,7 +579,7 @@ class ImportOptionsDialog(BaseDialog):
                         repos_needing_java.append(repo_name)
 
                 if repos_needing_java:
-                    repos_txt = " usará en: " + ", ".join(repos_needing_java)
+                    repos_txt = t("dialog.import.java_used_in") + ", ".join(repos_needing_java)
                     if len(repos_txt) > 50:
                         repos_txt = repos_txt[:47] + "..."
                     ctk.CTkLabel(row, text=repos_txt, font=theme.font("sm", mono=True),
@@ -589,7 +588,7 @@ class ImportOptionsDialog(BaseDialog):
 
     def _build_preview_section(self, parent):
         """Build changes preview textbox for step 1."""
-        ctk.CTkLabel(parent, text="📋 Resumen de Cambios",
+        ctk.CTkLabel(parent, text=t("dialog.import.changes_summary"),
                      font=theme.font("xl", bold=True)).pack(anchor="w", padx=10, pady=(5, 5))
 
         self._preview_box = ctk.CTkTextbox(parent, font=theme.font("md", mono=True), wrap="none", height=150)
@@ -597,17 +596,17 @@ class ImportOptionsDialog(BaseDialog):
 
     def _build_progress_section(self, parent):
         """Build progress bar and log textbox for step 2."""
-        ctk.CTkLabel(parent, text="⚙️ Aplicando Configuración...",
+        ctk.CTkLabel(parent, text=t("dialog.import.applying_title"),
                      font=theme.font("xxl", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
-        self._progress_label = ctk.CTkLabel(parent, text="Preparando...", font=theme.font("base", bold=True),
+        self._progress_label = ctk.CTkLabel(parent, text=t("dialog.import.preparing"), font=theme.font("base", bold=True),
                                             text_color=theme.C.text_primary)
         self._progress_label.pack(anchor="w", padx=10, pady=(10, 0))
         self._progress = ctk.CTkProgressBar(parent)
         self._progress.pack(fill="x", padx=10, pady=(5, 15))
         self._progress.set(0)
 
-        self._log_detail_label = ctk.CTkLabel(parent, text="📋 Log detallado:",
+        self._log_detail_label = ctk.CTkLabel(parent, text=t("dialog.import.log_detail"),
                                               font=theme.font("base", bold=True))
         self._log_detail_label.pack(anchor="w", padx=10, pady=(5, 0))
         self._log_box = ctk.CTkTextbox(parent, font=theme.font("sm", mono=True),
@@ -621,28 +620,28 @@ class ImportOptionsDialog(BaseDialog):
 
         lines = []
 
-        if self._base_changes_text and "Ningún cambio detectado" not in self._base_changes_text:
-            lines.append("--- CAMBIOS EN REPOSITORIOS (RAMA / PERFIL) ---")
+        if self._base_changes_text and t("dialog.profile.no_changes") not in self._base_changes_text:
+            lines.append(t("dialog.import.changes_header"))
             for line in self._base_changes_text.splitlines():
                 if "Clonar nuevo repo" not in line and "Sobrescribir archivos" not in line and line.strip() != "":
                     lines.append(line)
             lines.append("")
 
         if self._clone_var.get() and self._missing:
-            lines.append("--- CLONACIÓN ---")
+            lines.append(t("dialog.import.clone_header"))
             for m in self._missing:
                 repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
                 java_ver = repo_cfg.get('java_version')
-                req_java_text = f" | Usa Java: {java_ver}" if java_ver and java_ver != "Sistema (Por Defecto)" else ""
-                lines.append(f"➕ Se clonará: {m['name']} (rama: {m.get('branch', 'default')}){req_java_text}")
+                req_java_text = t("dialog.import.uses_java", version=java_ver) if java_ver and java_ver != "Sistema (Por Defecto)" else ""
+                lines.append(t("dialog.import.will_clone", name=m['name'], branch=m.get('branch', 'default'), java=req_java_text))
             lines.append("")
 
         if self._overwrite_configs_var.get():
             n_files = sum(len(r.get('config_files', {})) for r in self._profile_data.get('repos', {}).values())
-            lines.append(f"📝 Se sobrescribirán {n_files} archivos de configuración locales.\n")
+            lines.append(t("dialog.import.will_overwrite", count=n_files))
 
         if not lines:
-            lines.append("✅ Ningún cambio seleccionado.")
+            lines.append(t("dialog.import.no_changes_selected"))
 
         self._preview_box.insert("1.0", "\n".join(lines).strip())
         self._preview_box.configure(state="disabled")
@@ -733,7 +732,7 @@ class ImportOptionsDialog(BaseDialog):
         """Schedule the final completion UI update on the main thread."""
         def _done():
             self._progress.set(1.0)
-            self._progress_label.configure(text="✅ Importación completada")
+            self._progress_label.configure(text=t("dialog.import.completed"))
             
             def _close():
                 if self._on_complete:
@@ -741,9 +740,9 @@ class ImportOptionsDialog(BaseDialog):
                 self.destroy()
 
             self._apply_btn.pack_forget()
-            self._cancel_btn.configure(state="normal", text="✅ Cerrar", command=_close, **theme.btn_style("success", height="lg"))
+            self._cancel_btn.configure(state="normal", text=t("dialog.import.btn_close"), command=_close, **theme.btn_style("success", height="lg"))
             
-            messagebox.showinfo("Completado", "Configuración importada y aplicada correctamente")
+            messagebox.showinfo(t("dialog.import.done_title"), t("log.import_complete"))
         self.after(0, _done)
 
     def _execute_import_steps(self, settings: dict):
@@ -773,8 +772,9 @@ class ImportOptionsDialog(BaseDialog):
             n = len(self._missing)
             names = ", ".join(m['name'] for m in self._missing)
             try:
-                self.after(0, lambda: self._progress_label.configure(
-                    text=f"⏳ Iniciando clonación de {n} repositorio{'s' if n != 1 else ''}..."
+                clone_key = "dialog.import.starting_clone_one" if n == 1 else "dialog.import.starting_clone_many"
+                self.after(0, lambda k=clone_key: self._progress_label.configure(
+                    text=t(k, n=n)
                 ))
             except tk.TclError:
                 pass
@@ -786,11 +786,11 @@ class ImportOptionsDialog(BaseDialog):
         if settings['overwrite_configs']:
             try:
                 self.after(0, lambda: self._progress_label.configure(
-                    text="⏳ Aplicando archivos de configuración..."
+                    text=t("dialog.import.applying_configs")
                 ))
             except tk.TclError:
                 pass
-            self._log_to_dialog("[import] Aplicando archivos de configuración...")
+            self._log_to_dialog(t("dialog.import.applying_configs"))
             self._run_config_files_step(_update_progress)
 
         self._schedule_import_done()
@@ -857,7 +857,7 @@ class ImportOptionsDialog(BaseDialog):
 
     def _apply(self):
         """Run all selected import operations."""
-        self._apply_btn.configure(state="disabled", text="⏳ Aplicando...")
+        self._apply_btn.configure(state="disabled", text=t("dialog.import.btn_applying"))
         self._cancel_btn.configure(state="disabled")
 
         # Transition to Step 2

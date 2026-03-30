@@ -4,6 +4,7 @@ import os
 import threading
 from gui.constants import DOCKER_POLL_MS
 from gui import theme
+from core.i18n import t
 
 
 class DockerMixin:
@@ -140,7 +141,7 @@ class DockerMixin:
             self._status = "running"
         else:
             self._status_label.configure(text="🔴", text_color=theme.C.status_stopped)
-            self._status_text.configure(text="Detenido", text_color=theme.C.text_placeholder)
+            self._status_text.configure(text=t("label.status.stopped"), text_color=theme.C.text_placeholder)
             self._status = "stopped"
         self._update_button_visibility()
 

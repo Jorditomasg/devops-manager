@@ -284,7 +284,7 @@ class ActionsMixin:
         if hasattr(self, '_config_combos') and self._config_combos:
             for _, combo in self._config_combos.items():
                 v = combo.get()
-                if v and v not in ('- Sin Seleccionar -', ''):
+                if v and v not in (t("label.no_selection"), ''):
                     profile = v
                     break
 
@@ -387,15 +387,7 @@ class ActionsMixin:
 
     def _show_docker_unavailable_alert(self):
         """Show an error dialog when Docker daemon is not reachable."""
-        messagebox.showerror(
-            "Docker no disponible",
-            "No se puede conectar con el daemon de Docker.\n\n"
-            "Asegúrate de que Docker esté en ejecución:\n"
-            "  • Windows/Mac — inicia Docker Desktop\n"
-            "  • Linux — sudo systemctl start docker\n"
-            "  • WSL2 — inicia Docker Desktop o ejecuta\n"
-            "    'sudo service docker start' dentro de WSL"
-        )
+        messagebox.showerror(t("dialog.docker.unavailable_title"), t("dialog.docker.unavailable_msg"))
 
     def _stop(self):
         """Stop the service using the service launcher."""
@@ -449,9 +441,8 @@ class ActionsMixin:
                     limit = 10
                     display_changes = "\n".join(changes[:limit]) + ("\n..." if len(changes) > limit else "")
                     messagebox.showerror(
-                        "Error de Pull",
-                        f"No se puede hacer pull en '{self._repo.name}', tienes cambios locales sin guardar "
-                        f"que podrían sobreescribirse:\n\n{display_changes}",
+                        t("dialog.pull.error_title"),
+                        t("dialog.pull.error_msg", name=self._repo.name, changes=display_changes),
                     )
                 self.after(0, _err)
                 return
@@ -462,8 +453,8 @@ class ActionsMixin:
             if commits > 0:
                 def _ask():
                     if messagebox.askyesno(
-                        "Confirmar Pull",
-                        f"Hay {commits} nuevo(s) commit(s) en '{branch}'. ¿Quieres descargarlos ahora?",
+                        t("dialog.pull.confirm_title"),
+                        t("dialog.pull.confirm_msg", commits=commits, branch=branch),
                     ):
                         self._action_pool.submit(_do_pull)
                 self.after(0, _ask)
@@ -507,9 +498,8 @@ class ActionsMixin:
     def _clean_repo(self):
         """Clean all local untracked and modified files, removing env overrides."""
         if not messagebox.askyesno(
-            "Confirmar Limpieza",
-            "¿Seguro que quieres borrar todos los cambios locales no commiteados? "
-            "Se deseleccionará la configuración (Env/App) y se restaurarán los ficheros originales.",
+            t("dialog.clean.confirm_title"),
+            t("dialog.clean.confirm_msg"),
         ):
             return
 
@@ -519,13 +509,13 @@ class ActionsMixin:
             if success:
                 def _restore():
                     if hasattr(self, '_config_combo'):
-                        self._config_combo.set("- Sin Seleccionar -")
-                        self._on_config_change("- Sin Seleccionar -")
+                        self._config_combo.set(t("label.no_selection"))
+                        self._on_config_change(t("label.no_selection"))
                     if hasattr(self, '_config_combos'):
                         for target_file, combo in self._config_combos.items():
-                            combo.set("- Sin Seleccionar -")
+                            combo.set(t("label.no_selection"))
                             from core.config_manager import save_active_config
-                            save_active_config(self.get_config_key(target_file), "- Sin Seleccionar -")
+                            save_active_config(self.get_config_key(target_file), t("label.no_selection"))
                             # We don't trigger self._on_config_change for all because clean reverting
                             # the files makes git restore the originals automatically.
                     self._refresh_badge()

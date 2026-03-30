@@ -246,7 +246,7 @@ class ExpandPanelMixin:
 
         config_key = self.get_config_key(target_file)
         configs = load_repo_configs(config_key)
-        opts = ["- Sin Seleccionar -"] + list(configs.keys())
+        opts = [t("label.no_selection")] + list(configs.keys())
 
         ctk.CTkLabel(sel_frame, text=f"{lbl_prefix}:", font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
@@ -279,7 +279,7 @@ class ExpandPanelMixin:
             combo.set(chosen)
             self.after(500, self._on_config_change, chosen, target_file, True)
         else:
-            combo.set("- Sin Seleccionar -")
+            combo.set(t("label.no_selection"))
 
         self._config_combos[target_file] = combo
 
@@ -299,7 +299,7 @@ class ExpandPanelMixin:
     def _build_java_combo_section(self, frame, repo):
         """Build Java version selector section (~30 lines)."""
         combo_style = theme.combo_style()
-        ctk.CTkLabel(frame, text="Java:", font=theme.font("lg"),
+        ctk.CTkLabel(frame, text=t("label.java"), font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
         java_options = ["Sistema (Por Defecto)"] + list(self._java_versions.keys())
         self._java_combo = ctk.CTkComboBox(
@@ -309,7 +309,7 @@ class ExpandPanelMixin:
         self._java_combo.pack(side="left", padx=(6, 12))
 
         if getattr(repo, 'java_version', None):
-            self._java_hint_label = ctk.CTkLabel(frame, text=f"Recomendado: Java {repo.java_version}", font=theme.font("md"), text_color=theme.C.text_faint)
+            self._java_hint_label = ctk.CTkLabel(frame, text=t("label.java_recommended", version=repo.java_version), font=theme.font("md"), text_color=theme.C.text_faint)
             self._java_hint_label.pack(side="left", padx=(0, 10))
 
             def _on_java_change(*args):
@@ -362,22 +362,20 @@ class ExpandPanelMixin:
         row3 = ctk.CTkFrame(content, fg_color="transparent")
         row3.pack(fill="x", pady=(4, 0))
 
-        ctk.CTkLabel(row3, text="Cmd:", font=theme.font("lg"),
+        ctk.CTkLabel(row3, text=t("label.cmd"), font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
 
         self._cmd_entry = ctk.CTkEntry(
             row3, height=theme.G.btn_height_md, font=theme.font("md", mono=True),
             corner_radius=theme.G.corner_btn, fg_color=theme.C.section,
             border_color=theme.C.default_border,
-            placeholder_text=repo.run_command or "comando de inicio"
+            placeholder_text=repo.run_command or t("label.cmd_placeholder")
         )
         self._cmd_entry.pack(side="left", padx=(6, 4), fill="x", expand=True)
         pending_cmd = getattr(self, '_pending_custom_command', '')
         if pending_cmd:
             self._cmd_entry.insert(0, pending_cmd)
-        ToolTip(self._cmd_entry,
-                "Comando de inicio personalizado. Dejar vacío para usar el por defecto.\n"
-                f"Por defecto: {repo.run_command or 'N/A'}")
+        ToolTip(self._cmd_entry, t("tooltip.cmd_entry", cmd=repo.run_command or 'N/A'))
 
         # Update header hints when command changes
         def _on_cmd_changed(e):
@@ -433,9 +431,9 @@ class ExpandPanelMixin:
             self._docker_compose_buttons[dc_file] = btn
 
             if dc_file in self._active_compose_files:
-                ToolTip(btn, "Haga clic para gestionar servicios (Activo en perfil)")
+                ToolTip(btn, t("tooltip.docker_manage_active"))
             else:
-                ToolTip(btn, "Haga clic para gestionar servicios")
+                ToolTip(btn, t("tooltip.docker_manage"))
 
         # Start thread to update container counts if not running
         if not self._compose_status_thread_running:
@@ -481,12 +479,12 @@ class ExpandPanelMixin:
     def _show_file_selector(self, files: list):
         """Show a popup to select which config file to edit."""
         popup = ctk.CTkToplevel(self)
-        popup.title("Seleccionar archivo")
+        popup.title(t("dialog.select_file_title"))
         popup.geometry("400x300")
         popup.transient(self)
         popup.grab_set()
 
-        ctk.CTkLabel(popup, text="Seleccionar archivo para editar:",
+        ctk.CTkLabel(popup, text=t("label.select_file_to_edit"),
                      font=theme.font("base", bold=True)).pack(pady=(15, 10))
 
         scroll = ctk.CTkScrollableFrame(popup)
@@ -521,7 +519,7 @@ class ExpandPanelMixin:
                 color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)
             status_texts = {
-                'running':    f"Ejecutando :{self._repo.server_port or '?'}",
+                'running':    t("label.status.running_port", port=self._repo.server_port or '?'),
                 'starting':   t("label.status.starting"),
                 'installing': t("label.status.installing"),
                 'stopped':    t("label.status.stopped"),

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import tkinter as tk
 import customtkinter as ctk
 
+from core.i18n import t
 from gui.repo_card._log import LogMixin
 from gui.repo_card._git import GitMixin
 from gui.repo_card._config import ConfigMixin
@@ -149,19 +150,19 @@ class RepoCard(
         self._pending_profile = profile  # always persist regardless of widget state
         if hasattr(self, '_config_combo'):
             p = profile if isinstance(profile, str) else ''
-            self._config_combo.set(p if p else '- Sin Seleccionar -')
+            self._config_combo.set(p if p else t("label.no_selection"))
             self._update_header_hints()
-            self._on_config_change(p if p else '- Sin Seleccionar -')
+            self._on_config_change(p if p else t("label.no_selection"))
         elif hasattr(self, '_config_combos') and self._config_combos:
             if isinstance(profile, dict):
                 for target_file, combo in self._config_combos.items():
                     rel = os.path.relpath(target_file, self._repo.path).replace('\\', '/')
-                    val = profile.get(rel) or profile.get(target_file) or '- Sin Seleccionar -'
+                    val = profile.get(rel) or profile.get(target_file) or t("label.no_selection")
                     combo.set(val)
                     self._update_header_hints()
                     self._on_config_change(val, target_file, skip_log=True)
             else:
-                p = profile if isinstance(profile, str) and profile else '- Sin Seleccionar -'
+                p = profile if isinstance(profile, str) and profile else t("label.no_selection")
                 for target_file, combo in self._config_combos.items():
                     combo.set(p)
                     self._update_header_hints()
@@ -184,12 +185,12 @@ class RepoCard(
     def get_current_profile(self):
         if hasattr(self, '_config_combo'):
             val = self._config_combo.get()
-            return val if val != "- Sin Seleccionar -" else ''
+            return val if val != t("label.no_selection") else ''
         elif hasattr(self, '_config_combos') and self._config_combos:
             res = {}
             for tf, combo in self._config_combos.items():
                 v = combo.get()
-                if v and v not in ('- Sin Seleccionar -', ''):
+                if v and v not in (t("label.no_selection"), ''):
                     rel = os.path.relpath(tf, self._repo.path).replace('\\', '/')
                     res[rel] = v
             return res

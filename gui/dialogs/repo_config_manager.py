@@ -6,6 +6,7 @@ import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
 from gui import theme
+from core.i18n import t
 
 
 class _AskNameDialog(BaseDialog):
@@ -25,9 +26,9 @@ class _AskNameDialog(BaseDialog):
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(pady=(0, 14))
 
-        ctk.CTkButton(btn_frame, text="Aceptar", width=110,
+        ctk.CTkButton(btn_frame, text=t("btn.accept"), width=110,
                       command=self._confirm, **theme.btn_style("success")).pack(side="left", padx=8)
-        ctk.CTkButton(btn_frame, text="Cancelar", width=110,
+        ctk.CTkButton(btn_frame, text=t("btn.cancel"), width=110,
                       command=self.destroy, **theme.btn_style("neutral")).pack(side="left", padx=8)
 
         self._entry.bind("<Return>", lambda _e: self._confirm())
@@ -80,23 +81,23 @@ class RepoConfigManagerDialog(BaseDialog):
         self._build_action_buttons(right_panel)
 
     def _build_list_panel(self, frame):
-        ctk.CTkLabel(frame, text="Entornos Guardados", font=theme.font("h2", bold=True)).pack(pady=(15, 10))
+        ctk.CTkLabel(frame, text=t("dialog.env_manager.title"), font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
         self._list_frame = ctk.CTkScrollableFrame(frame, fg_color="transparent")
         self._list_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         ctk.CTkButton(
-            frame, text="➕ Nuevo",
+            frame, text=t("dialog.env_manager.btn_new"),
             command=self._cmd_new, **theme.btn_style("blue")
         ).pack(fill="x", padx=15, pady=(5, 5))
 
         ctk.CTkButton(
-            frame, text="📥 Auto-Importar",
+            frame, text=t("dialog.env_manager.btn_auto_import"),
             command=self._cmd_auto_import, **theme.btn_style("purple_alt")
         ).pack(fill="x", padx=15, pady=(0, 15))
 
     def _build_editor_panel(self, frame):
-        self._title_var = ctk.StringVar(value="Selecciona un entorno")
+        self._title_var = ctk.StringVar(value=t("dialog.env_manager.select_hint"))
         header = ctk.CTkFrame(frame, fg_color="transparent")
         header.pack(fill="x", pady=(0, 10))
 
@@ -106,21 +107,21 @@ class RepoConfigManagerDialog(BaseDialog):
         self._actions_frame.pack(side="right")
 
         self._btn_rename = ctk.CTkButton(
-            self._actions_frame, text="✏️ Renombrar", width=90,
+            self._actions_frame, text=t("dialog.env_manager.btn_rename"), width=90,
             command=self._cmd_rename, state="disabled",
             **theme.btn_style("neutral")
         )
         self._btn_rename.pack(side="left", padx=3)
 
         self._btn_duplicate = ctk.CTkButton(
-            self._actions_frame, text="📄 Duplicar", width=80,
+            self._actions_frame, text=t("dialog.env_manager.btn_duplicate"), width=80,
             command=self._cmd_duplicate, state="disabled",
             **theme.btn_style("neutral")
         )
         self._btn_duplicate.pack(side="left", padx=3)
 
         self._btn_delete = ctk.CTkButton(
-            self._actions_frame, text="🗑 Eliminar", width=80,
+            self._actions_frame, text=t("dialog.env_manager.btn_delete"), width=80,
             command=self._cmd_delete, state="disabled",
             **theme.btn_style("danger")
         )
@@ -137,7 +138,7 @@ class RepoConfigManagerDialog(BaseDialog):
 
     def _build_action_buttons(self, frame):
         self._btn_save = ctk.CTkButton(
-            frame, text="💾 Guardar Cambios en Entorno",
+            frame, text=t("dialog.env_manager.btn_save"),
             command=self._cmd_save_text, state="disabled",
             **theme.btn_style("success")
         )
@@ -180,7 +181,7 @@ class RepoConfigManagerDialog(BaseDialog):
                 pass
 
         if name and name in self._configs:
-            self._title_var.set(f"Editando: {name}")
+            self._title_var.set(t("dialog.env_manager.editing", name=name))
             self._editor.configure(state="normal")
             self._editor.delete("1.0", "end")
             self._editor.insert("1.0", self._configs[name])
@@ -190,7 +191,7 @@ class RepoConfigManagerDialog(BaseDialog):
             self._btn_delete.configure(state="normal")
             self._btn_save.configure(state="normal")
         else:
-            self._title_var.set("Selecciona un entorno")
+            self._title_var.set(t("dialog.env_manager.select_hint"))
             self._editor.delete("1.0", "end")
             self._editor.configure(state="disabled")
 
@@ -204,7 +205,7 @@ class RepoConfigManagerDialog(BaseDialog):
             return
         current_text = self._editor.get("1.0", "end-1c")
         if current_text != self._configs[self._current_selected]:
-            if messagebox.askyesno("Cambios sin guardar", f"Hay cambios sin guardar en '{self._current_selected}'. ¿Deseas guardarlos antes de cambiar?"):
+            if messagebox.askyesno(t("dialog.env_manager.unsaved_title"), t("dialog.env_manager.unsaved_msg", name=self._current_selected)):
                 self._cmd_save_text()
 
     def _cmd_save_text(self):
@@ -213,17 +214,17 @@ class RepoConfigManagerDialog(BaseDialog):
         new_text = self._editor.get("1.0", "end-1c")
         self._configs[self._current_selected] = new_text
         self._persist_to_db()
-        messagebox.showinfo("Guardado", f"El entorno '{self._current_selected}' se ha actualizado correctamente.")
+        messagebox.showinfo(t("dialog.env_manager.saved_title"), t("dialog.env_manager.saved_msg", name=self._current_selected))
 
     def _cmd_new(self):
-        dlg = _AskNameDialog(self, "Nuevo Entorno", "Nombre del nuevo entorno/app:")
+        dlg = _AskNameDialog(self, t("dialog.env_manager.new_title"), t("dialog.env_manager.new_prompt"))
         name = dlg.result
         if name:
             name = name.strip()
             if not name:
                 return
             if name in self._configs:
-                messagebox.showerror("Error", "Ya existe un entorno con ese nombre.")
+                messagebox.showerror(t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
                 return
             self._configs[name] = ""
             self._persist_to_db()
@@ -233,14 +234,14 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_rename(self):
         if not self._current_selected:
             return
-        dlg = _AskNameDialog(self, "Renombrar Entorno", "Nuevo nombre:", initial_value=self._current_selected)
+        dlg = _AskNameDialog(self, t("dialog.env_manager.rename_title"), t("dialog.env_manager.rename_prompt"), initial_value=self._current_selected)
         new_name = dlg.result
         if new_name:
             new_name = new_name.strip()
             if not new_name or new_name == self._current_selected:
                 return
             if new_name in self._configs:
-                messagebox.showerror("Error", "Ya existe un entorno con ese nombre.")
+                messagebox.showerror(t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
                 return
 
             # Transfer data
@@ -252,14 +253,14 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_duplicate(self):
         if not self._current_selected:
             return
-        dlg = _AskNameDialog(self, "Duplicar Entorno", "Nombre de la copia:", initial_value=f"{self._current_selected}_copia")
+        dlg = _AskNameDialog(self, t("dialog.env_manager.duplicate_title"), t("dialog.env_manager.duplicate_prompt"), initial_value=f"{self._current_selected}_copia")
         new_name = dlg.result
         if new_name:
             new_name = new_name.strip()
             if not new_name:
                 return
             if new_name in self._configs:
-                messagebox.showerror("Error", "Ya existe un entorno con ese nombre.")
+                messagebox.showerror(t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
                 return
 
             self._configs[new_name] = self._configs[self._current_selected]
@@ -270,7 +271,7 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_delete(self):
         if not self._current_selected:
             return
-        if messagebox.askyesno("Eliminar Entorno", f"¿Seguro que deseas eliminar '{self._current_selected}'?"):
+        if messagebox.askyesno(t("dialog.env_manager.delete_title"), t("dialog.env_manager.delete_msg", name=self._current_selected)):
             del self._configs[self._current_selected]
             self._persist_to_db()
             self._current_selected = None
@@ -280,7 +281,7 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_auto_import(self):
         env_files = getattr(self._repo, 'environment_files', [])
         if not env_files:
-            messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")
+            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
             return
 
         # Filter to source_dir when available, otherwise use all env files
@@ -290,7 +291,7 @@ class RepoConfigManagerDialog(BaseDialog):
             selected_files = env_files
 
         if not selected_files:
-            messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")
+            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
             return
 
         from core.config_manager import auto_import_configs
@@ -301,7 +302,7 @@ class RepoConfigManagerDialog(BaseDialog):
             env_patterns=getattr(self._repo, 'env_patterns', None) or None,
         )
         if not imported:
-            messagebox.showinfo("Auto-Import", "No se encontraron ficheros de configuración en el directorio para importar.")
+            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
             return
 
         added = 0
@@ -313,9 +314,9 @@ class RepoConfigManagerDialog(BaseDialog):
         if added > 0:
             self._persist_to_db()
             self._refresh_list()
-            messagebox.showinfo("Auto-Import", f"Se han importado {added} configuraciones correctamente.")
+            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_success", added=added))
         else:
-            messagebox.showinfo("Auto-Import", "No hay configuraciones nuevas que importar (las encontradas ya existen).")
+            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_exists"))
 
     def _persist_to_db(self):
         from core.config_manager import save_repo_configs

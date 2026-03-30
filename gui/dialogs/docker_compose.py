@@ -7,6 +7,7 @@ import customtkinter as ctk
 from gui.dialogs._base import BaseDialog
 from gui import theme
 from gui.tooltip import ToolTip
+from core.i18n import t
 
 
 class DockerComposeDialog(BaseDialog):
@@ -43,7 +44,7 @@ class DockerComposeDialog(BaseDialog):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=15, pady=(15, 5))
 
-        ctk.CTkLabel(header, text="Servicios Definidos",
+        ctk.CTkLabel(header, text=t("docker.title"),
                      font=theme.font("h2", bold=True)).pack(side="left")
 
         self._profile_count_lbl = ctk.CTkLabel(
@@ -59,7 +60,7 @@ class DockerComposeDialog(BaseDialog):
 
         if not self._services:
             ctk.CTkLabel(self._list_frame,
-                         text="No se encontraron servicios en el YAML.",
+                         text=t("docker.no_services"),
                          text_color=theme.C.status_error).pack(pady=20)
 
         for srv in self._services:
@@ -73,17 +74,17 @@ class DockerComposeDialog(BaseDialog):
 
         self._auto_refresh_var = ctk.BooleanVar(value=True)
         ctk.CTkSwitch(
-            actions, text="Auto-Refresh", variable=self._auto_refresh_var,
+            actions, text=t("docker.auto_refresh"), variable=self._auto_refresh_var,
             command=self._toggle_auto_refresh, font=theme.font("md")
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            actions, text="Iniciar todos", width=110,
+            actions, text=t("docker.btn_start_all"), width=110,
             command=self._start_all, **theme.btn_style("success")
         ).pack(side="left", padx=(0, 4))
 
         ctk.CTkButton(
-            actions, text="Detener todos", width=110,
+            actions, text=t("docker.btn_stop_all"), width=110,
             command=self._stop_all, **theme.btn_style("danger_deep")
         ).pack(side="left")
 
@@ -144,7 +145,7 @@ class DockerComposeDialog(BaseDialog):
             command=lambda n=name, v=profile_var: self._on_profile_checkbox(n, v)
         )
         cb.pack(side="left", padx=(8, 0))
-        ToolTip(cb, "Marcar para que este servicio se inicie automáticamente\ncuando pulses Start en la tarjeta del repositorio.\nSe guarda en el perfil activo.")
+        ToolTip(cb, t("tooltip.docker_profile_checkbox"))
         if name not in self._service_rows:
             self._service_rows[name] = {}
         self._service_rows[name]["profile_var"] = profile_var
@@ -176,17 +177,17 @@ class DockerComposeDialog(BaseDialog):
         logs_header.pack(fill="x", padx=15, pady=(5, 0))
 
         self._logs_title = ctk.CTkLabel(
-            logs_header, text="Logs: (seleccione un servicio)",
+            logs_header, text=t("docker.logs_title_empty"),
             font=theme.font("base", bold=True))
         self._logs_title.pack(side="left")
 
         ctk.CTkButton(
-            logs_header, text="Limpiar", width=60,
+            logs_header, text=t("btn.clear_log"), width=60,
             command=self._clear_logs, **theme.btn_style("neutral_alt", height="sm")
         ).pack(side="right")
 
         self._btn_refresh_logs = ctk.CTkButton(
-            logs_header, text="Recargar", width=80,
+            logs_header, text=t("btn.reload"), width=80,
             command=self._refresh_selected_logs, state="disabled",
             **theme.btn_style("neutral", height="sm")
         )
@@ -205,7 +206,7 @@ class DockerComposeDialog(BaseDialog):
 
     def _profile_count_text(self) -> str:
         n = len(self._profile_services)
-        return f"({n} en perfil)" if n else ""
+        return t("docker.profile_count", n=n) if n else ""
 
     def _refresh_profile_count(self):
         if hasattr(self, '_profile_count_lbl') and self._profile_count_lbl.winfo_exists():
@@ -226,7 +227,7 @@ class DockerComposeDialog(BaseDialog):
         from core.db_manager import is_docker_available
         if not is_docker_available():
             if self._log:
-                self._log("[docker] Docker no está disponible. Asegúrate de que Docker Desktop esté en ejecución.")
+                self._log(t("docker.log_unavailable"))
             return False
         return True
 
@@ -234,7 +235,7 @@ class DockerComposeDialog(BaseDialog):
         if not self._check_docker_daemon():
             return
         if self._log:
-            self._log(f"Iniciando servicio: {name}")
+            self._log(t("docker.log_starting", name=name))
 
         def _run():
             from core.db_manager import start_service_compose
@@ -246,7 +247,7 @@ class DockerComposeDialog(BaseDialog):
         if not self._check_docker_daemon():
             return
         if self._log:
-            self._log(f"Deteniendo servicio: {name}")
+            self._log(t("docker.log_stopping", name=name))
 
         def _run():
             from core.db_manager import stop_service_compose
@@ -258,7 +259,7 @@ class DockerComposeDialog(BaseDialog):
         if not self._check_docker_daemon():
             return
         if self._log:
-            self._log("Iniciando todos los servicios del compose")
+            self._log(t("docker.log_start_all"))
 
         def _run():
             from core.db_manager import docker_compose_up
@@ -270,7 +271,7 @@ class DockerComposeDialog(BaseDialog):
         if not self._check_docker_daemon():
             return
         if self._log:
-            self._log("Deteniendo todos los servicios del compose")
+            self._log(t("docker.log_stop_all"))
 
         def _run():
             from core.db_manager import docker_compose_down
@@ -295,10 +296,10 @@ class DockerComposeDialog(BaseDialog):
                     state = status_map.get(sname, "stopped")
                     if state == "running":
                         color = theme.C.status_running
-                        status_text = "En ejecución"
+                        status_text = t("label.status.running")
                     else:
                         color = theme.C.status_stopped
-                        status_text = "Detenido"
+                        status_text = t("label.status.stopped")
                     widgets["status_lbl"].configure(text="●", text_color=color)
                     if "status_text_lbl" in widgets:
                         widgets["status_text_lbl"].configure(text=status_text, text_color=color)
@@ -325,7 +326,7 @@ class DockerComposeDialog(BaseDialog):
 
     def _view_logs(self, name: str):
         self._selected_log_service = name
-        self._logs_title.configure(text=f"Logs: {name}")
+        self._logs_title.configure(text=t("docker.logs_title", name=name))
         self._btn_refresh_logs.configure(state="normal")
         self._refresh_selected_logs()
 
@@ -334,7 +335,7 @@ class DockerComposeDialog(BaseDialog):
             return
         self._logs_box.configure(state="normal")
         self._logs_box.delete("1.0", "end")
-        self._logs_box.insert("1.0", f"Cargando logs de {self._selected_log_service}...\n")
+        self._logs_box.insert("1.0", t("docker.log_loading", name=self._selected_log_service) + "\n")
         self._logs_box.configure(state="disabled")
 
         def _fetch():
