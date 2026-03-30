@@ -34,7 +34,3 @@ ui:
     - label: "Env:"
   install:
     check_dirs: ["node_modules"]
-    label_missing: "Install"
-    label_ok: "Reinstall ✓"
-    tooltip: "npm install --yes --legacy-peer-deps"
-    status_label_deps_missing: "⚠ Falta instalar"

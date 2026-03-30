@@ -7,13 +7,14 @@ import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
 from gui import theme
+from core.i18n import t, list_available_languages
 
 
 class SettingsDialog(BaseDialog):
     """General settings dialog."""
 
     def __init__(self, parent, settings: dict, on_save=None):
-        super().__init__(parent, "⚙ Configuración", 600, 550)
+        super().__init__(parent, t("dialog.settings.title"), 600, 550)
         # This dialog is resizable (override BaseDialog's fixed size)
         self.resizable(True, True)
         self.minsize(500, 400)
@@ -31,12 +32,12 @@ class SettingsDialog(BaseDialog):
         self._save_frame.pack(side="bottom", fill="x", padx=20, pady=15)
 
         ctk.CTkButton(
-            self._save_frame, text="💾 Guardar Cambios",
+            self._save_frame, text=t("btn.save_changes"),
             command=self._save, **theme.btn_style("success", width=150, height="lg", font_size="lg")
         ).pack(side="right")
 
         ctk.CTkButton(
-            self._save_frame, text="Cancelar",
+            self._save_frame, text=t("btn.cancel"),
             command=self.destroy, **theme.btn_style("neutral", width=100, height="lg", font_size="lg")
         ).pack(side="right", padx=(0, 15))
 
@@ -45,9 +46,10 @@ class SettingsDialog(BaseDialog):
         self._main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
-        ctk.CTkLabel(self._main_scroll, text="Ajustes de DevOps Manager",
+        ctk.CTkLabel(self._main_scroll, text=t("dialog.settings.main_title"),
                      font=theme.font("h1", bold=True), text_color=theme.C.text_primary).pack(pady=(15, 20))
 
+        self._build_section(self._build_language_section)
         self._build_section(self._build_workspace_section)
         self._build_section(self._build_java_section)
         self._build_section(self._build_shortcut_section)
@@ -65,17 +67,46 @@ class SettingsDialog(BaseDialog):
 
     # ── Section builders ──────────────────────────────────────────────────────
 
+    def _build_language_section(self, frame):
+        """Build the language selector section."""
+        lang_header = ctk.CTkFrame(frame, fg_color="transparent")
+        lang_header.pack(fill="x", padx=15, pady=(15, 0))
+        ctk.CTkLabel(
+            lang_header, text=t("dialog.settings.language_title"),
+            font=theme.font("xl", bold=True), text_color=theme.C.text_primary
+        ).pack(side="left")
+        ctk.CTkLabel(
+            frame,
+            text=t("dialog.settings.language_desc"),
+            font=theme.font("md"), text_color=theme.C.text_muted
+        ).pack(anchor="w", padx=15, pady=(2, 12))
+
+        self._languages = list_available_languages()
+        lang_names = [lang["name"] for lang in self._languages]
+        current_code = self._settings.get("language", "en_EN")
+        current_name = next(
+            (l["name"] for l in self._languages if l["code"] == current_code),
+            lang_names[0] if lang_names else "English"
+        )
+
+        self._lang_combo = ctk.CTkComboBox(
+            frame, values=lang_names, width=200, state="readonly",
+            **theme.combo_style()
+        )
+        self._lang_combo.set(current_name)
+        self._lang_combo.pack(anchor="w", padx=15, pady=(0, 15))
+
     def _build_workspace_section(self, frame):
         """Build the workspace folder row."""
         ws_header = ctk.CTkFrame(frame, fg_color="transparent")
         ws_header.pack(fill="x", padx=15, pady=(15, 0))
         ctk.CTkLabel(
-            ws_header, text="📁 Directorio de Trabajo",
+            ws_header, text=t("dialog.settings.workspace_title"),
             font=theme.font("xl", bold=True), text_color=theme.C.text_primary
         ).pack(side="left")
         ctk.CTkLabel(
             frame,
-            text="Ubicación donde se estructuran los repositorios de tus espacios de trabajo.",
+            text=t("dialog.settings.workspace_desc"),
             font=theme.font("md"), text_color=theme.C.text_muted
         ).pack(anchor="w", padx=15, pady=(2, 12))
 
@@ -92,7 +123,7 @@ class SettingsDialog(BaseDialog):
         self._workspace_entry.insert(0, self._settings.get('workspace_dir', ''))
 
         ctk.CTkButton(
-            dir_inner, text="Examinar",
+            dir_inner, text=t("btn.browse"),
             command=self._browse_dir, **theme.btn_style("blue", width=80)
         ).pack(side="left", padx=(10, 0))
 
@@ -101,12 +132,12 @@ class SettingsDialog(BaseDialog):
         java_header = ctk.CTkFrame(frame, fg_color="transparent")
         java_header.pack(fill="x", padx=15, pady=(15, 0))
         ctk.CTkLabel(
-            java_header, text="☕ Versiones de Java",
+            java_header, text=t("dialog.settings.java_title"),
             font=theme.font("xl", bold=True), text_color=theme.C.text_primary
         ).pack(side="left")
         ctk.CTkLabel(
             frame,
-            text="Registra versiones de JDK locales para usarlas en los servicios Spring Boot y Maven.",
+            text=t("dialog.settings.java_desc"),
             font=theme.font("md"), text_color=theme.C.text_muted
         ).pack(anchor="w", padx=15, pady=(2, 12))
 
@@ -123,12 +154,12 @@ class SettingsDialog(BaseDialog):
         java_add_row.pack(fill="x", padx=15, pady=(0, 15))
 
         ctk.CTkButton(
-            java_add_row, text="➕ Añadir Java",
+            java_add_row, text=t("btn.add_java"),
             command=self._add_java_version, **theme.btn_style("success", width=130)
         ).pack(side="left")
 
         ctk.CTkButton(
-            java_add_row, text="🔍 Auto-detectar",
+            java_add_row, text=t("btn.autodetect_java"),
             command=self._auto_detect_java, **theme.btn_style("purple", width=140)
         ).pack(side="left", padx=(10, 0))
 
@@ -137,19 +168,19 @@ class SettingsDialog(BaseDialog):
         sc_header = ctk.CTkFrame(frame, fg_color="transparent")
         sc_header.pack(fill="x", padx=15, pady=(15, 0))
         ctk.CTkLabel(
-            sc_header, text="🖥️ Acceso Rápido",
+            sc_header, text=t("dialog.settings.shortcut_title"),
             font=theme.font("xl", bold=True), text_color=theme.C.text_primary
         ).pack(side="left")
         ctk.CTkLabel(
             frame,
-            text="Crea un acceso directo en el Escritorio para lanzar la aplicación sin abrir la terminal.",
+            text=t("dialog.settings.shortcut_desc"),
             font=theme.font("md"), text_color=theme.C.text_muted
         ).pack(anchor="w", padx=15, pady=(2, 12))
 
         sc_btn_row = ctk.CTkFrame(frame, fg_color="transparent")
         sc_btn_row.pack(fill="x", padx=15, pady=(0, 15))
         ctk.CTkButton(
-            sc_btn_row, text="🔗 Crear acceso directo en el Escritorio",
+            sc_btn_row, text=t("btn.create_shortcut"),
             command=self._create_shortcut, **theme.btn_style("blue", width=280)
         ).pack(side="left")
 
@@ -158,12 +189,12 @@ class SettingsDialog(BaseDialog):
     def _create_shortcut(self):
         """Create a Desktop shortcut pointing to run.bat with the app icon (ctypes, no PowerShell)."""
         if sys.platform != 'win32':
-            messagebox.showinfo("No disponible", "La creación de accesos directos solo está disponible en Windows.", parent=self)
+            messagebox.showinfo(t("misc.warning_title"), t("dialog.settings.shortcut_unavailable"), parent=self)
             return
         try:
             app_dir = getattr(self.master, '_app_dir', None)
             if not app_dir:
-                messagebox.showerror("Error", "No se pudo determinar el directorio de la aplicación.", parent=self)
+                messagebox.showerror("Error", t("dialog.settings.shortcut_error"), parent=self)
                 return
             run_bat = os.path.join(app_dir, "scripts", "run.bat")
             icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
@@ -176,7 +207,7 @@ class SettingsDialog(BaseDialog):
             lnk_path = os.path.join(desktop, "DevOps Manager.lnk")
 
             self._create_lnk_ctypes(run_bat, lnk_path, icon_path, app_dir, "DevOps Manager")
-            messagebox.showinfo("Acceso directo creado", f"Se ha creado 'DevOps Manager' en:\n{lnk_path}", parent=self)
+            messagebox.showinfo(t("dialog.settings.shortcut_success_title"), t("dialog.settings.shortcut_success_msg", path=lnk_path), parent=self)
         except Exception as e:
             messagebox.showerror("Error", str(e), parent=self)
 
@@ -377,6 +408,30 @@ class SettingsDialog(BaseDialog):
             self._workspace_entry.insert(0, d)
 
     def _save(self):
+        # Persist language selection
+        selected_name = self._lang_combo.get() if hasattr(self, '_lang_combo') else None
+        if selected_name:
+            selected_lang = next((l for l in self._languages if l["name"] == selected_name), None)
+            if selected_lang:
+                old_code = self._settings.get("language", "en_EN")
+                new_code = selected_lang["code"]
+                self._settings["language"] = new_code
+
+                if new_code != old_code:
+                    # Load the NEW language temporarily to show restart message IN that language
+                    from core.i18n import _load_yaml, _TRANSLATIONS_DIR
+                    import os as _os
+                    new_path = _os.path.join(_TRANSLATIONS_DIR, f"{new_code}.yml")
+                    new_strings = _load_yaml(new_path)
+                    restart_title = new_strings.get("dialog.settings.language_restart_title", "Restart required")
+                    restart_msg = new_strings.get("dialog.settings.language_restart_msg", "Restart the application for changes to take effect.")
+                    try:
+                        restart_msg = restart_msg.format(name=selected_lang["name"])
+                    except (KeyError, ValueError):
+                        pass
+                    messagebox.showinfo(restart_title, restart_msg, parent=self)
+
+        # Persist workspace and java
         self._settings['workspace_dir'] = self._workspace_entry.get().strip()
         self._settings['java_versions'] = self._java_versions
         if self._on_save:

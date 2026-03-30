@@ -31,8 +31,8 @@ from gui.tooltip import ToolTip
 from gui.dialogs import CloneDialog, ConfigEditorDialog, ProfileDialog, SettingsDialog
 from gui import theme
 from gui.app_profile import ProfileManagerMixin
-from gui.constants import NO_PROFILE_TEXT
 from core.repo_detector import detect_repos
+from core.i18n import t
 from core.service_launcher import ServiceLauncher
 
 
@@ -126,7 +126,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._setup_cards_scroll()
         self._build_global_log_panel()
         self._statusbar = ctk.CTkLabel(
-            self, text="Listo",
+            self, text=t("label.ready"),
             font=theme.font("md"), text_color=theme.C.text_accent,
             anchor="w", height=24
         )
@@ -167,10 +167,10 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         btn_frame.pack(side="right", padx=15)
 
         btn_defs = [
-            ("➕ Clonar",  95, "blue",    self._show_clone_dialog,   "Clonar nuevo repositorio"),
-            ("🔄 Rescan",  95, "warning", self._scan_repos,           "Re-escanear workspace"),
-            ("⚙",          38, "neutral", self._show_settings,        "Abrir configuración"),
-            ("📋",         38, "neutral", self._detach_global_log,    "Abrir Log Global en Ventana"),
+            ("➕ Clonar",  95, "blue",    self._show_clone_dialog,   t("tooltip.clone_btn")),
+            ("🔄 Rescan",  95, "warning", self._scan_repos,           t("tooltip.rescan_btn")),
+            ("⚙",          38, "neutral", self._show_settings,        t("tooltip.settings_btn")),
+            ("📋",         38, "neutral", self._detach_global_log,    t("tooltip.global_log_btn")),
         ]
 
         profiles = self._profile_dropdown_values()
@@ -188,7 +188,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         if self._current_profile_name in profiles:
             self._profile_combo.set(self._current_profile_name)
         else:
-            self._profile_combo.set(NO_PROFILE_TEXT)
+            self._profile_combo.set(t("label.no_profile"))
             
         ToolTip(self._profile_combo, "Seleccionar Perfil de Workspace")
         
@@ -259,11 +259,11 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         log_header = ctk.CTkFrame(self._global_log_frame, fg_color="transparent")
         log_header.pack(fill="x", padx=10, pady=(5, 0))
 
-        ctk.CTkLabel(log_header, text="📋 Log Global", font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
+        ctk.CTkLabel(log_header, text=t("label.global_log_section"), font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
 
         log_btn_s = theme.btn_style("log_action", height="sm", font_size="sm")
-        ctk.CTkButton(log_header, text="🗗 Desacoplar", width=80, command=self._detach_global_log, **log_btn_s).pack(side="right", padx=(0, 6))
-        ctk.CTkButton(log_header, text="🗑 Limpiar", width=60, command=self._clear_global_log, **log_btn_s).pack(side="right")
+        ctk.CTkButton(log_header, text=t("btn.detach_log"), width=80, command=self._detach_global_log, **log_btn_s).pack(side="right", padx=(0, 6))
+        ctk.CTkButton(log_header, text=t("btn.clear_log"), width=60, command=self._clear_global_log, **log_btn_s).pack(side="right")
 
         self._global_log_textbox = ctk.CTkTextbox(
             self._global_log_frame, state="disabled",
@@ -340,7 +340,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         header.pack(fill="x", padx=8, pady=(6, 0))
         log_btn_s = theme.btn_style("log_action", height="sm", font_size="sm")
         ctk.CTkButton(
-            header, text="🗑 Limpiar", width=60,
+            header, text=t("btn.clear_log"), width=60,
             command=self._clear_global_log,
             **log_btn_s
         ).pack(side="left")
@@ -456,8 +456,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _scan_repos(self, _after_scan=None):
         """Scan workspace for repositories."""
-        self._log("Escaneando workspace...")
-        self._statusbar.configure(text="Escaneando repos...")
+        self._log(t("log.scanning"))
+        self._statusbar.configure(text=t("label.scanning_status"))
 
         def _run():
             if self.project_analyzer:
@@ -475,11 +475,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
             def _update():
                 self._build_cards(repos)
-                self._statusbar.configure(
-                    text=f"{len(repos)} repositorios detectados"
-                )
-                self._log(f"Detectados {len(repos)} repos: "
-                         + ", ".join(r.name for r in repos))
+                self._statusbar.configure(text=t("label.ready"))
+                self._log(t("log.repos_detected", count=len(repos), names=", ".join(r.name for r in repos)))
                 if _after_scan:
                     _after_scan()
 
@@ -722,20 +719,20 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         selected = [c for c in self._repo_cards if c.is_selected()]
         items = []
         if selected:
-            items.append(item(f'▶  Iniciar seleccionados ({len(selected)})', self._tray_start_selected))
+            items.append(item(t("tray.start_selected", count=len(selected)), self._tray_start_selected))
         if running:
-            items.append(item(f'■  Parar todos corriendo ({len(running)})', self._tray_stop_running))
+            items.append(item(t("tray.stop_running", count=len(running)), self._tray_stop_running))
         if running:
             items.append(pystray.Menu.SEPARATOR)
             for card in running:
                 name = card.get_name()
                 status = getattr(card, '_status', '')
-                status_label = 'arrancando' if status == 'starting' else 'corriendo'
+                status_label = t("label.tray.starting") if status == 'starting' else t("label.tray.running")
                 label = f'{name} - {status_label}'
                 items.append(item(label, None, enabled=False))
         items.append(pystray.Menu.SEPARATOR)
-        items.append(item('Mostrar', self._restore_window, default=True))
-        items.append(item('Salir', self._quit_app))
+        items.append(item(t("tray.show"), self._restore_window, default=True))
+        items.append(item(t("tray.quit"), self._quit_app))
         return items
 
     def _tray_start_selected(self, icon, menu_item):

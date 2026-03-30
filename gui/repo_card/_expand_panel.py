@@ -5,8 +5,9 @@ import customtkinter as ctk
 import tkinter as tk
 from gui import theme
 from gui.tooltip import ToolTip
-from gui.constants import BADGE_REFRESH_MS, BTN_CONFIG_TEXT, BTN_CONFIG_TOOLTIP, REINSTALL_LBL
+from gui.constants import BADGE_REFRESH_MS
 from gui.log_helpers import insert_log_line
+from core.i18n import t
 
 
 class ExpandPanelMixin:
@@ -50,17 +51,17 @@ class ExpandPanelMixin:
         header = ctk.CTkFrame(self._log_frame, fg_color="transparent")
         header.pack(fill="x")
 
-        self._log_section_label = ctk.CTkLabel(header, text="📋 Logs del Repositorio", font=theme.font("base", bold=True), text_color=theme.C.text_secondary)
+        self._log_section_label = ctk.CTkLabel(header, text=t("label.log_section"), font=theme.font("base", bold=True), text_color=theme.C.text_secondary)
         self._log_section_label.pack(side="left")
 
         clear_btn = ctk.CTkButton(
-            header, text="🗑 Limpiar", width=60,
+            header, text=t("btn.clear_log"), width=60,
             command=self._clear_logs, **theme.btn_style("log_action", height="sm")
         )
         clear_btn.pack(side="right")
 
         detach_btn = ctk.CTkButton(
-            header, text="🗗 Desacoplar", width=80,
+            header, text=t("btn.detach_log"), width=80,
             command=self._detach_logs, **theme.btn_style("log_action", height="sm")
         )
         detach_btn.pack(side="right", padx=(0, 6))
@@ -90,24 +91,24 @@ class ExpandPanelMixin:
             command=self._pull, **theme.btn_style("blue")
         )
         self._pull_btn.pack(side="left", padx=(0, 3))
-        ToolTip(self._pull_btn, "Descargar cambios (git pull)")
+        ToolTip(self._pull_btn, t("tooltip.pull_btn"))
 
         # Clean
         self._clean_btn = ctk.CTkButton(
-            row1, text="🧹 Limpiar", width=80,
+            row1, text=t("btn.clean"), width=80,
             command=self._clean_repo, **theme.btn_style("purple")
         )
         self._clean_btn.pack(side="left", padx=(0, 3))
-        ToolTip(self._clean_btn, "Limpiar ficheros no commiteados y reestablecer cambios")
+        ToolTip(self._clean_btn, t("tooltip.clean_btn"))
 
         # Config
         if not repo.environment_files and repo.repo_type != 'docker-infra':
             edit_btn = ctk.CTkButton(
-                row1, text=BTN_CONFIG_TEXT, width=80,
+                row1, text=t("btn.config"), width=80,
                 command=self._edit_config, **theme.btn_style("neutral")
             )
             edit_btn.pack(side="left")
-            ToolTip(edit_btn, BTN_CONFIG_TOOLTIP)
+            ToolTip(edit_btn, t("tooltip.config_btn"))
 
         # Right-aligned frame for install buttons
         self.right_frame = ctk.CTkFrame(row1, fg_color="transparent", width=0, height=0)
@@ -118,10 +119,10 @@ class ExpandPanelMixin:
 
     def _build_branch_combo_section(self, row):
         """Build the branch combo box and fetch button within the branch row."""
-        ctk.CTkLabel(row, text="Rama:", font=theme.font("lg"),
+        ctk.CTkLabel(row, text=t("label.branch"), font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
 
-        initial_branches = self._branches_cache if getattr(self, '_branches_cache', None) else ["cargando..."]
+        initial_branches = self._branches_cache if getattr(self, '_branches_cache', None) else [t("label.loading")]
         self._branch_combo = ctk.CTkComboBox(
             row, values=initial_branches, width=180,
             command=self._on_branch_change, **theme.combo_style()
@@ -142,7 +143,7 @@ class ExpandPanelMixin:
             command=self._fetch_branches, **theme.btn_style("log_action")
         )
         search_btn.pack(side="left", padx=(0, 10))
-        ToolTip(search_btn, "Buscar ramas remotas (fetch)")
+        ToolTip(search_btn, t("tooltip.fetch_branches"))
 
     def _build_install_btn(self, parent):
         """Build the general install button (Install or Reinstall) based on UI Config."""
@@ -179,10 +180,10 @@ class ExpandPanelMixin:
         tooltip_text = cmd_str
 
         if is_installed:
-            btn_text = install_cfg.get('label_ok', REINSTALL_LBL)
+            btn_text = t("install.label_ok")
             _variant = "neutral_alt"
         else:
-            btn_text = install_cfg.get('label_missing', "Install")
+            btn_text = t("install.label_missing")
             _variant = "danger_alt"
 
         self._install_btn = ctk.CTkButton(
@@ -521,10 +522,10 @@ class ExpandPanelMixin:
             self._status_label.configure(text="🔴", text_color=color)
             status_texts = {
                 'running':    f"Ejecutando :{self._repo.server_port or '?'}",
-                'starting':   "Iniciando...",
-                'installing': "Instalando...",
-                'stopped':    "Detenido",
-                'error':      "Error",
+                'starting':   t("label.status.starting"),
+                'installing': t("label.status.installing"),
+                'stopped':    t("label.status.stopped"),
+                'error':      t("label.status.error"),
             }
             self._status_text.configure(
                 text=status_texts.get(status, status),
@@ -551,10 +552,10 @@ class ExpandPanelMixin:
                 color = theme.STATUS_ICONS.get('logging', theme.C.status_logging)
             self._status_label.configure(text="🔴", text_color=color)
             status_text = {
-                'running': 'Ejecutando',
-                'starting': 'Iniciando...',
-                'stopped': 'Detenido',
-                'error': 'Error'
+                'running': t("label.status.running"),
+                'starting': t("label.status.starting"),
+                'stopped': t("label.status.stopped"),
+                'error': t("label.status.error"),
             }.get(status, status)
             self._status_text.configure(
                 text=status_text,

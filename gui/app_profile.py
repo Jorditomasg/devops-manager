@@ -1,20 +1,21 @@
 """app_profile.py — ProfileManagerMixin extracted from app.py."""
 from __future__ import annotations
 import os
-from gui.constants import NO_PROFILE_TEXT, PROFILE_DIRTY_SUFFIX
+from gui.constants import PROFILE_DIRTY_SUFFIX
 from gui import theme
+from core.i18n import t
 
 
 class ProfileManagerMixin:
     """Mixin providing profile load/save/detect/apply for DevOpsManagerApp."""
 
     def _profile_dropdown_values(self) -> list:
-        """Returns dropdown values: includes NO_PROFILE_TEXT only when no profile is active."""
+        """Returns dropdown values: includes t("label.no_profile") only when no profile is active."""
         from core.profile_manager import list_profiles
         names = list_profiles()
-        if self._current_profile_name and self._current_profile_name != NO_PROFILE_TEXT:
+        if self._current_profile_name and self._current_profile_name != t("label.no_profile"):
             return names
-        return [NO_PROFILE_TEXT] + names
+        return [t("label.no_profile")] + names
 
     def _refresh_profile_dropdown(self, auto_select_name=None, original_name=None):
         """Reload profile options into topbar dropdown after creation/deletion."""
@@ -29,18 +30,18 @@ class ProfileManagerMixin:
             elif self._current_profile_name in profiles:
                 self._profile_combo.set(self._current_profile_name)
             else:
-                self._profile_combo.set(NO_PROFILE_TEXT)
+                self._profile_combo.set(t("label.no_profile"))
 
     def _load_initial_profile_data(self):
         """Loads cached profile data for change tracking on startup."""
-        if self._current_profile_name and self._current_profile_name != NO_PROFILE_TEXT:
+        if self._current_profile_name and self._current_profile_name != t("label.no_profile"):
             from core.profile_manager import load_profile
             data = load_profile(self._current_profile_name)
             if data:
                 self._current_profile_data = data
 
     def _on_profile_dropdown_change(self, selected_profile: str):
-        if selected_profile == NO_PROFILE_TEXT:
+        if selected_profile == t("label.no_profile"):
             self._current_profile_name = ""
             self._current_profile_data = {}
             self._settings['last_profile'] = ""
@@ -48,9 +49,9 @@ class ProfileManagerMixin:
 
             # Limpiar perfiles en cards
             for card in self._repo_cards:
-                card.set_profile('- Sin Seleccionar -')
+                card.set_profile(t("label.no_selection"))
 
-            # Restore full list (now that no profile is active, show NO_PROFILE_TEXT again)
+            # Restore full list (now that no profile is active, show t("label.no_profile") again)
             self._refresh_profile_dropdown()
             return
 
@@ -66,14 +67,14 @@ class ProfileManagerMixin:
         self._settings['last_profile'] = selected_profile
         self._save_settings(self._settings)
 
-        # Hide NO_PROFILE_TEXT from dropdown now that a profile is active
+        # Hide t("label.no_profile") from dropdown now that a profile is active
         self._refresh_profile_dropdown()
 
         self._apply_config(data)
 
     def _save_current_profile(self):
         """Guards changes to current profile if exists, else opens Config manager."""
-        if not self._current_profile_name or self._current_profile_name == NO_PROFILE_TEXT:
+        if not self._current_profile_name or self._current_profile_name == t("label.no_profile"):
              # Despliega dialog si no hay uno seleccionado
              self._show_configs()
              return
@@ -87,7 +88,7 @@ class ProfileManagerMixin:
         save_profile(self._current_profile_name, profile_data)
         self._current_profile_data = profile_data
         self._do_check_profile_changes()
-        self._log(f"✅ Perfil '{self._current_profile_name}' guardado correctamente")
+        self._log(t("log.profile_saved", name=self._current_profile_name))
 
     def _check_profile_changes(self):
         """Debounced: schedule the actual check 10 ms out, cancelling any pending one.
@@ -120,7 +121,7 @@ class ProfileManagerMixin:
                 button_hover_color=theme.C.profile_accent,
                 font=theme.font("base"),
             )
-            self._profile_combo.set(self._current_profile_name or NO_PROFILE_TEXT)
+            self._profile_combo.set(self._current_profile_name or t("label.no_profile"))
 
     def _do_check_profile_changes(self):
         """Actual profile-change detection — runs at most once per 300 ms burst."""
@@ -128,7 +129,7 @@ class ProfileManagerMixin:
         if not hasattr(self, '_profile_combo'):
             return
 
-        if not self._current_profile_name or self._current_profile_name == NO_PROFILE_TEXT:
+        if not self._current_profile_name or self._current_profile_name == t("label.no_profile"):
             self._set_profile_combo_dirty(False)
             return
 
@@ -204,7 +205,7 @@ class ProfileManagerMixin:
                 name = card.get_name()
                 if name in repos_config:
                     self._apply_config_to_card(card, repos_config[name])
-            self._log("[config] Configuración aplicada a todos los repos")
+            self._log(t("log.config_applied"))
         finally:
             self._applying_profile = False
             if not _skip_dirty_check:

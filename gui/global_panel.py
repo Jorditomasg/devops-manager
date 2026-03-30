@@ -8,6 +8,7 @@ import threading
 
 from gui.tooltip import ToolTip
 from gui import theme
+from core.i18n import t
 
 class GlobalPanel(ctk.CTkFrame):
     """Panel with global controls that affect all repo cards."""
@@ -34,7 +35,7 @@ class GlobalPanel(ctk.CTkFrame):
         title_frame.pack(fill="x", padx=15, pady=(8, 4))
 
         ctk.CTkLabel(
-            title_frame, text="🌐 Panel Global",
+            title_frame, text=t("label.global_panel_title"),
             font=theme.font("xxl", bold=True),
             text_color=theme.C.text_primary
         ).pack(side="left")
@@ -42,7 +43,7 @@ class GlobalPanel(ctk.CTkFrame):
         # Select All checkbox (toggles all card checkboxes)
         self._select_all_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
-            title_frame, text="Seleccionar todos", variable=self._select_all_var,
+            title_frame, text=t("label.select_all"), variable=self._select_all_var,
             font=theme.font("md"),
             checkbox_width=theme.G.checkbox_size_sm, checkbox_height=theme.G.checkbox_size_sm,
             text_color=theme.C.text_muted,
@@ -53,7 +54,7 @@ class GlobalPanel(ctk.CTkFrame):
         row = ctk.CTkFrame(self, fg_color="transparent")
         row.pack(fill="x", padx=15, pady=(0, 8))
 
-        ctk.CTkLabel(row, text="Rama:", font=theme.font("base"),
+        ctk.CTkLabel(row, text=t("label.global_branch"), font=theme.font("base"),
                      text_color=theme.C.text_secondary, width=45).pack(side="left")
 
         self._branch_entry = ctk.CTkEntry(
@@ -66,53 +67,53 @@ class GlobalPanel(ctk.CTkFrame):
         self._branch_entry.pack(side="left", padx=(4, 4))
 
         self._apply_branch_btn = ctk.CTkButton(
-            row, text="Aplicar", width=70,
+            row, text=t("btn.apply_branch"), width=70,
             command=self._apply_branch_all,
             **theme.btn_style("blue")
         )
         self._apply_branch_btn.pack(side="left", padx=(0, 0))
-        ToolTip(self._apply_branch_btn, "Aplicar esta rama a todos los repos seleccionados")
+        ToolTip(self._apply_branch_btn, t("tooltip.apply_branch"))
 
         self._pull_btn = ctk.CTkButton(
-            row, text="⬇ Pull All", width=90,
+            row, text=t("btn.pull_all"), width=90,
             command=self._pull_all,
             **theme.btn_style("blue", font_size="md")
         )
         self._pull_btn.pack(side="left", padx=(3, 0))
-        ToolTip(self._pull_btn, "Descargar cambios de todos los repos seleccionados")
+        ToolTip(self._pull_btn, t("tooltip.pull_all"))
 
         self._install_btn = ctk.CTkButton(
-            row, text="📦 Install All", width=95,
+            row, text=t("btn.install_all"), width=95,
             command=self._install_all,
             **theme.btn_style("neutral_alt", font_size="md")
         )
         self._install_btn.pack(side="left", padx=(3, 0))
-        ToolTip(self._install_btn, "Instalar dependencias de todos los proyectos seleccionados")
+        ToolTip(self._install_btn, t("tooltip.install_all"))
 
         # Action buttons — right-aligned
         self._restart_btn = ctk.CTkButton(
-            row, text="🔄 Restart", width=90,
+            row, text=t("btn.restart"), width=90,
             command=self._restart_selected,
             **theme.btn_style("warning", font_size="md")
         )
         self._restart_btn.pack(side="right", padx=(3, 0))
-        ToolTip(self._restart_btn, "Reiniciar todos los servicios seleccionados")
+        ToolTip(self._restart_btn, t("tooltip.restart_selected"))
 
         self._stop_btn = ctk.CTkButton(
-            row, text="⬛ Stop", width=80,
+            row, text=t("btn.stop"), width=80,
             command=self._stop_selected,
             **theme.btn_style("danger", font_size="md")
         )
         self._stop_btn.pack(side="right", padx=(3, 0))
-        ToolTip(self._stop_btn, "Detener todos los servicios seleccionados")
+        ToolTip(self._stop_btn, t("tooltip.stop_selected"))
 
         self._start_btn = ctk.CTkButton(
-            row, text="▶ Start", width=80,
+            row, text=t("btn.start"), width=80,
             command=self._start_selected,
             **theme.btn_style("start", font_size="md")
         )
         self._start_btn.pack(side="right", padx=(3, 0))
-        ToolTip(self._start_btn, "Iniciar todos los servicios seleccionados")
+        ToolTip(self._start_btn, t("tooltip.start_selected"))
 
 
     def _set_async_btns_state(self, state: str):
@@ -137,12 +138,12 @@ class GlobalPanel(ctk.CTkFrame):
         """Apply a branch to all selected repos. Alert if branch not found in some."""
         branch = self._branch_entry.get().strip()
         if not branch:
-            messagebox.showwarning("Aviso", "Introduce un nombre de rama")
+            messagebox.showwarning(t("misc.warning_title"), t("misc.enter_branch"))
             return
 
         selected = self._get_selected_cards()
         if not selected:
-            messagebox.showwarning("Aviso", "No hay repos seleccionados")
+            messagebox.showwarning(t("misc.warning_title"), t("misc.no_repos_selected"))
             return
 
         self._set_async_btns_state("disabled")
@@ -162,14 +163,15 @@ class GlobalPanel(ctk.CTkFrame):
         if not_found:
             repos_str = "\n".join(f"  • {r}" for r in not_found)
             messagebox.showwarning(
-                "⚠ Rama no encontrada",
-                f"La rama '{branch}' no se encontró en:\n{repos_str}\n\n"
-                "Estos repos mantienen su rama actual.",
+                t("misc.branch_not_found_title"),
+                t("misc.branch_not_found_msg", branch=branch, repos=repos_str),
             )
         if self._log:
             changed = len(selected) - len(not_found)
-            suffix = f" ({len(not_found)} sin la rama)" if not_found else ""
-            self._log(f"[global] Rama '{branch}' aplicada a {changed}/{len(selected)} repos{suffix}")
+            if not_found:
+                self._log(t("log.global_branch_not_found", branch=branch, changed=changed, total=len(selected), missing=len(not_found)))
+            else:
+                self._log(t("log.global_branch_applied", branch=branch, changed=changed, total=len(selected)))
 
     def _pull_all(self):
         """Pull all selected repos."""
@@ -178,7 +180,7 @@ class GlobalPanel(ctk.CTkFrame):
             return
 
         if self._log:
-            self._log(f"[global] Pulling {len(selected)} repos...")
+            self._log(t("log.global_pulling", count=len(selected)))
 
         self._set_async_btns_state("disabled")
 
@@ -204,11 +206,11 @@ class GlobalPanel(ctk.CTkFrame):
         ]
         if not to_install:
             if self._log:
-                self._log("[global] Todos los repos ya están instalados.")
+                self._log(t("log.global_all_installed"))
             return
 
         if self._log:
-            self._log(f"[global] Installing dependencies for {len(to_install)} repos...")
+            self._log(t("log.global_installing", count=len(to_install)))
 
         self._set_async_btns_state("disabled")
 
@@ -221,7 +223,7 @@ class GlobalPanel(ctk.CTkFrame):
                 if remaining[0] == 0:
                     self.after(0, lambda: self._set_async_btns_state("normal"))
                     if self._log:
-                        self._log("[global] ✓ Install All completado.")
+                        self._log(t("log.global_install_done"))
 
         def _install_card(card):
             card.install_dependencies(skip_if_installed=True)
@@ -234,7 +236,7 @@ class GlobalPanel(ctk.CTkFrame):
         """Start all selected repos."""
         selected = self._get_selected_cards()
         if self._log:
-            self._log(f"[global] Starting {len(selected)} services...")
+            self._log(t("log.global_starting", count=len(selected)))
         for card in selected:
             card.do_start()
 
@@ -242,7 +244,7 @@ class GlobalPanel(ctk.CTkFrame):
         """Stop all selected repos."""
         selected = self._get_selected_cards()
         if self._log:
-            self._log(f"[global] Stopping {len(selected)} services...")
+            self._log(t("log.global_stopping", count=len(selected)))
         for card in selected:
             card.do_stop()
 
@@ -250,7 +252,7 @@ class GlobalPanel(ctk.CTkFrame):
         """Restart all selected repos."""
         selected = self._get_selected_cards()
         if self._log:
-            self._log(f"[global] Restarting {len(selected)} services...")
+            self._log(t("log.global_restarting", count=len(selected)))
         for card in selected:
             card.do_stop()
 

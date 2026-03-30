@@ -41,6 +41,11 @@ def main():
     from core.logger import setup_logging
     setup_logging()
 
+    # Initialize translations (must happen before any GUI widget is created)
+    from core.i18n import init_i18n
+    from core.config_manager import get_app_setting
+    init_i18n(get_app_setting("language", default="en_EN"))
+
     # Set Windows AppUserModelID early so custom icon is used in taskbar
     if sys.platform == 'win32':
         import ctypes

@@ -4,6 +4,7 @@ import threading
 import re
 from gui.constants import GIT_BADGE_SEMAPHORE_COUNT, BADGE_REFRESH_MS, PORT_REGEXES
 from gui import theme
+from core.i18n import t
 
 
 class GitMixin:
@@ -121,9 +122,9 @@ class GitMixin:
                 if not self.winfo_exists():
                     return
                 if not files:
-                    self._log("📝 Sin cambios locales.")
+                    self._log(t("log.no_changes_local"))
                     return
-                self._log(f"📝 {len(files)} fichero(s) modificado(s):")
+                self._log(t("log.modified_files_header", count=len(files)))
                 for f in files:
                     self._log(f"   {f}")
             self.after(0, _log)

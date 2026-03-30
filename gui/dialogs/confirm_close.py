@@ -3,6 +3,7 @@ import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
 from gui import theme
+from core.i18n import t
 
 
 class ConfirmCloseDialog(BaseDialog):
@@ -12,14 +13,13 @@ class ConfirmCloseDialog(BaseDialog):
     """
 
     def __init__(self, parent, running_count: int):
-        super().__init__(parent, "Servicios en ejecución", 420, 180)
+        super().__init__(parent, t("dialog.confirm_close.title"), 420, 180)
         self.confirmed = False
 
-        noun = "servicio" if running_count == 1 else "servicios"
-        msg = (
-            f"Hay {running_count} {noun} corriendo.\n"
-            "¿Querés cerrar la aplicación igualmente?"
-        )
+        if running_count == 1:
+            msg = t("dialog.confirm_close.message_one")
+        else:
+            msg = t("dialog.confirm_close.message_many", count=running_count)
         ctk.CTkLabel(
             self, text=msg,
             wraplength=380, justify="left",
@@ -30,12 +30,12 @@ class ConfirmCloseDialog(BaseDialog):
         btn_frame.pack(fill="x", padx=20, pady=(0, 16))
 
         ctk.CTkButton(
-            btn_frame, text="Cancelar", width=110,
+            btn_frame, text=t("dialog.confirm_close.btn_cancel"), width=110,
             command=self._cancel, **theme.btn_style("neutral")
         ).pack(side="right", padx=(8, 0))
 
         ctk.CTkButton(
-            btn_frame, text="Cerrar igual", width=130,
+            btn_frame, text=t("dialog.confirm_close.btn_confirm"), width=130,
             command=self._confirm, **theme.btn_style("danger")
         ).pack(side="right")
 

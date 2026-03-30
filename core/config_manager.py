@@ -46,6 +46,15 @@ def _invalidate_config_cache(config_path: str) -> None:
         _CONFIG_CACHE_MTIME.pop(config_path, None)
 
 
+def get_app_setting(key: str, default=None):
+    """Read a single top-level key from devops_manager_config.json.
+
+    Uses the in-memory cache. Safe to call before the UI is created.
+    """
+    data = _load_config_cached(get_config_path())
+    return data.get(key, default)
+
+
 # ─── Config Path ────────────────────────────────────────────────────────────
 
 def get_config_path() -> str:

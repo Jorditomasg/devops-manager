@@ -1,14 +1,10 @@
 """Shared constants for the GUI layer."""
 
 # ── Combo / label sentinel values ──────────────────────────────
-NO_PROFILE_TEXT    = "— Sin perfil —"
 PROFILE_DIRTY_SUFFIX = " *"
 
-# ── Button labels ───────────────────────────────────────────────
+# ── Event bindings ──────────────────────────────────────────────
 BTN_CLICK          = "<Button-1>"
-BTN_CONFIG_TEXT    = "⚙ Config"
-BTN_CONFIG_TOOLTIP = "Editar configuración"
-REINSTALL_LBL      = "Reinstall ✓"
 
 # ── Timing (milliseconds / seconds) ────────────────────────────
 BADGE_REFRESH_MS   = 30_000   # git badge poll interval per card

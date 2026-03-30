@@ -6,9 +6,9 @@ import threading
 import subprocess
 import time
 from tkinter import messagebox
-from gui.constants import REINSTALL_LBL
 from gui.log_helpers import insert_log_line
 from gui import theme
+from core.i18n import t
 
 _ANSI_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
@@ -97,7 +97,7 @@ class ActionsMixin:
             self._update_header_hints()
             self._refresh_badge()
             if self._log:
-                self._log(f"[{self._repo.name}] Instalación finalizada ✓")
+                self._log(t("log.install_done", name=self._repo.name))
         else:
             _fail_style = theme.btn_style("danger_alt")
             if hasattr(self, '_install_btn'):
@@ -108,7 +108,7 @@ class ActionsMixin:
                     hover_color=_fail_style["hover_color"],
                 )
             if self._log:
-                self._log(f"[{self._repo.name}] Fallo al instalar. Archivos clave no encontrados.")
+                self._log(t("log.install_fail", name=self._repo.name))
         # Revert card status indicator back to stopped (or running if service is up)
         final_status = 'running' if self._status == 'installing' else self._status
         if self._status == 'installing':
@@ -134,7 +134,7 @@ class ActionsMixin:
                     break
 
         if hasattr(self, '_install_btn') and already_installed and not bypass_confirm:
-            if not messagebox.askyesno("Reinstalar", "¿Estás seguro de que deseas volver a instalar dependencias?"):
+            if not messagebox.askyesno(t("dialog.reinstall.title"), t("dialog.reinstall.confirm")):
                 if on_complete:
                     on_complete()
                 return
@@ -148,14 +148,14 @@ class ActionsMixin:
                 on_complete()
             return
 
-        success_text = install_cfg.get('label_ok', REINSTALL_LBL)
-        fail_text = "Error!"
+        success_text = t("install.label_ok")
+        fail_text = t("install.error")
 
         if self._log:
             self._log(f"Running {cmd_str}...")
 
         if hasattr(self, '_install_btn'):
-            self._install_btn.configure(text="Installing...", state="disabled")
+            self._install_btn.configure(text=t("install.in_progress"), state="disabled")
         self._is_installing = True
         # Update the card status indicator to 'installing' (purple dot)
         self._update_status(repo.name, 'installing')
@@ -173,7 +173,7 @@ class ActionsMixin:
                 process.wait(timeout=600)
             except subprocess.TimeoutExpired:
                 if self._log:
-                    self._log(f"[{self._repo.name}] ⚠️ Instalación superó 10 min, proceso terminado")
+                    self._log(t("log.install_timeout", name=self._repo.name))
                 try:
                     process.kill()
                     process.wait(timeout=5)

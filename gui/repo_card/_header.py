@@ -8,6 +8,7 @@ import customtkinter as ctk
 import tkinter as tk
 from gui import theme
 from gui.tooltip import ToolTip
+from core.i18n import t
 
 BTN_CLICK = "<Button-1>"
 
@@ -87,7 +88,7 @@ class HeaderMixin:
         name_label.pack(side="left")
         name_label.bind(BTN_CLICK, self._toggle_expand)
         if repo.git_remote_url:
-            ToolTip(name_label, "🔗 Clic derecho: abrir repositorio")
+            ToolTip(name_label, t("tooltip.open_repo"))
             name_label.bind("<Button-3>", lambda e: webbrowser.open(repo.git_remote_url))
 
         self._build_header_name_hints(frame)
@@ -101,7 +102,7 @@ class HeaderMixin:
         )
         self._changes_count_label.pack(side="left", padx=(4, 4))
         self._changes_count_label.bind("<Button-1>", self._show_modified_files)
-        ToolTip(self._changes_count_label, "Ficheros modificados sin guardar. Clic para ver la lista en el log.")
+        ToolTip(self._changes_count_label, t("tooltip.modified_files"))
 
         # Warning badge (yellow, shown only when deps missing)
         self._branch_hint_warn = ctk.CTkLabel(
@@ -136,7 +137,7 @@ class HeaderMixin:
             command=self._toggle_expand, **theme.btn_style("toggle_expand", font_size="md")
         )
         self._toggle_btn.pack(side="right", padx=(4, 2))
-        ToolTip(self._toggle_btn, "Expandir / Colapsar opciones")
+        ToolTip(self._toggle_btn, t("tooltip.expand"))
 
         # Open in Explorer
         self._explorer_btn = ctk.CTkButton(
@@ -144,7 +145,7 @@ class HeaderMixin:
             command=self._open_in_explorer, **theme.btn_style("neutral", font_size="md")
         )
         self._explorer_btn.pack(side="right", padx=(4, 2))
-        ToolTip(self._explorer_btn, "Abrir en el explorador")
+        ToolTip(self._explorer_btn, t("tooltip.open_explorer"))
 
         # Action buttons frame
         self._build_action_buttons(frame)
@@ -158,7 +159,7 @@ class HeaderMixin:
 
         # Status text (leftmost of the right group)
         self._status_text = ctk.CTkLabel(
-            frame, text="Detenido",
+            frame, text=t("label.status.stopped"),
             font=theme.font("base"), text_color=theme.C.text_muted
         )
         self._status_text.pack(side="right", padx=(0, 4))
@@ -172,19 +173,19 @@ class HeaderMixin:
             self._action_btns_frame, text="▶", width=32,
             command=self._start, **theme.btn_style("start", font_size="lg")
         )
-        ToolTip(self._start_btn, "Iniciar servicio")
+        ToolTip(self._start_btn, t("tooltip.start_btn"))
 
         self._stop_btn = ctk.CTkButton(
             self._action_btns_frame, text="⬛", width=32,
             command=self._stop, **theme.btn_style("danger", font_size="lg")
         )
-        ToolTip(self._stop_btn, "Detener servicio")
+        ToolTip(self._stop_btn, t("tooltip.stop_btn"))
 
         self._restart_btn = ctk.CTkButton(
             self._action_btns_frame, text="🔄", width=32,
             command=self._restart, **theme.btn_style("warning", font_size="lg")
         )
-        ToolTip(self._restart_btn, "Reiniciar servicio")
+        ToolTip(self._restart_btn, t("tooltip.restart_btn"))
         self._update_button_visibility()
 
     def _open_in_explorer(self):
@@ -292,8 +293,7 @@ class HeaderMixin:
                     break
 
         if not is_installed and self._repo.run_install_cmd:
-            deps_text = install_cfg.get('status_label_deps_missing', '⚠ Falta instalar')
-            warn_text = deps_text
+            warn_text = t("install.status_deps_missing")
             hint_text = ("   " + "   ".join(parts)) if parts else ""
         else:
             warn_text = ""

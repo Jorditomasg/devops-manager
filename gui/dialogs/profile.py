@@ -8,7 +8,8 @@ import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
 from gui import theme
-from gui.constants import NO_PROFILE_TEXT, PROFILE_DIRTY_SUFFIX
+from gui.constants import PROFILE_DIRTY_SUFFIX
+from core.i18n import t
 
 
 def _unique_profile_name(base: str, existing: list) -> str:
@@ -35,7 +36,7 @@ class ProfileDialog(BaseDialog):
                  repo_cards: list = None,
                  log_callback=None, on_profile_loaded=None,
                  on_rescan=None, on_profiles_changed=None):
-        super().__init__(parent, "Configuraciones Guardadas", 580, 520)
+        super().__init__(parent, t("dialog.profile.title"), 580, 520)
 
         self._workspace_dir = workspace_dir
         self._repos = repos
@@ -280,7 +281,7 @@ class ProfileDialog(BaseDialog):
         if self._on_profile_loaded:
             self._on_profile_loaded(data)
         if self._log:
-            self._log(f"Configuración '{data.get('name', '??')}' aplicada")
+            self._log(t("log.profile_applied", name=data.get('name', '??')))
         messagebox.showinfo("Cargado", "Configuración aplicada correctamente")
         self.destroy()
 
@@ -293,7 +294,7 @@ class ProfileDialog(BaseDialog):
             save_profile(save_name, data)
             self._pending_save_profile_name = None
             if self._log:
-                self._log(f"Configuración importada y guardada: {save_name}")
+                self._log(t("log.profile_imported_saved", name=save_name))
             if self._on_profiles_changed:
                 self._on_profiles_changed(save_name, original_name)
         if self._on_profile_loaded:
@@ -680,12 +681,12 @@ class ImportOptionsDialog(BaseDialog):
                 ))
             except tk.TclError:
                 pass
-            _combined_log(f"[import] Clonando {m['name']}...")
+            _combined_log(t("log.import_cloning", name=m['name']))
             success, msg = clone(m['git_url'], dest, _combined_log)
             if success and m.get('branch'):
                 checkout(dest, m['branch'], _combined_log)
             if not success:
-                _combined_log(f"[import] ❌ Error al clonar {m['name']}: {msg[:200]}")
+                _combined_log(t("log.import_clone_error", name=m['name'], msg=msg[:200]))
             _update_progress(f"✅ {m['name']}" if success else f"❌ Error: {m['name']}")
             self._did_clone = True
 
@@ -777,7 +778,7 @@ class ImportOptionsDialog(BaseDialog):
                 ))
             except tk.TclError:
                 pass
-            self._log_to_dialog(f"[import] Iniciando clonación: {names}")
+            self._log_to_dialog(t("log.import_starting", names=names))
             self._apply_repos(self._missing, _update_progress)
 
         self._run_import_repo_configs_step(_update_progress)

@@ -8,28 +8,29 @@ import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
 from gui import theme
+from core.i18n import t
 
 
 class CloneDialog(BaseDialog):
     """Dialog for cloning a new repository."""
 
     def __init__(self, parent, workspace_dir: str, log_callback=None, on_complete=None):
-        super().__init__(parent, "Clonar Repositorio", 500, 220)
+        super().__init__(parent, t("dialog.clone.title"), 500, 220)
         self._workspace_dir = workspace_dir
         self._log = log_callback
         self._on_complete = on_complete
 
         # URL
-        ctk.CTkLabel(self, text="URL del repositorio Git:").pack(
+        ctk.CTkLabel(self, text=t("dialog.clone.url_label")).pack(
             anchor="w", padx=20, pady=(20, 5))
-        self._url_entry = ctk.CTkEntry(self, width=450, placeholder_text="https://...")
+        self._url_entry = ctk.CTkEntry(self, width=450, placeholder_text=t("dialog.clone.url_placeholder"))
         self._url_entry.pack(padx=20)
 
         # Folder name
-        ctk.CTkLabel(self, text="Nombre de la carpeta (opcional):").pack(
+        ctk.CTkLabel(self, text=t("dialog.clone.folder_label")).pack(
             anchor="w", padx=20, pady=(10, 5))
         self._name_entry = ctk.CTkEntry(self, width=450,
-                                        placeholder_text="Se autodetecta del URL")
+                                        placeholder_text=t("dialog.clone.folder_placeholder"))
         self._name_entry.pack(padx=20)
 
         # Progress bar
@@ -42,13 +43,13 @@ class CloneDialog(BaseDialog):
         btn_frame.pack(fill="x", padx=20, pady=10)
 
         self._clone_btn = ctk.CTkButton(
-            btn_frame, text="Clonar", width=120,
+            btn_frame, text=t("dialog.clone.btn"), width=120,
             command=self._start_clone, **theme.btn_style("blue")
         )
         self._clone_btn.pack(side="right", padx=(10, 0))
 
         ctk.CTkButton(
-            btn_frame, text="Cancelar", width=100,
+            btn_frame, text=t("btn.cancel"), width=100,
             command=self.destroy, **theme.btn_style("neutral")
         ).pack(side="right")
 
@@ -64,15 +65,15 @@ class CloneDialog(BaseDialog):
     def _start_clone(self):
         url = self._url_entry.get().strip()
         if not url:
-            messagebox.showwarning("Error", "Introduce una URL de repositorio")
+            messagebox.showwarning(t("misc.error_title"), t("dialog.clone.error_no_url"))
             return
 
         name, dest = self._build_clone_cmd(url, self._name_entry.get().strip())
         if os.path.isdir(dest):
-            messagebox.showwarning("Error", f"La carpeta '{name}' ya existe")
+            messagebox.showwarning(t("misc.error_title"), t("dialog.clone.error_folder_exists", name=name))
             return
 
-        self._clone_btn.configure(state="disabled", text="Clonando...")
+        self._clone_btn.configure(state="disabled", text=t("dialog.clone.btn_cloning"))
         threading.Thread(target=self._do_clone, args=(url, dest, name), daemon=True).start()
 
     def _do_clone(self, url: str, dest: str, name: str) -> None:
@@ -90,13 +91,13 @@ class CloneDialog(BaseDialog):
         def _done():
             if success:
                 self._progress.set(1.0)
-                messagebox.showinfo("Éxito", f"Repositorio clonado: {name}")
+                messagebox.showinfo(t("dialog.clone.success_title"), t("dialog.clone.success_msg", name=name))
                 if self._on_complete:
                     self._on_complete()
                 self.destroy()
             else:
-                messagebox.showerror("Error", f"Error al clonar:\n{msg}")
-                self._clone_btn.configure(state="normal", text="Clonar")
+                messagebox.showerror(t("misc.error_title"), t("dialog.clone.error_clone_msg", msg=msg))
+                self._clone_btn.configure(state="normal", text=t("dialog.clone.btn"))
                 self._progress.set(0)
 
         self.after(0, _done)
