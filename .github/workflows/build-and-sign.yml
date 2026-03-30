@@ -25,6 +25,7 @@ jobs:
       - name: Compile with Nuitka
         run: |
           uv run python -m nuitka --standalone --follow-imports `
+            --enable-plugin=tk-inter `
             --include-package=customtkinter,darkdetect,pystray,PIL,git,yaml `
             --include-package-data=customtkinter `
             --include-data-dir=config=config `
