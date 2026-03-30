@@ -15,6 +15,10 @@ commands:
   profile_flag: "--configuration="
   ready_pattern: "localhost:\\d+|Local:.*http|compiled|Listening on"
   error_pattern: "Error:"
+  port_patterns:
+    - "Local:\\s*http://localhost:(\\d+)"
+    - "http://localhost:(\\d+)"
+    - "Listening on.*?(\\d+)"
 
 env_files:
   default_dir: "apps/default/src/environments"

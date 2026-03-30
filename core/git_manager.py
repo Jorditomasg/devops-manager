@@ -4,6 +4,7 @@ git_manager.py — Git operations: clone, pull, fetch, branch listing, checkout.
 from __future__ import annotations
 import subprocess
 import os
+import fnmatch
 from typing import Optional, Callable
 
 
@@ -263,7 +264,7 @@ def get_local_changes(repo_path: str, ignore_files: list[str] = None) -> list[st
                 file_path = line[3:].strip()
                 filename = os.path.basename(file_path)
 
-                if filename not in ignore_files:
+                if not any(fnmatch.fnmatch(filename, pattern) for pattern in ignore_files):
                     changes.append(file_path)
     except (subprocess.SubprocessError, OSError):
         pass

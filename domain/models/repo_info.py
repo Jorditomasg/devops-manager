@@ -46,6 +46,7 @@ class RepoInfo:
     # Log-based status detection patterns (regex)
     ready_pattern: Optional[str] = None
     error_pattern: Optional[str] = None
+    port_patterns: List[str] = field(default_factory=list)
 
     # Docker Compose files
     docker_compose_files: List[str] = field(default_factory=list)

@@ -161,6 +161,7 @@ class ProjectAnalyzerService:
         repo.run_reinstall_cmd = commands.get('reinstall_cmd')
         repo.ready_pattern = commands.get('ready_pattern')
         repo.error_pattern = commands.get('error_pattern')
+        repo.port_patterns = commands.get('port_patterns', [])
         
         # Inject UI config and features
         if 'ui' in r_type:

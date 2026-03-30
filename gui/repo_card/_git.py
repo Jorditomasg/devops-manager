@@ -2,7 +2,7 @@
 from __future__ import annotations
 import threading
 import re
-from gui.constants import GIT_BADGE_SEMAPHORE_COUNT, BADGE_REFRESH_MS, PORT_REGEXES
+from gui.constants import GIT_BADGE_SEMAPHORE_COUNT, BADGE_REFRESH_MS, PORT_PATTERNS_FALLBACK
 from gui import theme
 from core.i18n import t
 
@@ -136,8 +136,9 @@ class GitMixin:
         if self._repo.server_port:
             return  # Port is already statically defined
 
-        for regex in PORT_REGEXES:
-            match = regex.search(line)
+        patterns = self._repo.port_patterns or PORT_PATTERNS_FALLBACK
+        for pattern in patterns:
+            match = re.search(pattern, line, re.IGNORECASE)
             if match:
                 try:
                     port = int(match.group(1))

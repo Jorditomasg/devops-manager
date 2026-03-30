@@ -21,6 +21,10 @@ commands:
   profile_flag: ""
   ready_pattern: "compiled successfully|Compiled|localhost:\\d+"
   error_pattern: "Failed to compile"
+  port_patterns:
+    - "Local:\\s*http://localhost:(\\d+)"
+    - "http://(?:localhost|127\\.0\\.0\\.1):(\\d+)"
+    - "(?:listening on|bound to).*?port\\s+(\\d+)"
 
 env_files:
   default_dir: "."

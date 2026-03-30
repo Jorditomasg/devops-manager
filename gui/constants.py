@@ -20,11 +20,9 @@ LOG_MAX_LINES      = 500
 # ── Config file ─────────────────────────────────────────────────
 CONFIG_FILE        = "devops_manager_config.json"
 
-# ── Port detection regexes ──────────────────────────────────────
-import re
-PORT_REGEXES = [
-    re.compile(r"Tomcat (?:started on|initialized with) port.*?(\d+)", re.IGNORECASE),
-    re.compile(r"http://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])[:\s]+(\d+)", re.IGNORECASE),
-    re.compile(r"(?:listening on|bound to).*?port\s+(\d+)", re.IGNORECASE),
-    re.compile(r"Local:\s*http://localhost:(\d+)", re.IGNORECASE),
+# ── Port detection fallback (used when repo type defines no port_patterns) ──
+PORT_PATTERNS_FALLBACK = [
+    r"http://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d+)",
+    r"(?:listening on|bound to).*?port\s+(\d+)",
 ]
+

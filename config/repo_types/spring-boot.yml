@@ -23,6 +23,9 @@ commands:
   profile_flag: "-Dspring-boot.run.profiles="
   ready_pattern: "Started \\w+ in"
   error_pattern: "Application run failed"
+  port_patterns:
+    - "Tomcat (?:started on|initialized with) port.*?(\\d+)"
+    - "http://(?:localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::1\\])[:\\s]+(\\d+)"
 
 env_files:
   default_dir: "src/main/resources"
