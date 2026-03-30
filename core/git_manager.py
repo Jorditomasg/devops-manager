@@ -13,8 +13,8 @@ LogCallback = Optional[Callable[[str], None]]
 def _run_git_command(args: list[str], repo_path: str, timeout: int = 10) -> subprocess.CompletedProcess:
     """Helper to execute git commands safely and unify configurations."""
     return subprocess.run(
-        args,  # capture_output is implicitly covered by text=True
-        capture_output=True, text=True, cwd=repo_path, timeout=timeout,
+        args,
+        capture_output=True, encoding='utf-8', errors='replace', cwd=repo_path, timeout=timeout,
         creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     )
 

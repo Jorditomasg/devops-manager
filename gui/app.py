@@ -287,6 +287,11 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             except Exception:
                 pass
 
+    def _show_global_log_if_hidden(self):
+        """Show the global log panel if it is currently hidden."""
+        if hasattr(self, '_global_log_frame') and not self._global_log_frame.winfo_ismapped():
+            self._global_log_frame.pack(fill="x", padx=10, pady=(5, 5), before=self._statusbar)
+
     def _toggle_global_log(self):
         if self._global_log_frame.winfo_ismapped():
             self._global_log_frame.pack_forget()
@@ -449,7 +454,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         textbox.see("end")
         textbox.configure(state="disabled")
 
-    def _scan_repos(self):
+    def _scan_repos(self, _after_scan=None):
         """Scan workspace for repositories."""
         self._log("Escaneando workspace...")
         self._statusbar.configure(text="Escaneando repos...")
@@ -460,7 +465,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             else:
                 repos = detect_repos(self._workspace_dir)
             self._repos = repos
-            
+
             from application.use_cases.manage_services_use_case import ManageServicesUseCase
             if hasattr(self, '_manage_services_use_case'):
                 self._manage_services_use_case.update_repos(repos)
@@ -475,6 +480,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 )
                 self._log(f"Detectados {len(repos)} repos: "
                          + ", ".join(r.name for r in repos))
+                if _after_scan:
+                    _after_scan()
 
             self.after(0, _update)
 
@@ -550,7 +557,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             repo_cards=self._repo_cards,
             log_callback=self._log,
             on_profile_loaded=self._apply_config,
-            on_rescan=self._scan_repos,
+            on_rescan=lambda: self._scan_repos(_after_scan=self._show_global_log_if_hidden),
             on_profiles_changed=self._refresh_profile_dropdown
         )
 
@@ -668,8 +675,6 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self.after(0, _show)
 
     def _quit_app(self, icon, item):
-        if self._tray_icon:
-            self._tray_icon.stop()
         self.after(0, self._on_close)
 
     def _check_tray_status(self):
@@ -725,7 +730,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             for card in running:
                 name = card.get_name()
                 status = getattr(card, '_status', '')
-                label = f'● {name}' + (' (arrancando)' if status == 'starting' else '')
+                status_label = 'arrancando' if status == 'starting' else 'corriendo'
+                label = f'{name} - {status_label}'
                 items.append(item(label, None, enabled=False))
         items.append(pystray.Menu.SEPARATOR)
         items.append(item('Mostrar', self._restore_window, default=True))
@@ -749,7 +755,18 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 card.do_stop()
 
     def _on_close(self):
-        """Handle window close."""
+        """Handle window close — show confirmation if services are running."""
+        running_count = sum(
+            1 for card in self._repo_cards
+            if getattr(card, '_status', '') in ('running', 'starting')
+        )
+        if running_count:
+            from gui.dialogs import ConfirmCloseDialog
+            dlg = ConfirmCloseDialog(self, running_count)
+            self.wait_window(dlg)
+            if not dlg.confirmed:
+                return
+
         try:
             if hasattr(self, '_original_stdout'):
                 sys.stdout = self._original_stdout

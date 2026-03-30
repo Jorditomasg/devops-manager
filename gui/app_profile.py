@@ -196,6 +196,7 @@ class ProfileManagerMixin:
         Suppresses per-card change callbacks during the loop; runs one check at the end.
         Pass _skip_dirty_check=True on startup to avoid false-positive dirty state
         while async branch loads are still in flight."""
+        self._current_profile_data = profile_data
         self._applying_profile = True
         try:
             repos_config = profile_data.get('repos', {})

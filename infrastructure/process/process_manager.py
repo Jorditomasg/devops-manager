@@ -75,7 +75,7 @@ class ProcessManager:
             process = subprocess.Popen(
                 cmd, cwd=cwd, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, shell=(os.name == 'nt' and cmd[0] in ('npm', 'npx', 'mvn', 'mvnw.cmd')),
+                encoding='utf-8', errors='replace', bufsize=1, shell=(os.name == 'nt' and cmd[0] in ('npm', 'npx', 'mvn', 'mvnw.cmd')),
                 creationflags=creationflags
             )
             
