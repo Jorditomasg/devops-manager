@@ -75,7 +75,7 @@ class ProcessManager:
             process = subprocess.Popen(
                 cmd, cwd=cwd, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                encoding='utf-8', errors='replace', bufsize=1, shell=(os.name == 'nt' and cmd[0] in ('npm', 'npx', 'mvn', 'mvnw.cmd')),
+                shell=(os.name == 'nt' and cmd[0] in ('npm', 'npx', 'mvn', 'mvnw.cmd')),
                 creationflags=creationflags
             )
             
@@ -100,11 +100,9 @@ class ProcessManager:
                 log_callback(f"[sys] Error starting {service.name}: {e}")
 
     def _stream_process_output(self, process, service: RunningService, log_callback: LogCallback):
-        for line in iter(process.stdout.readline, ''):
-            if not line:
-                break
-            line = line.strip()
-            if log_callback:
+        for raw_line in iter(process.stdout.readline, b''):
+            line = raw_line.decode('utf-8', errors='replace').strip()
+            if line and log_callback:
                 log_callback(f"[{service.name}] {line}")
 
     def stop_process(self, name: str, log_callback: LogCallback = None) -> bool:

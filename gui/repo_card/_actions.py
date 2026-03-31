@@ -21,7 +21,6 @@ def _create_subprocess(cmd_str: str, cwd: str, env: dict = None, shell: bool = T
     return subprocess.Popen(
         cmd_str, cwd=cwd, env=env, shell=shell,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1,
         creationflags=creationflags,
     )
 
@@ -76,11 +75,10 @@ class ActionsMixin:
 
     def _stream_process_output(self, proc, log_fn):
         """Read stdout line-by-line from *proc* and forward to *log_fn*."""
-        for line in iter(proc.stdout.readline, ''):
-            if not line:
-                break
-            if log_fn:
-                log_fn(line.strip())
+        for raw_line in iter(proc.stdout.readline, b''):
+            line = raw_line.decode('utf-8', errors='replace').strip()
+            if line and log_fn:
+                log_fn(line)
 
     def _on_install_complete(self, success: bool, check_dirs: list, success_text: str, fail_text: str, on_complete=None):
         """Update install button style and status after the install process finishes."""
@@ -240,14 +238,12 @@ class ActionsMixin:
     def _stream_start_output(self, proc, repo):
         """Read stdout line-by-line, detecting port/status patterns, until EOF."""
         try:
-            for line in iter(proc.stdout.readline, ''):
-                if not line:
-                    break
-                decoded_line = _ANSI_RE.sub('', line).strip()
-                self._detect_port_from_log(decoded_line)
-                self._detect_status_from_log(decoded_line)
+            for raw_line in iter(proc.stdout.readline, b''):
+                line = _ANSI_RE.sub('', raw_line.decode('utf-8', errors='replace')).strip()
+                self._detect_port_from_log(line)
+                self._detect_status_from_log(line)
                 if self._log:
-                    self._log(decoded_line)
+                    self._log(line)
         except (OSError, ValueError):
             pass  # Process killed — expected when stopping manually
 

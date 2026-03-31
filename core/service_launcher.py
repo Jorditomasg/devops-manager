@@ -79,16 +79,13 @@ class ServiceLauncher:
                 process = subprocess.Popen(
                     cmd_str, cwd=repo_path, env=env, shell=use_shell,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1,
                     creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
                 )
                 svc.process = process
 
-                for line in iter(process.stdout.readline, ''):
-                    if not line:
-                        break
-                    line = line.strip()
-                    if log:
+                for raw_line in iter(process.stdout.readline, b''):
+                    line = raw_line.decode('utf-8', errors='replace').strip()
+                    if line and log:
                         log(line)
 
                 try:

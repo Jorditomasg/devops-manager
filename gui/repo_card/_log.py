@@ -33,6 +33,8 @@ class LogMixin:
             self._detached_log_textbox.configure(state="disabled")
             self._detached_log_line_count[0] = 0
 
+        self._full_log_buffer.clear()
+        self._pre_panel_log_buffer.clear()
         self._has_logs = False
 
     def _detach_logs(self):
@@ -75,17 +77,18 @@ class LogMixin:
         )
         self._detached_log_textbox.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
-        # Copy current content (deferred so the window can render first)
+        # Snapshot the buffer now (main thread) to avoid races with incoming _insert callbacks
+        snapshot = list(self._full_log_buffer)
+
         def _copy_content():
-            if not hasattr(self, '_log_textbox'):
+            if not snapshot:
                 return
-            current_logs = self._log_textbox.get("1.0", "end")
+            content = "\n".join(snapshot)
             self._detached_log_textbox.configure(state="normal")
-            self._detached_log_textbox.insert("end", current_logs)
+            self._detached_log_textbox.insert("end", content + "\n")
             self._detached_log_textbox.configure(state="disabled")
             self._detached_log_textbox.see("end")
-            # Sync line counter with the copied content
-            self._detached_log_line_count[0] = self._log_line_count[0]
+            self._detached_log_line_count[0] = len(snapshot)
 
         self._detached_log_window.after(0, _copy_content)
 
@@ -100,6 +103,9 @@ class LogMixin:
 
         def _insert():
             self._has_logs = True
+            self._full_log_buffer.append(line)
+            if len(self._full_log_buffer) > LOG_MAX_LINES:
+                del self._full_log_buffer[0]
 
             if hasattr(self, '_log_textbox'):
                 insert_log_line(self._log_textbox, line, count_ref=self._log_line_count)

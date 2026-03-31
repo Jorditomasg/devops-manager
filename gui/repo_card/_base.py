@@ -74,6 +74,7 @@ class RepoCard(
         self._log_line_count = [0]          # mutable list ref for O(1) log trimming
         self._detached_log_line_count = [0]
         self._pre_panel_log_buffer: list = []   # log lines buffered before expand panel exists
+        self._full_log_buffer: list = []        # complete log history for detached window
         self._expand_panel_built = False
         self._pending_profile = None    # profile value set before expand panel exists
         self._pending_custom_command = ''  # custom command set before expand panel exists
