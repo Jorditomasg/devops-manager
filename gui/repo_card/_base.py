@@ -57,6 +57,7 @@ class RepoCard(
         self._is_installing = False
         self.selected_var = ctk.BooleanVar(value=True)
         self.selected_java_var = ctk.StringVar(value="Sistema (Por Defecto)")
+        self._branch_in_profile_var = ctk.BooleanVar(value=False)
 
         self._active_compose_files = set()
         self._docker_compose_buttons = {}
@@ -200,6 +201,9 @@ class RepoCard(
 
     def get_branch(self) -> str:
         return getattr(self, '_current_branch', '')
+
+    def get_branch_in_profile(self) -> bool:
+        return self._branch_in_profile_var.get()
 
     def get_name(self) -> str:
         return self._repo.name

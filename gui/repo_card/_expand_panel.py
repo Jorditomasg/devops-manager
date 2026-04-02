@@ -142,8 +142,16 @@ class ExpandPanelMixin:
             row, text="🔍", width=28,
             command=self._fetch_branches, **theme.btn_style("log_action")
         )
-        search_btn.pack(side="left", padx=(0, 10))
+        search_btn.pack(side="left", padx=(0, 6))
         ToolTip(search_btn, t("tooltip.fetch_branches"))
+
+        branch_chk = ctk.CTkCheckBox(
+            row, text="", variable=self._branch_in_profile_var,
+            width=20,
+            checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size,
+        )
+        branch_chk.pack(side="left", padx=(0, 10))
+        ToolTip(branch_chk, t("tooltip.branch_in_profile"))
 
     def _build_install_btn(self, parent):
         """Build the general install button (Install or Reinstall) based on UI Config."""

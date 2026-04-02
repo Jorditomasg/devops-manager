@@ -139,7 +139,7 @@ def _build_single_repo_profile(card, include_config_files: bool) -> tuple[str, d
     repo = card.get_repo_info()
     repo_data = {
         'git_url': repo.git_remote_url or '',
-        'branch': card.get_branch(),
+        'branch': card.get_branch() if card.get_branch_in_profile() else None,
         'type': repo.repo_type,
         'profile': card.get_current_profile(),
         'custom_command': card.get_custom_command(),

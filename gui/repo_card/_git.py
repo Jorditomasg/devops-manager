@@ -19,23 +19,27 @@ class GitMixin:
         self._badge_timer = self.after(BADGE_REFRESH_MS, self._refresh_badge_loop)
 
     def _refresh_badge(self, event=None):
-        """Count modified files and update the badge label."""
+        """Count modified files and update the badge label. Also detects external branch changes."""
         def _run():
             if not self._GIT_BADGE_SEMAPHORE.acquire(blocking=False):
                 return  # Too many concurrent git calls — skip this cycle
             try:
-                from core.git_manager import count_modified_files
+                from core.git_manager import count_modified_files, get_current_branch
                 count = count_modified_files(self._repo.path)
-                if count > 0:
-                    def _update():
-                        if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
-                            self._changes_count_label.configure(text=f"📝 {count}")
-                    self.after(0, _update)
-                else:
-                    def _update():
-                        if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
-                            self._changes_count_label.configure(text="")
-                    self.after(0, _update)
+                current = get_current_branch(self._repo.path)
+
+                def _update():
+                    if not self.winfo_exists():
+                        return
+                    if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
+                        self._changes_count_label.configure(text=f"📝 {count}" if count > 0 else "")
+                    if current and current != self._current_branch:
+                        self._current_branch = current
+                        if hasattr(self, '_branch_combo'):
+                            self._branch_combo.set(current)
+                        self._update_header_hints()
+
+                self.after(0, _update)
             finally:
                 self._GIT_BADGE_SEMAPHORE.release()
         threading.Thread(target=_run, daemon=True).start()
