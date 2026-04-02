@@ -159,7 +159,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._path_label.pack(side="left", padx=10, fill="x", expand=True)
         self._path_label.bind("<Button-1>", lambda e: self._open_workspace())
         self._path_label.bind("<Configure>", self._update_path_label)
-        ToolTip(self._path_label, t("tooltip.workspace_dir", path=self._workspace_dir))
+        self._path_tooltip = ToolTip(self._path_label, t("tooltip.workspace_dir", path=self._workspace_dir))
 
     def _build_topbar_buttons(self, topbar):
         """Build the right-side action buttons in the top bar."""
@@ -599,6 +599,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
         if settings.get('workspace_dir') and settings['workspace_dir'] != self._workspace_dir:
             self._workspace_dir = settings['workspace_dir']
+            self._update_path_label()
+            self._path_tooltip.update_text(t("tooltip.workspace_dir", path=self._workspace_dir))
             self._scan_repos()
 
     def _propagate_settings_to_cards(self, settings: dict):
