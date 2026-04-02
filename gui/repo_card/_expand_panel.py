@@ -149,6 +149,7 @@ class ExpandPanelMixin:
             row, text="", variable=self._branch_in_profile_var,
             width=20,
             checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size,
+            command=self._trigger_change_callback,
         )
         branch_chk.pack(side="left", padx=(0, 10))
         ToolTip(branch_chk, t("tooltip.branch_in_profile"))

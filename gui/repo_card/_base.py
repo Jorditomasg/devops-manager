@@ -205,6 +205,9 @@ class RepoCard(
     def get_branch_in_profile(self) -> bool:
         return self._branch_in_profile_var.get()
 
+    def set_branch_in_profile(self, value: bool):
+        self._branch_in_profile_var.set(value)
+
     def get_name(self) -> str:
         return self._repo.name
 

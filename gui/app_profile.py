@@ -158,8 +158,17 @@ class ProfileManagerMixin:
             return True
         card = card_by_name[r_name]
 
-        if card.get_branch() != t_cfg.get('branch'):
-            return True
+        saved_branch = t_cfg.get('branch')
+        if saved_branch is None:
+            # Branch excluded from profile when saved — dirty if checkbox is now on
+            if card.get_branch_in_profile():
+                return True
+        else:
+            # Branch tracked when saved — dirty if checkbox is now off, or branch changed
+            if not card.get_branch_in_profile():
+                return True
+            if card.get_branch() != saved_branch:
+                return True
         cur_prof = card.get_current_profile()
         tgt_prof = t_cfg.get('profile')
         if not cur_prof and not tgt_prof:
@@ -213,9 +222,12 @@ class ProfileManagerMixin:
 
     def _apply_config_to_card(self, card, config: dict):
         """Apply a single repo config to a card."""
-        branch = config.get('branch', '')
+        branch = config.get('branch')
         if branch:
             card.set_branch(branch)
+            card.set_branch_in_profile(True)
+        else:
+            card.set_branch_in_profile(False)
         profile = config.get('profile')
         if profile is not None:
             card.set_profile(profile)
