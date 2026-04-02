@@ -83,6 +83,7 @@ dialog.clone.title: "Clone Repository"
 dialog.profile.title: "Saved Configurations"
 dialog.confirm_close.title: "Services running"
 dialog.reinstall.title: "Reinstall"
+dialog.global_log.title: "Global Log - DevOps Manager"
 
 # ── Dialog — Confirm close ────────────────────────────────────────────────────
 dialog.confirm_close.message_one: "There is 1 service running.\nDo you want to close the application anyway?"

@@ -320,7 +320,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             self._global_log_frame.pack_forget()
             
         self._detached_global_log_window = ctk.CTkToplevel(self)
-        self._detached_global_log_window.title("Log Global - DevOps Manager")
+        self._detached_global_log_window.title(t("dialog.global_log.title"))
         self._detached_global_log_window.geometry("800x600")
 
         # Set window icon matching the current app icon color
