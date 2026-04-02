@@ -601,7 +601,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         if event.widget != self:
             return
 
-        if self.state() == 'iconic':
+        if self.state() == 'iconic' and self._settings.get('minimize_to_tray', True):
             self.withdraw()
             
             # Recreate the tray icon to avoid state issues

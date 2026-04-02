@@ -1,4 +1,4 @@
-"""settings.py — SettingsDialog, JavaVersionEditorDialog."""
+"""settings.py — SettingsDialog, JavaVersionsManagerDialog, JavaVersionEditorDialog."""
 import os
 import sys
 import tkinter as tk
@@ -7,79 +7,91 @@ import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
 from gui import theme
+from gui.tooltip import ToolTip
 from core.i18n import t, list_available_languages
+
+_LABEL_W = 155  # fixed width for left-column labels in the form
 
 
 class SettingsDialog(BaseDialog):
-    """General settings dialog."""
+    """General settings dialog — single-card form layout."""
 
     def __init__(self, parent, settings: dict, on_save=None):
-        super().__init__(parent, t("dialog.settings.title"), 600, 550)
-        # This dialog is resizable (override BaseDialog's fixed size)
-        self.resizable(True, True)
-        self.minsize(500, 400)
+        super().__init__(parent, t("dialog.settings.title"), 580, 100)
+        self.resizable(True, False)  # horizontal resize only; height auto-fits
 
         self._settings = settings
         self._on_save = on_save
         self._java_versions = dict(settings.get('java_versions', {}))
 
         self._build_save_bar()
-        self._build_main_container()
+        self._build_form()
+
+        # Auto-fit height to content after widgets are laid out
+        self.update_idletasks()
+        self.geometry(f"580x{self.winfo_reqheight()}")
+
+    # ── Save bar ──────────────────────────────────────────────────────────────
 
     def _build_save_bar(self):
-        """Build the fixed bottom save/cancel bar."""
-        self._save_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self._save_frame.pack(side="bottom", fill="x", padx=20, pady=15)
+        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar.pack(side="bottom", fill="x", padx=20, pady=12)
 
         ctk.CTkButton(
-            self._save_frame, text=t("btn.save_changes"),
+            bar, text=t("btn.save_changes"),
             command=self._save, **theme.btn_style("success", width=150, height="lg", font_size="lg")
         ).pack(side="right")
 
         ctk.CTkButton(
-            self._save_frame, text=t("btn.cancel"),
+            bar, text=t("btn.cancel"),
             command=self.destroy, **theme.btn_style("neutral", width=100, height="lg", font_size="lg")
-        ).pack(side="right", padx=(0, 15))
+        ).pack(side="right", padx=(0, 12))
 
-    def _build_main_container(self):
-        """Build scrollable container with title and all section frames."""
-        self._main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
+    # ── Form (single card) ────────────────────────────────────────────────────
 
-        ctk.CTkLabel(self._main_scroll, text=t("dialog.settings.main_title"),
-                     font=theme.font("h1", bold=True), text_color=theme.C.text_primary).pack(pady=(15, 20))
+    def _build_form(self):
+        outer = ctk.CTkFrame(self, fg_color="transparent")
+        outer.pack(fill="both", expand=True, padx=10, pady=(8, 0))
 
-        self._build_section(self._build_language_section)
-        self._build_section(self._build_workspace_section)
-        self._build_section(self._build_java_section)
-        self._build_section(self._build_shortcut_section)
-
-    def _build_section(self, builder_fn):
-        """Create a themed section frame and pass it to the given builder function."""
-        frame = ctk.CTkFrame(
-            self._main_scroll, fg_color=theme.C.section,
+        card = ctk.CTkFrame(
+            outer, fg_color=theme.C.section,
             corner_radius=theme.G.corner_card,
             border_width=theme.G.border_width,
-            border_color=theme.C.settings_border
+            border_color=theme.C.settings_border,
         )
-        frame.pack(fill="x", padx=10, pady=(0, 15))
-        builder_fn(frame)
+        card.pack(fill="x")
 
-    # ── Section builders ──────────────────────────────────────────────────────
+        self._build_lang_row(card)
+        self._divider(card)
+        self._build_workspace_row(card)
+        self._divider(card)
+        self._build_behavior_row(card)
+        self._divider(card)
+        self._build_shortcut_row(card)
+        self._divider(card)
+        self._build_java_row(card)
 
-    def _build_language_section(self, frame):
-        """Build the language selector section."""
-        lang_header = ctk.CTkFrame(frame, fg_color="transparent")
-        lang_header.pack(fill="x", padx=15, pady=(15, 0))
+    def _divider(self, parent):
+        ctk.CTkFrame(parent, height=1, fg_color=theme.C.subtle_border).pack(fill="x", padx=12)
+
+    def _row(self, parent):
+        """Create a horizontal form row and return it."""
+        r = ctk.CTkFrame(parent, fg_color="transparent")
+        r.pack(fill="x", padx=0)
+        return r
+
+    def _row_label(self, row, key):
+        """Add the left-column label to a row."""
         ctk.CTkLabel(
-            lang_header, text=t("dialog.settings.language_title"),
-            font=theme.font("xl", bold=True), text_color=theme.C.text_primary
-        ).pack(side="left")
-        ctk.CTkLabel(
-            frame,
-            text=t("dialog.settings.language_desc"),
-            font=theme.font("md"), text_color=theme.C.text_muted
-        ).pack(anchor="w", padx=15, pady=(2, 12))
+            row, text=t(key), width=_LABEL_W, anchor="w",
+            font=theme.font("md", bold=True), text_color=theme.C.text_primary,
+        ).pack(side="left", padx=(14, 0), pady=10)
+
+    # ── Row builders ──────────────────────────────────────────────────────────
+
+    def _build_lang_row(self, card):
+        row = self._row(card)
+        self._row_label(row, "dialog.settings.language_title")
 
         self._languages = list_available_languages()
         lang_names = [lang["name"] for lang in self._languages]
@@ -88,106 +100,86 @@ class SettingsDialog(BaseDialog):
             (l["name"] for l in self._languages if l["code"] == current_code),
             lang_names[0] if lang_names else "English"
         )
-
         self._lang_combo = ctk.CTkComboBox(
-            frame, values=lang_names, width=200, state="readonly",
-            **theme.combo_style()
+            row, values=lang_names, width=190, state="readonly", **theme.combo_style()
         )
         self._lang_combo.set(current_name)
-        self._lang_combo.pack(anchor="w", padx=15, pady=(0, 15))
+        self._lang_combo.pack(side="left")
+        ToolTip(self._lang_combo, t("dialog.settings.language_desc"))
 
-    def _build_workspace_section(self, frame):
-        """Build the workspace folder row."""
-        ws_header = ctk.CTkFrame(frame, fg_color="transparent")
-        ws_header.pack(fill="x", padx=15, pady=(15, 0))
-        ctk.CTkLabel(
-            ws_header, text=t("dialog.settings.workspace_title"),
-            font=theme.font("xl", bold=True), text_color=theme.C.text_primary
-        ).pack(side="left")
-        ctk.CTkLabel(
-            frame,
-            text=t("dialog.settings.workspace_desc"),
-            font=theme.font("md"), text_color=theme.C.text_muted
-        ).pack(anchor="w", padx=15, pady=(2, 12))
-
-        dir_inner = ctk.CTkFrame(frame, fg_color="transparent")
-        dir_inner.pack(fill="x", padx=15, pady=(0, 15))
+    def _build_workspace_row(self, card):
+        row = self._row(card)
+        self._row_label(row, "dialog.settings.workspace_title")
 
         self._workspace_entry = ctk.CTkEntry(
-            dir_inner, height=32,
+            row, height=32,
             font=theme.font("base", mono=True),
             fg_color=theme.C.section_alt,
-            border_color=theme.C.subtle_border
+            border_color=theme.C.subtle_border,
         )
         self._workspace_entry.pack(side="left", fill="x", expand=True)
         self._workspace_entry.insert(0, self._settings.get('workspace_dir', ''))
 
         ctk.CTkButton(
-            dir_inner, text=t("btn.browse"),
+            row, text=t("btn.browse"),
             command=self._browse_dir, **theme.btn_style("blue", width=80)
-        ).pack(side="left", padx=(10, 0))
+        ).pack(side="left", padx=(8, 14))
 
-    def _build_java_section(self, frame):
-        """Build the Java version list + buttons."""
-        java_header = ctk.CTkFrame(frame, fg_color="transparent")
-        java_header.pack(fill="x", padx=15, pady=(15, 0))
-        ctk.CTkLabel(
-            java_header, text=t("dialog.settings.java_title"),
-            font=theme.font("xl", bold=True), text_color=theme.C.text_primary
-        ).pack(side="left")
-        ctk.CTkLabel(
-            frame,
-            text=t("dialog.settings.java_desc"),
-            font=theme.font("md"), text_color=theme.C.text_muted
-        ).pack(anchor="w", padx=15, pady=(2, 12))
+    def _build_behavior_row(self, card):
+        row = self._row(card)
+        self._row_label(row, "dialog.settings.behavior_title")
 
-        self._java_list_frame = ctk.CTkScrollableFrame(
-            frame, height=80,
-            fg_color=theme.C.section_alt,
-            border_width=theme.G.border_width,
-            border_color=theme.C.subtle_border
+        self._minimize_to_tray_var = ctk.BooleanVar(value=self._settings.get('minimize_to_tray', True))
+        ctk.CTkCheckBox(
+            row, text=t("dialog.settings.minimize_to_tray"),
+            variable=self._minimize_to_tray_var,
+            font=theme.font("md"),
+            checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size,
+        ).pack(side="left", padx=(0, 14))
+
+    def _build_shortcut_row(self, card):
+        row = self._row(card)
+        self._row_label(row, "dialog.settings.shortcut_title")
+
+        btn = ctk.CTkButton(
+            row, text=t("btn.create_shortcut"),
+            command=self._create_shortcut, **theme.btn_style("blue", width=260)
         )
-        self._java_list_frame.pack(fill="x", padx=15, pady=(0, 10))
-        self._refresh_java_list()
+        btn.pack(side="left")
+        ToolTip(btn, t("dialog.settings.shortcut_desc"))
 
-        java_add_row = ctk.CTkFrame(frame, fg_color="transparent")
-        java_add_row.pack(fill="x", padx=15, pady=(0, 15))
-
-        ctk.CTkButton(
-            java_add_row, text=t("btn.add_java"),
-            command=self._add_java_version, **theme.btn_style("success", width=130)
-        ).pack(side="left")
+    def _build_java_row(self, card):
+        row = self._row(card)
+        self._row_label(row, "dialog.settings.java_title")
 
         ctk.CTkButton(
-            java_add_row, text=t("btn.autodetect_java"),
-            command=self._auto_detect_java, **theme.btn_style("purple", width=140)
-        ).pack(side="left", padx=(10, 0))
-
-    def _build_shortcut_section(self, frame):
-        """Build the shortcut creation buttons."""
-        sc_header = ctk.CTkFrame(frame, fg_color="transparent")
-        sc_header.pack(fill="x", padx=15, pady=(15, 0))
-        ctk.CTkLabel(
-            sc_header, text=t("dialog.settings.shortcut_title"),
-            font=theme.font("xl", bold=True), text_color=theme.C.text_primary
+            row, text=t("btn.manage_java"),
+            command=self._open_java_manager, **theme.btn_style("purple", width=200)
         ).pack(side="left")
-        ctk.CTkLabel(
-            frame,
-            text=t("dialog.settings.shortcut_desc"),
-            font=theme.font("md"), text_color=theme.C.text_muted
-        ).pack(anchor="w", padx=15, pady=(2, 12))
 
-        sc_btn_row = ctk.CTkFrame(frame, fg_color="transparent")
-        sc_btn_row.pack(fill="x", padx=15, pady=(0, 15))
-        ctk.CTkButton(
-            sc_btn_row, text=t("btn.create_shortcut"),
-            command=self._create_shortcut, **theme.btn_style("blue", width=280)
-        ).pack(side="left")
+        self._java_count_label = ctk.CTkLabel(
+            row, text=self._java_count_text(),
+            font=theme.font("sm"), text_color=theme.C.text_muted, anchor="w",
+        )
+        self._java_count_label.pack(side="left", padx=(10, 14))
+
+    def _java_count_text(self) -> str:
+        n = len(self._java_versions)
+        if n == 0:
+            return t("dialog.settings.java_none_configured")
+        return t("dialog.settings.java_n_configured", count=n)
+
+    def _open_java_manager(self):
+        def _on_done(versions: dict):
+            self._java_versions = versions
+            self._java_count_label.configure(text=self._java_count_text())
+
+        JavaVersionsManagerDialog(self, self._java_versions, on_done=_on_done)
 
     # ── Shortcut creation ─────────────────────────────────────────────────────
 
     def _create_shortcut(self):
-        """Create a Desktop shortcut pointing to run.bat with the app icon (ctypes, no PowerShell)."""
+        """Create a Desktop shortcut that launches via wscript.exe + run.vbs (no console window)."""
         if sys.platform != 'win32':
             messagebox.showinfo(t("misc.warning_title"), t("dialog.settings.shortcut_unavailable"), parent=self)
             return
@@ -196,24 +188,26 @@ class SettingsDialog(BaseDialog):
             if not app_dir:
                 messagebox.showerror("Error", t("dialog.settings.shortcut_error"), parent=self)
                 return
-            run_bat = os.path.join(app_dir, "scripts", "run.bat")
+            run_vbs = os.path.join(app_dir, "scripts", "run.vbs")
             icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
 
-            # Resolve real Desktop path (handles OneDrive-redirected desktops)
+            windir = os.environ.get('WINDIR', r'C:\Windows')
+            wscript = os.path.join(windir, 'System32', 'wscript.exe')
+            arguments = f'/nologo "{run_vbs}"'
+
             import ctypes
             buf = ctypes.create_unicode_buffer(260)
-            ctypes.windll.shell32.SHGetFolderPathW(None, 0, None, 0, buf)  # CSIDL_DESKTOP = 0
+            ctypes.windll.shell32.SHGetFolderPathW(None, 0, None, 0, buf)
             desktop = buf.value or os.path.join(os.path.expanduser("~"), "Desktop")
             lnk_path = os.path.join(desktop, "DevOps Manager.lnk")
 
-            self._create_lnk_ctypes(run_bat, lnk_path, icon_path, app_dir, "DevOps Manager")
+            self._create_lnk_ctypes(wscript, lnk_path, icon_path, app_dir, "DevOps Manager", arguments)
             messagebox.showinfo(t("dialog.settings.shortcut_success_title"), t("dialog.settings.shortcut_success_msg", path=lnk_path), parent=self)
         except Exception as e:
             messagebox.showerror("Error", str(e), parent=self)
 
     @staticmethod
     def _guid_from_str(s, GUID, ctypes):
-        """Parse a GUID string like '{XXXXXXXX-...}' into a GUID struct."""
         s = s.strip('{}').replace('-', '')
         g = GUID()
         g.Data1 = int(s[0:8], 16)
@@ -226,7 +220,6 @@ class SettingsDialog(BaseDialog):
 
     @staticmethod
     def _build_shell_link_object(ole32, GUID, guid_from_str, ctypes):
-        """Create the IShellLinkW COM object and return (ppsl, vtbl, str_method, get_vtbl, IID_IShellLinkW)."""
         from ctypes import byref
         CLSID_ShellLink = guid_from_str('{00021401-0000-0000-C000-000000000046}')
         IID_IShellLinkW = guid_from_str('{000214F9-0000-0000-C000-000000000046}')
@@ -234,7 +227,7 @@ class SettingsDialog(BaseDialog):
         ole32.CoInitialize(None)
         ppsl = ctypes.c_void_p(None)
         hr = ole32.CoCreateInstance(
-            byref(CLSID_ShellLink), None, 1,  # CLSCTX_INPROC_SERVER
+            byref(CLSID_ShellLink), None, 1,
             byref(IID_IShellLinkW), byref(ppsl)
         )
         if hr != 0:
@@ -252,18 +245,17 @@ class SettingsDialog(BaseDialog):
         return ppsl, vtbl, str_method, get_vtbl, IID_IShellLinkW
 
     @staticmethod
-    def _set_link_properties(ppsl, vtbl, str_method, target_path, working_dir, description, icon_path, ctypes):
-        """Set IShellLinkW properties: path, working dir, description, icon."""
-        # IShellLinkW vtable (IUnknown: 0-2, then):
-        # 7=SetDescription, 9=SetWorkingDirectory, 17=SetIconLocation, 20=SetPath
+    def _set_link_properties(ppsl, vtbl, str_method, target_path, working_dir, description, icon_path, ctypes, arguments=''):
+        # IShellLinkW vtable: 7=SetDescription, 9=SetWorkingDirectory, 11=SetArguments, 17=SetIconLocation, 20=SetPath
         str_method(20)(ppsl, target_path)
+        if arguments:
+            str_method(11)(ppsl, arguments)
         str_method(9)(ppsl, working_dir)
         str_method(7)(ppsl, description)
         ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int)(vtbl[17])(ppsl, icon_path, 0)
 
     @staticmethod
-    def _create_lnk_ctypes(target_path, lnk_path, icon_path, working_dir, description):
-        """Create a Windows .lnk shortcut via IShellLink COM using ctypes only (no subprocess)."""
+    def _create_lnk_ctypes(target_path, lnk_path, icon_path, working_dir, description, arguments=''):
         import ctypes
         from ctypes import byref, POINTER
 
@@ -287,10 +279,9 @@ class SettingsDialog(BaseDialog):
                 ole32, GUID, guid_from_str, ctypes
             )
             SettingsDialog._set_link_properties(
-                ppsl, vtbl, str_method, target_path, working_dir, description, icon_path, ctypes
+                ppsl, vtbl, str_method, target_path, working_dir, description, icon_path, ctypes, arguments
             )
 
-            # QueryInterface → IPersistFile
             pppf = ctypes.c_void_p(None)
             fn_qi = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, POINTER(GUID), POINTER(ctypes.c_void_p))(vtbl[0])
             hr = fn_qi(ppsl, byref(IID_IPersistFile), byref(pppf))
@@ -298,108 +289,17 @@ class SettingsDialog(BaseDialog):
                 raise OSError(f'QI IPersistFile falló: 0x{hr & 0xFFFFFFFF:08X}')
 
             vtbl_pf = get_vtbl(pppf)
-
-            # IPersistFile vtable (IUnknown:0-2, IPersist:3, then): 4=IsDirty, 5=Load, 6=Save
             fn_save = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int)(vtbl_pf[6])
             hr = fn_save(pppf, lnk_path, 1)
             if hr != 0:
                 raise OSError(f'IPersistFile::Save falló: 0x{hr & 0xFFFFFFFF:08X}')
 
-            # Release
             ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl_pf[2])(pppf)
             ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])(ppsl)
         finally:
             ole32.CoUninitialize()
 
-    # ── Java version management ───────────────────────────────────────────────
-
-    def _refresh_java_list(self):
-        """Rebuild the java versions list display."""
-        for widget in self._java_list_frame.winfo_children():
-            widget.destroy()
-
-        if not self._java_versions:
-            ctk.CTkLabel(
-                self._java_list_frame,
-                text=t("dialog.settings.java_no_versions"),
-                font=theme.font("sm"), text_color=theme.C.text_placeholder
-            ).pack(pady=5)
-            return
-
-        for name, path in self._java_versions.items():
-            row = ctk.CTkFrame(self._java_list_frame, fg_color="transparent")
-            row.pack(fill="x", pady=2)
-
-            ctk.CTkLabel(
-                row, text=f"☕ {name}",
-                font=theme.font("md", bold=True), width=120, anchor="w"
-            ).pack(side="left")
-
-            path_display = path
-            if len(path_display) > 35:
-                path_display = path_display[:32] + '...'
-            ctk.CTkLabel(
-                row, text=path_display,
-                font=theme.font("xs", mono=True), text_color=theme.C.text_placeholder, anchor="w"
-            ).pack(side="left", padx=(5, 0), fill="x", expand=True)
-
-            ctk.CTkButton(
-                row, text="✏", width=28,
-                command=lambda n=name: self._edit_java(n),
-                **theme.btn_style("warning", height="sm")
-            ).pack(side="right", padx=(2, 0))
-
-            ctk.CTkButton(
-                row, text="🗑", width=28,
-                command=lambda n=name: self._delete_java(n),
-                **theme.btn_style("danger_deep", height="sm")
-            ).pack(side="right")
-
-    def _auto_detect_java(self):
-        """Auto-detect Java installations and add them to the list."""
-        from core.java_manager import auto_detect_java_paths
-        found = auto_detect_java_paths()
-        added_count = 0
-        for name, path in found.items():
-            # Avoid overwriting existing custom paths with identical names if they exist
-            if name not in self._java_versions and path not in self._java_versions.values():
-                self._java_versions[name] = path
-                added_count += 1
-
-        self._refresh_java_list()
-
-        if added_count > 0:
-            messagebox.showinfo(t("dialog.settings.java_detected_title"), t("dialog.settings.java_detected_msg", added_count=added_count))
-        else:
-            res = messagebox.askyesno(
-                t("dialog.settings.java_not_found_title"),
-                t("dialog.settings.java_not_found_msg")
-            )
-            if res:
-                self._add_java_version()
-
-    def _add_java_version(self):
-        """Open the Java Version Editor dialog to add a new version."""
-        JavaVersionEditorDialog(self, on_save=self._on_java_saved)
-
-    def _edit_java(self, name: str):
-        """Open the Java Version Editor dialog to edit an existing version."""
-        path = self._java_versions.get(name, "")
-        JavaVersionEditorDialog(self, version_name=name, version_path=path,
-                                on_save=self._on_java_saved)
-
-    def _on_java_saved(self, name: str, path: str):
-        """Callback when a Java version is saved."""
-        self._java_versions[name] = path
-        self._refresh_java_list()
-
-    def _delete_java(self, name: str):
-        """Delete a Java version."""
-        if messagebox.askyesno(t("dialog.settings.java_delete_title"), t("dialog.settings.java_delete_msg", name=name)):
-            del self._java_versions[name]
-            self._refresh_java_list()
-
-    # ── Workspace / save ──────────────────────────────────────────────────────
+    # ── Save ──────────────────────────────────────────────────────────────────
 
     def _browse_dir(self):
         d = filedialog.askdirectory(title=t("dialog.settings.workspace_select_title"))
@@ -408,7 +308,6 @@ class SettingsDialog(BaseDialog):
             self._workspace_entry.insert(0, d)
 
     def _save(self):
-        # Persist language selection
         selected_name = self._lang_combo.get() if hasattr(self, '_lang_combo') else None
         if selected_name:
             selected_lang = next((l for l in self._languages if l["name"] == selected_name), None)
@@ -418,37 +317,153 @@ class SettingsDialog(BaseDialog):
                 self._settings["language"] = new_code
 
                 if new_code != old_code:
-                    # Load the NEW language temporarily to show restart message IN that language
                     from core.i18n import _load_yaml, _TRANSLATIONS_DIR
                     import os as _os
                     new_path = _os.path.join(_TRANSLATIONS_DIR, f"{new_code}.yml")
                     new_strings = _load_yaml(new_path)
                     restart_title = new_strings.get("dialog.settings.language_restart_title", "Restart required")
-                    restart_msg = new_strings.get("dialog.settings.language_restart_msg", "Restart the application for changes to take effect.")
+                    restart_msg = new_strings.get("dialog.settings.language_restart_msg", "Restart the application.")
                     try:
                         restart_msg = restart_msg.format(name=selected_lang["name"])
                     except (KeyError, ValueError):
                         pass
                     messagebox.showinfo(restart_title, restart_msg, parent=self)
 
-        # Persist workspace and java
         self._settings['workspace_dir'] = self._workspace_entry.get().strip()
         self._settings['java_versions'] = self._java_versions
+        self._settings['minimize_to_tray'] = self._minimize_to_tray_var.get()
         if self._on_save:
             self._on_save(self._settings)
         self.destroy()
 
-    def _open_profile_manager(self):
-        if hasattr(self.master, '_show_configs'):
-            self.master._show_configs()
-            self.destroy()
+
+class JavaVersionsManagerDialog(BaseDialog):
+    """Modal for managing the list of registered Java versions."""
+
+    def __init__(self, parent, java_versions: dict, on_done=None):
+        super().__init__(parent, t("dialog.settings.java_title"), 560, 380)
+        self.resizable(True, True)
+        self.minsize(420, 280)
+
+        self._java_versions = dict(java_versions)
+        self._on_done = on_done
+
+        self._build_ui()
+
+    def _build_ui(self):
+        # Close / apply bar
+        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar.pack(side="bottom", fill="x", padx=16, pady=12)
+
+        ctk.CTkButton(
+            bar, text=t("btn.close"),
+            command=self._close, **theme.btn_style("success", width=120)
+        ).pack(side="right")
+
+        ctk.CTkButton(
+            bar, text=t("btn.autodetect_java"),
+            command=self._auto_detect, **theme.btn_style("purple", width=150)
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            bar, text=t("btn.add_java"),
+            command=self._add, **theme.btn_style("neutral", width=130)
+        ).pack(side="left", padx=(8, 0))
+
+        # List
+        self._list_frame = ctk.CTkScrollableFrame(
+            self, fg_color=theme.C.section_alt,
+            border_width=theme.G.border_width,
+            border_color=theme.C.subtle_border,
+        )
+        self._list_frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
+        self._refresh()
+
+    def _refresh(self):
+        for w in self._list_frame.winfo_children():
+            w.destroy()
+
+        if not self._java_versions:
+            ctk.CTkLabel(
+                self._list_frame,
+                text=t("dialog.settings.java_no_versions"),
+                font=theme.font("sm"), text_color=theme.C.text_placeholder,
+            ).pack(pady=10)
+            return
+
+        for name, path in self._java_versions.items():
+            row = ctk.CTkFrame(self._list_frame, fg_color="transparent")
+            row.pack(fill="x", pady=3)
+
+            ctk.CTkLabel(
+                row, text=f"☕ {name}",
+                font=theme.font("md", bold=True), width=130, anchor="w",
+            ).pack(side="left")
+
+            path_display = path if len(path) <= 38 else path[:35] + '...'
+            ctk.CTkLabel(
+                row, text=path_display,
+                font=theme.font("xs", mono=True), text_color=theme.C.text_placeholder, anchor="w",
+            ).pack(side="left", padx=(4, 0), fill="x", expand=True)
+
+            ctk.CTkButton(
+                row, text="✏", width=28,
+                command=lambda n=name: self._edit(n),
+                **theme.btn_style("warning", height="sm")
+            ).pack(side="right", padx=(2, 0))
+
+            ctk.CTkButton(
+                row, text="🗑", width=28,
+                command=lambda n=name: self._delete(n),
+                **theme.btn_style("danger_deep", height="sm")
+            ).pack(side="right")
+
+    def _add(self):
+        JavaVersionEditorDialog(self, on_save=self._on_saved)
+
+    def _edit(self, name: str):
+        JavaVersionEditorDialog(self, version_name=name,
+                                version_path=self._java_versions.get(name, ''),
+                                on_save=self._on_saved)
+
+    def _on_saved(self, name: str, path: str):
+        self._java_versions[name] = path
+        self._refresh()
+
+    def _delete(self, name: str):
+        if messagebox.askyesno(t("dialog.settings.java_delete_title"),
+                               t("dialog.settings.java_delete_msg", name=name), parent=self):
+            del self._java_versions[name]
+            self._refresh()
+
+    def _auto_detect(self):
+        from core.java_manager import auto_detect_java_paths
+        found = auto_detect_java_paths()
+        added_count = 0
+        for n, p in found.items():
+            if n not in self._java_versions and p not in self._java_versions.values():
+                self._java_versions[n] = p
+                added_count += 1
+        self._refresh()
+
+        if added_count > 0:
+            messagebox.showinfo(t("dialog.settings.java_detected_title"),
+                                t("dialog.settings.java_detected_msg", added_count=added_count), parent=self)
+        else:
+            if messagebox.askyesno(t("dialog.settings.java_not_found_title"),
+                                   t("dialog.settings.java_not_found_msg"), parent=self):
+                self._add()
+
+    def _close(self):
+        if self._on_done:
+            self._on_done(self._java_versions)
+        self.destroy()
 
 
 class JavaVersionEditorDialog(BaseDialog):
-    """Dialog for adding/editing a Java version configuration."""
+    """Dialog for adding/editing a single Java version."""
 
-    def __init__(self, parent, version_name: str = '', version_path: str = '',
-                 on_save=None):
+    def __init__(self, parent, version_name: str = '', version_path: str = '', on_save=None):
         title = t("dialog.settings.java_edit_title") if version_name else t("dialog.settings.java_new_title")
         super().__init__(parent, title, 520, 220)
 
@@ -461,7 +476,6 @@ class JavaVersionEditorDialog(BaseDialog):
         form.pack(fill="x", padx=20)
         self._build_fields(form, version_name, version_path)
 
-        # Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=15)
 
@@ -476,8 +490,6 @@ class JavaVersionEditorDialog(BaseDialog):
         ).pack(side="right")
 
     def _build_fields(self, form, version_name: str, version_path: str):
-        """Build the form fields for Java version name and JAVA_HOME path."""
-        # Name
         ctk.CTkLabel(form, text=t("dialog.settings.java_field_name"), font=theme.font("md"),
                      width=80, anchor="w").grid(row=0, column=0, pady=4, sticky="w")
         self._name_entry = ctk.CTkEntry(form, width=380, placeholder_text=t("dialog.settings.java_name_placeholder"))
@@ -485,7 +497,6 @@ class JavaVersionEditorDialog(BaseDialog):
         if version_name:
             self._name_entry.insert(0, version_name)
 
-        # Path (JAVA_HOME)
         ctk.CTkLabel(form, text=t("dialog.settings.java_field_path"), font=theme.font("md"),
                      width=80, anchor="w").grid(row=1, column=0, pady=4, sticky="w")
         self._path_entry = ctk.CTkEntry(form, width=330, placeholder_text=t("dialog.settings.java_path_placeholder"))
@@ -493,33 +504,30 @@ class JavaVersionEditorDialog(BaseDialog):
         if version_path:
             self._path_entry.insert(0, version_path)
 
-        def _browse_path():
+        def _browse():
             d = filedialog.askdirectory(title=t("dialog.settings.java_dir_title"))
             if d:
                 self._path_entry.delete(0, "end")
                 self._path_entry.insert(0, d)
 
-        ctk.CTkButton(
-            form, text="📁", width=40,
-            command=_browse_path, **theme.btn_style("blue")
-        ).grid(row=1, column=2, padx=(10, 0))
+        ctk.CTkButton(form, text="📁", width=40, command=_browse,
+                      **theme.btn_style("blue")).grid(row=1, column=2, padx=(10, 0))
 
     def _save(self):
         name = self._name_entry.get().strip()
         path = self._path_entry.get().strip()
 
         if not name:
-            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_name_required"))
+            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_name_required"), parent=self)
             return
-
         if not path or not os.path.isdir(path):
-            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_path_required"))
+            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_path_required"), parent=self)
             return
 
-        # Simple heuristic to make sure it looks like a valid JAVA_HOME
         java_exe = os.path.join(path, "bin", "java.exe" if os.name == 'nt' else "java")
         if not os.path.isfile(java_exe):
-            if not messagebox.askyesno(t("dialog.settings.java_exe_warn_title"), t("dialog.settings.java_exe_warn_msg", java_exe=java_exe)):
+            if not messagebox.askyesno(t("dialog.settings.java_exe_warn_title"),
+                                       t("dialog.settings.java_exe_warn_msg", java_exe=java_exe), parent=self):
                 return
 
         if self._on_save:
