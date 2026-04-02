@@ -41,7 +41,7 @@ class ExpandPanelMixin:
 
         # Docker status prefetch — runs once on first expand, not at startup
         if getattr(self._repo, 'docker_compose_files', None):
-            self.after(0, self._prefetch_docker_status)
+            self.after(600, self._prefetch_docker_status)
 
     def _build_log_row(self, content):
         """Build the repository log console."""

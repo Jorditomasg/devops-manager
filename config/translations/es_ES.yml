@@ -57,7 +57,9 @@ label.scanning_status: "Escaneando repos..."
 
 # ── Tooltips ──────────────────────────────────────────────────────────────────
 tooltip.config_btn: "Editar configuración"
-tooltip.modified_files: "Ficheros modificados sin guardar. Clic para ver la lista en el log."
+tooltip.pending_pulls: "Commits disponibles para pull desde el remoto (último fetch). Clic para hacer pull."
+tooltip.staged_files: "Ficheros en stage listos para hacer commit."
+tooltip.modified_files: "Ficheros sin stagear / sin seguimiento. Clic para ver la lista en el log."
 tooltip.start_btn: "Iniciar servicio"
 tooltip.stop_btn: "Detener servicio"
 tooltip.restart_btn: "Reiniciar servicio"

@@ -94,8 +94,17 @@ class HeaderMixin:
         self._build_header_name_hints(frame)
 
     def _build_header_name_hints(self, frame):
-        """Build changes badge and branch hint labels."""
-        # Unsaved changes badge
+        """Build pull, staged, unstaged badges and branch hint labels."""
+        # Pending pulls badge
+        self._pull_count_label = ctk.CTkLabel(
+            frame, text="",
+            font=theme.font("md", bold=True), text_color=theme.C.text_accent
+        )
+        self._pull_count_label.pack(side="left", padx=(4, 0))
+        self._pull_count_label.bind("<Button-1>", lambda e: self._pull())
+        ToolTip(self._pull_count_label, t("tooltip.pending_pulls"))
+
+        # Unstaged / untracked changes badge
         self._changes_count_label = ctk.CTkLabel(
             frame, text="",
             font=theme.font("md", bold=True), text_color=theme.C.text_warning_badge

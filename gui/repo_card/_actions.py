@@ -469,25 +469,23 @@ class ActionsMixin:
     def _check_pull_status(self):
         """Update pull button state with commits behind count."""
         def _run():
-            from core.git_manager import get_commits_behind, get_current_branch
-            branch = get_current_branch(self._repo.path)
-            if branch != 'unknown':
-                commits = get_commits_behind(self._repo.path, branch)
+            from core.git_manager import get_commits_behind
+            commits = get_commits_behind(self._repo.path)
 
-                def _update():
-                    if hasattr(self, '_pull_btn'):
-                        if commits > 0:
-                            self._pull_btn.configure(
-                                text=f"⬇ Pull ({commits})",
-                                fg_color=theme.btn_style("blue_active")["fg_color"],
-                            )
-                        else:
-                            self._pull_btn.configure(
-                                text="⬇ Pull",
-                                fg_color=theme.btn_style("blue")["fg_color"],
-                            )
+            def _update():
+                if hasattr(self, '_pull_btn'):
+                    if commits > 0:
+                        self._pull_btn.configure(
+                            text=f"⬇ Pull ({commits})",
+                            fg_color=theme.btn_style("blue_active")["fg_color"],
+                        )
+                    else:
+                        self._pull_btn.configure(
+                            text="⬇ Pull",
+                            fg_color=theme.btn_style("blue")["fg_color"],
+                        )
 
-                self.after(0, _update)
+            self.after(0, _update)
 
         self._action_pool.submit(_run)
 

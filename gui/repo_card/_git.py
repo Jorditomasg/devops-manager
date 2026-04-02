@@ -19,21 +19,36 @@ class GitMixin:
         self._badge_timer = self.after(BADGE_REFRESH_MS, self._refresh_badge_loop)
 
     def _refresh_badge(self, event=None):
-        """Count modified files and update the badge label. Also detects external branch changes."""
+        """Single git call to refresh branch, behind count, staged and unstaged badges."""
         def _run():
             if not self._GIT_BADGE_SEMAPHORE.acquire(blocking=False):
                 return  # Too many concurrent git calls — skip this cycle
             try:
-                from core.git_manager import count_modified_files, get_current_branch
-                count = count_modified_files(self._repo.path)
-                current = get_current_branch(self._repo.path)
+                from core.git_manager import get_status_summary
+                s = get_status_summary(self._repo.path)
+                current = s['branch']
+                behind = s['behind']
+                unstaged = s['unstaged']
 
                 def _update():
                     if not self.winfo_exists():
                         return
                     if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
-                        self._changes_count_label.configure(text=f"📝 {count}" if count > 0 else "")
-                    if current and current != self._current_branch:
+                        self._changes_count_label.configure(text=f"📝 {unstaged}" if unstaged > 0 else "")
+                    if hasattr(self, '_pull_count_label') and self._pull_count_label.winfo_exists():
+                        self._pull_count_label.configure(text=f"📥 {behind}" if behind > 0 else "")
+                    if hasattr(self, '_pull_btn'):
+                        if behind > 0:
+                            self._pull_btn.configure(
+                                text=f"⬇ Pull ({behind})",
+                                fg_color=theme.btn_style("blue_active")["fg_color"],
+                            )
+                        else:
+                            self._pull_btn.configure(
+                                text="⬇ Pull",
+                                fg_color=theme.btn_style("blue")["fg_color"],
+                            )
+                    if current and current not in ('unknown', 'HEAD') and current != self._current_branch:
                         self._current_branch = current
                         if hasattr(self, '_branch_combo'):
                             self._branch_combo.set(current)

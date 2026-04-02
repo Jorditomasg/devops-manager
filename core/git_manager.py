@@ -217,15 +217,13 @@ def get_remote_url(repo_path: str) -> Optional[str]:
     return None
 
 
-def get_commits_behind(repo_path: str, branch: str) -> int:
-    """Get number of commits the local branch is behind its remote tracking branch."""
+def get_commits_behind(repo_path: str) -> int:
+    """Get number of commits the current branch is behind its upstream tracking branch (@{u})."""
     try:
-        # Check if origin/branch exists
-        result = _run_git_command(['git', 'rev-parse', '--verify', f'origin/{branch}'], repo_path, timeout=5)
-        if result.returncode != 0:
-            return 0  # No remote branch or error
-
-        result = _run_git_command(['git', 'rev-list', '--count', f'HEAD..origin/{branch}'], repo_path, timeout=5)
+        result = _run_git_command(
+            ['git', 'rev-list', '--count', 'HEAD..@{u}'],
+            repo_path, timeout=5
+        )
         if result.returncode == 0:
             return int(result.stdout.strip())
     except (subprocess.SubprocessError, OSError):
@@ -233,6 +231,50 @@ def get_commits_behind(repo_path: str, branch: str) -> int:
     except Exception:
         pass
     return 0
+
+
+def get_status_summary(repo_path: str) -> dict:
+    """Single git call returning branch, behind count, staged and unstaged file counts.
+
+    Replaces separate calls to get_current_branch + get_commits_behind + count_modified_files.
+    Parses `git status --porcelain -b` output:
+      - First line: ## <branch>...<upstream> [ahead N, behind M]
+      - Subsequent lines: XY <path>  where X=index (staged), Y=worktree (unstaged)
+    Returns: {'branch': str, 'behind': int, 'staged': int, 'unstaged': int}
+    """
+    import re as _re
+    result = _run_git_command(
+        ['git', '--no-optional-locks', 'status', '--porcelain', '-b'],
+        repo_path, timeout=5
+    )
+    out = {'branch': 'unknown', 'behind': 0, 'staged': 0, 'unstaged': 0}
+    if result.returncode != 0:
+        return out
+
+    for i, line in enumerate(result.stdout.splitlines()):
+        if i == 0:
+            # ## main...origin/main [ahead 1, behind 2]
+            if line.startswith('## '):
+                header = line[3:]
+                branch_part = header.split('...')[0].split(' ')[0]
+                out['branch'] = branch_part if branch_part else 'unknown'
+                m = _re.search(r'behind (\d+)', header)
+                if m:
+                    out['behind'] = int(m.group(1))
+            continue
+
+        if len(line) < 2:
+            continue
+        x, y = line[0], line[1]
+        if x == '?' and y == '?':
+            out['unstaged'] += 1       # untracked
+        else:
+            if x != ' ':
+                out['staged'] += 1     # index change
+            if y != ' ':
+                out['unstaged'] += 1   # worktree change
+
+    return out
 
 
 def count_modified_files(repo_path: str) -> int:
