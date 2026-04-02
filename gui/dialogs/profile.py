@@ -52,6 +52,7 @@ class ProfileDialog(BaseDialog):
         ctk.CTkLabel(self._main_scroll, text=t("dialog.profile.section_title"),
                      font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
+        self._import_frame = None  # set by _build_action_buttons; needed by _refresh_list
         self._build_save_section(self._main_scroll)
         self._build_list_section(self._main_scroll)
         self._build_action_buttons(self._main_scroll)
@@ -133,6 +134,7 @@ class ProfileDialog(BaseDialog):
         """Build the import-from-file section."""
         import_frame = ctk.CTkFrame(scroll, corner_radius=8)
         import_frame.pack(fill="x", padx=20, pady=5)
+        self._import_frame = import_frame
 
         ctk.CTkLabel(import_frame, text=t("dialog.profile.import_external"),
                      font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
@@ -171,6 +173,7 @@ class ProfileDialog(BaseDialog):
 
         messagebox.showinfo(t("dialog.profile.saved_title"), t("dialog.profile.saved_msg", name=name))
         self._refresh_list()
+        self._select_profile_item(name)
 
         if self._on_profiles_changed:
             self._on_profiles_changed(name)
@@ -393,7 +396,10 @@ class ProfileDialog(BaseDialog):
             self._selected_profile.set("")
             return
 
-        self._list_section_frame.pack(fill="x", padx=20, pady=5)
+        if self._import_frame is not None:
+            self._list_section_frame.pack(fill="x", padx=20, pady=5, before=self._import_frame)
+        else:
+            self._list_section_frame.pack(fill="x", padx=20, pady=5)
 
         _blue = theme.btn_style("blue")
         _neutral = theme.btn_style("neutral")
