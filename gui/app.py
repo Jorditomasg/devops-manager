@@ -124,7 +124,9 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         )
         self._global_panel.pack(fill="x", padx=10, pady=(10, 6))
         self._setup_cards_scroll()
-        self._build_global_log_panel()
+        self._global_log_buffer: list = []
+        self._global_log_queue: queue.Queue = queue.Queue()
+        self._log_line_counts: dict = {}
         self._statusbar = ctk.CTkLabel(
             self, text=t("label.ready"),
             font=theme.font("md"), text_color=theme.C.text_accent,
@@ -251,28 +253,6 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             return None if bottom >= 1.0 else 3
         return None
 
-    def _build_global_log_panel(self):
-        """Build the global log panel (hidden by default)."""
-        self._global_log_frame = ctk.CTkFrame(self, fg_color=theme.C.app, height=150)
-        self._global_log_frame.pack_propagate(False)
-
-        log_header = ctk.CTkFrame(self._global_log_frame, fg_color="transparent")
-        log_header.pack(fill="x", padx=10, pady=(5, 0))
-
-        ctk.CTkLabel(log_header, text=t("label.global_log_section"), font=theme.font("base", bold=True), text_color=theme.C.text_secondary).pack(side="left")
-
-        log_btn_s = theme.btn_style("log_action", height="sm", font_size="sm")
-        ctk.CTkButton(log_header, text=t("btn.detach_log"), width=80, command=self._detach_global_log, **log_btn_s).pack(side="right", padx=(0, 6))
-        ctk.CTkButton(log_header, text=t("btn.clear_log"), width=60, command=self._clear_global_log, **log_btn_s).pack(side="right")
-
-        self._global_log_textbox = ctk.CTkTextbox(
-            self._global_log_frame, state="disabled",
-            **theme.log_textbox_style()
-        )
-        self._global_log_textbox.pack(fill="both", expand=True, padx=10, pady=5)
-        self._log_line_counts: dict = {}
-        self._global_log_queue: queue.Queue = queue.Queue()
-
     def _log(self, message: str):
         """Central log function."""
         print(message)
@@ -287,38 +267,20 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             except Exception:
                 pass
 
-    def _show_global_log_if_hidden(self):
-        """Show the global log panel if it is currently hidden."""
-        if hasattr(self, '_global_log_frame') and not self._global_log_frame.winfo_ismapped():
-            self._global_log_frame.pack(fill="x", padx=10, pady=(5, 5), before=self._statusbar)
-
-    def _toggle_global_log(self):
-        if self._global_log_frame.winfo_ismapped():
-            self._global_log_frame.pack_forget()
-        else:
-            self._global_log_frame.pack(fill="x", padx=10, pady=(5, 5), before=self._statusbar)
-
     def _clear_global_log(self):
-        if hasattr(self, '_global_log_textbox'):
-            self._global_log_textbox.configure(state="normal")
-            self._global_log_textbox.delete("1.0", "end")
-            self._global_log_textbox.configure(state="disabled")
-
+        self._global_log_buffer.clear()
+        self._log_line_counts.clear()
         if getattr(self, '_detached_global_log_textbox', None) and self._detached_global_log_textbox.winfo_exists():
             self._detached_global_log_textbox.configure(state="normal")
             self._detached_global_log_textbox.delete("1.0", "end")
             self._detached_global_log_textbox.configure(state="disabled")
 
     def _detach_global_log(self):
-        """Open the global logs in a separate detached window and hide the embedded one."""
+        """Open the global log in a separate floating window."""
         if getattr(self, '_detached_global_log_window', None) and self._detached_global_log_window.winfo_exists():
             self._detached_global_log_window.focus()
             return
 
-        # Hide the embedded log
-        if self._global_log_frame.winfo_ismapped():
-            self._global_log_frame.pack_forget()
-            
         self._detached_global_log_window = ctk.CTkToplevel(self)
         self._detached_global_log_window.title(t("dialog.global_log.title"))
         self._detached_global_log_window.geometry("800x600")
@@ -351,10 +313,11 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         )
         self._detached_global_log_textbox.pack(fill="both", expand=True, padx=8, pady=(4, 8))
         
-        # Flush pending items so the copy includes everything written so far
+        # Flush pending items so the buffer is up to date, then seed the window
         self._drain_global_log_queue()
-        current_logs = self._global_log_textbox.get("1.0", "end")
-        self._detached_global_log_textbox.insert("end", current_logs)
+        if self._global_log_buffer:
+            self._detached_global_log_textbox.configure(state="normal")
+            self._detached_global_log_textbox.insert("end", "".join(self._global_log_buffer))
         self._detached_global_log_textbox.configure(state="disabled")
         self._detached_global_log_textbox.see("end")
 
@@ -428,7 +391,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         if not items:
             return
         text = ''.join(items)
-        self._insert_log_into_textbox(getattr(self, '_global_log_textbox', None), text, 1000)
+        self._global_log_buffer.append(text)
         self._insert_log_into_textbox(getattr(self, '_detached_global_log_textbox', None), text, 1000)
 
     def _poll_global_log(self):
@@ -554,7 +517,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             repo_cards=self._repo_cards,
             log_callback=self._log,
             on_profile_loaded=self._apply_config,
-            on_rescan=lambda: self._scan_repos(_after_scan=self._show_global_log_if_hidden),
+            on_rescan=lambda: self._scan_repos(),
             on_profiles_changed=self._refresh_profile_dropdown
         )
 
