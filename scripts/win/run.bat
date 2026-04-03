@@ -1,5 +1,5 @@
 @echo off
-cd /d "%~dp0.."
+cd /d "%~dp0..\.."
 if not exist ".venv\Scripts\pythonw.exe" (
     echo El entorno virtual no existe. Por favor, ejecuta 'install.bat' primero.
     pause

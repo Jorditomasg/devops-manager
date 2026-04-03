@@ -9,8 +9,14 @@ A Python desktop application (customtkinter GUI) for managing and launching mult
 ## Running the Application
 
 ```bash
-# Run via uv (manages Python version automatically)
-uv run python main.py
+# Windows — silent launcher (no terminal window)
+scripts\win\run.vbs
+
+# Windows — from console
+scripts\win\run.bat
+
+# Linux/Unix — from terminal or file manager
+./scripts/linux/run.sh
 
 # Or activate venv first (after install)
 .venv\Scripts\activate          # Windows
@@ -18,7 +24,7 @@ source .venv/bin/activate       # Unix
 python main.py
 
 # Run with explicit workspace
-uv run python main.py /path/to/workspace
+.venv/bin/python main.py /path/to/workspace
 ```
 
 There is no build step. No test suite or linter configuration exists in the project.
@@ -29,8 +35,8 @@ Requires [uv](https://docs.astral.sh/uv/) — installs Python automatically if n
 
 ```bash
 # Automated (installs uv if not present)
-scripts\install.bat    # Windows
-./scripts/install.sh   # Unix
+scripts\win\install.bat    # Windows
+./scripts/linux/install.sh # Unix
 
 # Manual (with uv already installed)
 uv sync
@@ -47,8 +53,28 @@ The codebase follows a layered DDD-influenced architecture:
 - **`gui/`** — All UI code: `app.py` (main window) + `app_profile.py` (profile mixin), `repo_card/` package (per-repo accordion widget split into focused mixins), `dialogs/` package (9 dialog classes with shared `BaseDialog`), `global_panel.py` (batch controls), `constants.py` (shared magic strings/numbers), `log_helpers.py` (shared log insertion), `tooltip.py`, `theme.py` (UI theme loader).
 - **`config/repo_types/`** — YAML definitions that drive repository detection and available commands (one file per framework).
 - **`config/ui_theme.yml`** — Editable UI theme: colors, fonts, sizes, button variants. Overrides the defaults embedded in `gui/theme.py`.
-- **`scripts/`** — Shell scripts for install (`install.bat/sh`), run (`run.bat/sh`), Nuitka compilation (`compile.bat/sh`), and running the compiled binary (`run_compiled.bat/sh`).
+- **`scripts/`** — OS-separated subdirectories: `scripts/win/` (Windows: `run.vbs` silent launcher, `run.bat` console, `install.bat`, `compile.bat`, `run-compiled.bat`) and `scripts/linux/` (Linux/Unix: `run.sh`, `install.sh`, `compile.sh`, `run-compiled.sh`). `build-installer.bat` stays at `scripts/` root (CI/CD only).
 - **`.github/workflows/`** — GitHub Actions CI/CD pipeline triggered on `v*` tags or manual dispatch: builds a standalone Windows executable with Nuitka, signs it via SignPath, and publishes it as a GitHub Release.
+
+## Scripts Structure
+
+Scripts are split by OS under `scripts/win/` and `scripts/linux/`. There is no flat-root equivalent — always use the subfolder path:
+
+| Action | Windows | Linux |
+|--------|---------|-------|
+| Install | `scripts\win\install.bat` | `./scripts/linux/install.sh` |
+| Run (silent) | `scripts\win\run.vbs` | — |
+| Run | `scripts\win\run.bat` | `./scripts/linux/run.sh` |
+| Compile | `scripts\win\compile.bat` | `./scripts/linux/compile.sh` |
+| Run compiled | `scripts\win\run-compiled.bat` | `./scripts/linux/run-compiled.sh` |
+
+`build-installer.bat` stays at `scripts/` root — CI/CD only.
+
+**Windows launcher** (`run.vbs`): uses `WScript.Shell.Run` with `windowStyle=0` so no CMD window appears. Path to project root is computed with three nested `GetParentFolderName` calls on `WScript.ScriptFullName` (file → `win/` → `scripts/` → root).
+
+**Linux launcher** (`run.sh`): calls `.venv/bin/python` directly (no `uv run` overhead). Detects terminal via `-t 1`: stays attached if running from shell, detaches with `nohup` if launched from file manager or desktop shortcut.
+
+**Desktop shortcut creation**: `install.bat` / `install.sh` create a shortcut automatically after install. Can also be recreated any time from **Settings → Quick Access** — the button adapts to the current OS (`.lnk` on Windows via `IShellLink` ctypes, `.desktop` on Linux via `xdg-user-dir DESKTOP`).
 
 ## Key Design Decisions
 
@@ -100,6 +126,8 @@ Button variants available: `success`, `start`, `danger`, `danger_alt`, `danger_d
 **Lazy expand panel** (`gui/repo_card/_expand_panel.py`): `_build_expand_panel()` is NOT called in `RepoCard.__init__`. It is called lazily on the first `_toggle_expand()` via the `_expand_panel_built` flag. Widgets like `_branch_combo`, `_config_combo`, `_cmd_entry`, `_db_combo` do not exist until the card is expanded for the first time. Any code that accesses these must guard with `hasattr(self, '_branch_combo')` etc. `set_branch()`, `set_profile()`, and `set_custom_command()` silently no-op on collapsed cards — this is intentional.
 
 **Profile-switch callback suppression** (`gui/app_profile.py`): `_apply_config()` sets `self._applying_profile = True` during the loop and calls `_do_check_profile_changes()` once at the end. `_check_profile_changes()` is a 300 ms debounce wrapper that returns immediately when `_applying_profile` is True. Any new card-level change trigger must respect this pattern — do not call `_do_check_profile_changes()` directly from card code.
+
+**Parallel repo detection** (`application/services/project_analyzer.py`): `detect_repos` classifies all candidate directories concurrently via `ThreadPoolExecutor(max_workers=min(8, n))`. Each `_classify_repo` call runs `os.walk` + a git subprocess — parallelising gives a meaningful speedup with 5+ repos. `executor.map` is used (not `as_completed`) because it preserves the input alphabetical order.
 
 **Git badge concurrency cap** (`gui/repo_card/_git.py`): `_GIT_BADGE_SEMAPHORE = threading.Semaphore(GIT_BADGE_SEMAPHORE_COUNT)` (value: 3) is a class variable on `GitMixin` limiting concurrent `git status` subprocesses. Badge refresh runs every 30 s per card (`BADGE_REFRESH_MS = 30_000` in `gui/constants.py`). Docker compose status polls every 15 s (`DOCKER_POLL_MS = 15_000`). Do not lower these intervals.
 

@@ -1,12 +1,12 @@
 #!/bin/bash
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 echo "==================================================="
 echo "DevOps Manager - Compilacion con Nuitka"
 echo "==================================================="
 echo ""
 
 if [ ! -f ".venv/bin/activate" ]; then
-    echo "Error: El entorno virtual no existe. Ejecuta install.sh primero."
+    echo "Error: El entorno virtual no existe. Ejecuta scripts/linux/install.sh primero."
     exit 1
 fi
 
@@ -23,5 +23,5 @@ fi
 
 echo ""
 echo "Compilacion completada con exito en dist/main.dist/devops-manager"
-echo "Puedes ejecutarla usando './run_compiled.sh <ruta_del_workspace>'"
+echo "Puedes ejecutarla usando './scripts/linux/run-compiled.sh <ruta_del_workspace>'"
 echo ""

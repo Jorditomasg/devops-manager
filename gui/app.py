@@ -398,7 +398,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         """Periodic timer (50 ms) that drains the log queue on the main thread."""
         self._drain_global_log_queue()
         try:
-            self.after(50, self._poll_global_log)
+            self.after(100, self._poll_global_log)
         except tk.TclError:
             pass
 

@@ -1,5 +1,5 @@
 @echo off
-cd /d "%~dp0.."
+cd /d "%~dp0..\.."
 echo ===================================================
 echo DevOps Manager - Instalacion del Entorno Virtual
 echo ===================================================
@@ -43,7 +43,29 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Instalacion completada exitosamente.
-echo Puedes iniciar la aplicacion ejecutando 'run.bat'
-echo Para compilar con Nuitka, ejecuta 'compile.bat' (opcional).
+echo Puedes iniciar la aplicacion ejecutando 'scripts\win\run.vbs' (sin terminal)
+echo o 'scripts\win\run.bat' desde consola.
+echo Para compilar con Nuitka, ejecuta 'scripts\win\compile.bat' (opcional).
+echo.
+
+:: Resolve clean absolute root path (no trailing backslash)
+pushd "%~dp0..\.."
+set "ROOT=%CD%"
+popd
+
+:: Create desktop shortcut
+:: Pass paths via env vars so PowerShell reads them cleanly — no CMD quoting issues.
+:: TargetPath = wscript.exe (reliable); VBS passed as quoted argument.
+echo Creando acceso directo en el escritorio...
+set "DM_VBS=%ROOT%\scripts\win\run.vbs"
+set "DM_ICON=%ROOT%\assets\icons\icon_red.ico"
+set "DM_ROOT=%ROOT%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell;$s=$ws.CreateShortcut([Environment]::GetFolderPath('Desktop')+'\DevOps Manager.lnk');$s.TargetPath=($env:SystemRoot+'\System32\wscript.exe');$s.Arguments=([char]34+$env:DM_VBS+[char]34);$s.IconLocation=($env:DM_ICON+',0');$s.Description='DevOps Manager';$s.WorkingDirectory=$env:DM_ROOT;$s.Save()" >nul 2>&1
+
+if %errorlevel% equ 0 (
+    echo Acceso directo creado en el escritorio.
+) else (
+    echo No se pudo crear el acceso directo ^(puedes crearlo manualmente^).
+)
 echo.
 pause

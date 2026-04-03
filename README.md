@@ -14,66 +14,60 @@ Esta aplicación te permite visualizar, configurar y ejecutar tus proyectos desd
 
 ## Requisitos Previos
 
-* **Python 3.8+** instalado en tu sistema.
-* **Git** instalado e incluido en el PATH (para la gestión de repositorios mediante `GitPython`).
+* **[uv](https://docs.astral.sh/uv/)** — gestiona Python y dependencias automáticamente. Si no lo tienes, el script de instalación lo descarga.
+* **Git** instalado e incluido en el PATH.
 
 ## Instalación
 
-Para asegurar que las dependencias de este proyecto (como `customtkinter`, `PyYAML`, `Pillow`, etc.) no interfieran con otros proyectos de Python en tu sistema, se recomienda llevar a cabo la instalación utilizando un **entorno virtual (venv)**.
+Los scripts de instalación están organizados por sistema operativo en `scripts/win/` y `scripts/linux/`.
 
-### Opción 1: Instalación Automática (Recomendada)
+### Windows
 
-Hemos incluido scripts preparados para inicializar el entorno virtual y descargar todas las dependencias de manera automática:
-
-**Para Windows:**
-Haz doble clic sobre el archivo `scripts\install.bat` o ejecútalo desde tu consola:
+Haz doble clic sobre `scripts\win\install.bat` o ejecútalo desde consola:
 ```cmd
-scripts\install.bat
+scripts\win\install.bat
 ```
 
-**Para Linux / macOS:**
-Dale permisos de ejecución al script y lánzalo:
+Al finalizar crea automáticamente un acceso directo `.lnk` en el Escritorio.
+
+### Linux
+
 ```bash
-chmod +x scripts/install.sh
-./scripts/install.sh
+chmod +x scripts/linux/install.sh
+./scripts/linux/install.sh
 ```
 
-### Opción 2: Instalación Manual
+Al finalizar crea una entrada `.desktop` en el launcher y en el Escritorio (si existe).
 
-Si prefieres realizar los pasos manualmente en tu terminal:
+### Manual
 
-1. **Crear el entorno virtual:**
-   ```bash
-   python -m venv .venv
-   ```
-
-2. **Activar el entorno virtual:**
-   * **Windows:** `.venv\Scripts\activate`
-   * **Linux/macOS:** `source .venv/bin/activate`
-
-3. **Instalar dependencias:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+uv sync
+```
 
 ## Uso
 
-Una vez instalado, asegúrate de tener activo tu entorno virtual antes de ejecutar la aplicación.
+### Lanzamiento rápido
 
-### Ejecución Rápida
+| SO | Launcher | Descripción |
+|---|---|---|
+| Windows | `scripts\win\run.vbs` | Sin ventana de terminal (recomendado) |
+| Windows | `scripts\win\run.bat` | Desde consola |
+| Linux | `./scripts/linux/run.sh` | Terminal o file manager |
 
-Puedes utilizar los scripts predefinidos para iniciar la aplicación cómodamente:
-* **Windows:** Ejecuta `scripts\run.bat`
-* **Linux/macOS:** Ejecuta `./scripts/run.sh`
+### Acceso directo desde la app
 
-### Ejecución Manual
+En **Configuración → Acceso Rápido** puedes crear o recrear el acceso directo del Escritorio en cualquier momento. El botón se adapta automáticamente al SO: genera un `.lnk` en Windows o un `.desktop` en Linux.
 
-Desde la terminal, con el entorno virtual ya activado:
+### Ejecución manual
+
 ```bash
-python main.py
+.venv/bin/python main.py                        # Linux
+.venv\Scripts\pythonw.exe main.py               # Windows (sin terminal)
+.venv/bin/python main.py /ruta/a/workspace      # workspace explícito
 ```
 
-Al abrirla, la aplicación autodetectará por defecto el espacio de trabajo basado en la carpeta principal superior (o puedes especificar una ruta al hacer el lanzamiento: `python main.py /ruta/a/tu/workspace`).
+Al abrirla, la aplicación autodetecta el espacio de trabajo basado en la carpeta padre (o puedes especificar una ruta en el lanzamiento).
 
 ## Configuración
 

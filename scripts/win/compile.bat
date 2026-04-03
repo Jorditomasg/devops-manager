@@ -1,12 +1,12 @@
 @echo off
-cd /d "%~dp0.."
+cd /d "%~dp0..\.."
 echo ===================================================
 echo DevOps Manager - Compilacion con Nuitka
 echo ===================================================
 echo.
 
 if not exist ".venv\Scripts\activate.bat" (
-    echo Error: El entorno virtual no existe. Ejecuta install.bat primero.
+    echo Error: El entorno virtual no existe. Ejecuta scripts\win\install.bat primero.
     pause
     exit /b 1
 )
@@ -24,6 +24,6 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Compilacion completada con exito en dist\main.dist\devops-manager.exe
-echo Puedes ejecutarla usando 'run_compiled.bat ^<ruta_del_workspace^>'
+echo Puedes ejecutarla usando 'scripts\win\run-compiled.bat ^<ruta_del_workspace^>'
 echo.
 pause

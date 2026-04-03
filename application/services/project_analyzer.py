@@ -1,5 +1,6 @@
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Dict, Any
 from domain.models.repo_info import RepoInfo
 from infrastructure.config.yaml_parser import YamlParser
@@ -34,28 +35,33 @@ class ProjectAnalyzerService:
 
     def detect_repos(self, workspace_dir: str) -> List[RepoInfo]:
         """Scan workspace_dir for valid repositories matching known definitions."""
-        repos = []
         if not os.path.isdir(workspace_dir):
-            return repos
+            return []
 
-        # Determine the tool's own directory to skip it
         tool_dir = os.path.normpath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-        for entry in sorted(os.listdir(workspace_dir)):
-            full_path = os.path.join(workspace_dir, entry)
-            if not os.path.isdir(full_path):
-                continue
-            if entry.startswith('.') or entry == 'node_modules':
-                continue
-            # Skip the devops-manager tool itself
-            if os.path.normpath(full_path) == tool_dir:
-                continue
+        candidates = [
+            (entry, os.path.join(workspace_dir, entry))
+            for entry in sorted(os.listdir(workspace_dir))
+            if (
+                os.path.isdir(os.path.join(workspace_dir, entry))
+                and not entry.startswith('.')
+                and entry != 'node_modules'
+                and os.path.normpath(os.path.join(workspace_dir, entry)) != tool_dir
+            )
+        ]
 
-            repo = self._classify_repo(entry, full_path)
-            if repo:
-                repos.append(repo)
+        if not candidates:
+            return []
 
-        return repos
+        # Classify repos in parallel — each call does os.walk + git subprocess,
+        # so concurrency gives a meaningful speedup with 5+ repos.
+        worker_count = min(8, len(candidates))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            results = list(executor.map(lambda c: self._classify_repo(*c), candidates))
+
+        # map() preserves input order, so alphabetical sort is already maintained
+        return [r for r in results if r is not None]
 
     def _classify_repo(self, name: str, path: str) -> Optional[RepoInfo]:
         """Classifies a directory against all loaded repo_types."""

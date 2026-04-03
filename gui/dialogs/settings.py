@@ -141,12 +141,19 @@ class SettingsDialog(BaseDialog):
         row = self._row(card)
         self._row_label(row, "dialog.settings.shortcut_title")
 
+        if sys.platform == 'win32':
+            btn_text = t("btn.create_shortcut_win")
+            btn_tip  = t("dialog.settings.shortcut_desc_win")
+        else:
+            btn_text = t("btn.create_shortcut_linux")
+            btn_tip  = t("dialog.settings.shortcut_desc_linux")
+
         btn = ctk.CTkButton(
-            row, text=t("btn.create_shortcut"),
+            row, text=btn_text,
             command=self._create_shortcut, **theme.btn_style("blue", width=260)
         )
         btn.pack(side="left")
-        ToolTip(btn, t("dialog.settings.shortcut_desc"))
+        ToolTip(btn, btn_tip)
 
     def _build_java_row(self, card):
         row = self._row(card)
@@ -179,32 +186,95 @@ class SettingsDialog(BaseDialog):
     # ── Shortcut creation ─────────────────────────────────────────────────────
 
     def _create_shortcut(self):
-        """Create a Desktop shortcut that launches via wscript.exe + run.vbs (no console window)."""
-        if sys.platform != 'win32':
-            messagebox.showinfo(t("misc.warning_title"), t("dialog.settings.shortcut_unavailable"), parent=self)
+        """Create a Desktop shortcut appropriate for the current OS."""
+        app_dir = getattr(self.master, '_app_dir', None)
+        if not app_dir:
+            messagebox.showerror("Error", t("dialog.settings.shortcut_error"), parent=self)
             return
         try:
-            app_dir = getattr(self.master, '_app_dir', None)
-            if not app_dir:
-                messagebox.showerror("Error", t("dialog.settings.shortcut_error"), parent=self)
-                return
-            run_vbs = os.path.join(app_dir, "scripts", "run.vbs")
-            icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
-
-            windir = os.environ.get('WINDIR', r'C:\Windows')
-            wscript = os.path.join(windir, 'System32', 'wscript.exe')
-            arguments = f'/nologo "{run_vbs}"'
-
-            import ctypes
-            buf = ctypes.create_unicode_buffer(260)
-            ctypes.windll.shell32.SHGetFolderPathW(None, 0, None, 0, buf)
-            desktop = buf.value or os.path.join(os.path.expanduser("~"), "Desktop")
-            lnk_path = os.path.join(desktop, "DevOps Manager.lnk")
-
-            self._create_lnk_ctypes(wscript, lnk_path, icon_path, app_dir, "DevOps Manager", arguments)
-            messagebox.showinfo(t("dialog.settings.shortcut_success_title"), t("dialog.settings.shortcut_success_msg", path=lnk_path), parent=self)
+            if sys.platform == 'win32':
+                self._create_shortcut_windows(app_dir)
+            else:
+                self._create_shortcut_linux(app_dir)
         except Exception as e:
             messagebox.showerror("Error", str(e), parent=self)
+
+    def _create_shortcut_windows(self, app_dir: str):
+        run_vbs = os.path.join(app_dir, "scripts", "win", "run.vbs")
+        icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
+
+        windir = os.environ.get('WINDIR', r'C:\Windows')
+        wscript = os.path.join(windir, 'System32', 'wscript.exe')
+        arguments = f'/nologo "{run_vbs}"'
+
+        import ctypes
+        buf = ctypes.create_unicode_buffer(260)
+        ctypes.windll.shell32.SHGetFolderPathW(None, 0, None, 0, buf)
+        desktop = buf.value or os.path.join(os.path.expanduser("~"), "Desktop")
+        lnk_path = os.path.join(desktop, "DevOps Manager.lnk")
+
+        self._create_lnk_ctypes(wscript, lnk_path, icon_path, app_dir, "DevOps Manager", arguments)
+        messagebox.showinfo(
+            t("dialog.settings.shortcut_success_title"),
+            t("dialog.settings.shortcut_success_msg", path=lnk_path),
+            parent=self
+        )
+
+    def _create_shortcut_linux(self, app_dir: str):
+        run_sh = os.path.join(app_dir, "scripts", "linux", "run.sh")
+        icon_path = os.path.join(app_dir, "assets", "icons", "icon_red.ico")
+
+        desktop_entry = (
+            "[Desktop Entry]\n"
+            "Version=1.0\n"
+            "Type=Application\n"
+            "Name=DevOps Manager\n"
+            "Comment=Manage and launch development services\n"
+            f"Exec={run_sh}\n"
+            f"Icon={icon_path}\n"
+            "Terminal=false\n"
+            "Categories=Development;Utility;\n"
+            "StartupNotify=true\n"
+        )
+
+        created = []
+
+        # App launcher
+        launcher_dir = os.path.join(os.path.expanduser("~"), ".local", "share", "applications")
+        if os.path.isdir(launcher_dir):
+            path = os.path.join(launcher_dir, "devops-manager.desktop")
+            with open(path, "w") as f:
+                f.write(desktop_entry)
+            created.append(path)
+
+        # Physical desktop
+        import subprocess
+        try:
+            desktop_dir = subprocess.check_output(
+                ["xdg-user-dir", "DESKTOP"], text=True
+            ).strip()
+        except Exception:
+            desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+
+        if os.path.isdir(desktop_dir):
+            path = os.path.join(desktop_dir, "devops-manager.desktop")
+            with open(path, "w") as f:
+                f.write(desktop_entry)
+            os.chmod(path, 0o755)
+            created.append(path)
+
+        if created:
+            messagebox.showinfo(
+                t("dialog.settings.shortcut_success_title"),
+                t("dialog.settings.shortcut_success_msg", path="\n".join(created)),
+                parent=self
+            )
+        else:
+            messagebox.showwarning(
+                t("misc.warning_title"),
+                t("dialog.settings.shortcut_unavailable"),
+                parent=self
+            )
 
     @staticmethod
     def _guid_from_str(s, GUID, ctypes):
