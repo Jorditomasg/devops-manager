@@ -6,6 +6,7 @@ Optionally includes global DB presets.
 from __future__ import annotations
 import json
 import os
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -13,20 +14,29 @@ from typing import Optional
 PROFILES_DIR_NAME = '.devops-profiles'
 
 
-def get_profiles_dir() -> str:
-    """Get or create the profiles directory within the devops-manager repository."""
-    # os.path.abspath(__file__) -> .../devops-manager/core/profile_manager.py
-    # dirname -> .../devops-manager/core
-    # dirname -> .../devops-manager
+def _sanitize_group_name(name: str) -> str:
+    """Convert group name to a safe directory name."""
+    return re.sub(r'[<>:"/\\|?*]', '_', name).strip('._') or 'default'
+
+
+def get_profiles_dir(group_name: str = None) -> str:
+    """Get or create the profiles directory for a group.
+    'Default' and None both map to the root .devops-profiles/ dir (backwards compat).
+    All other group names get their own subdirectory.
+    """
     devops_manager_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    d = os.path.join(devops_manager_dir, PROFILES_DIR_NAME)
+    base = os.path.join(devops_manager_dir, PROFILES_DIR_NAME)
+    if not group_name or group_name == "Default":
+        d = base
+    else:
+        d = os.path.join(base, _sanitize_group_name(group_name))
     os.makedirs(d, exist_ok=True)
     return d
 
 
-def save_profile(profile_name: str, config: dict) -> str:
+def save_profile(profile_name: str, config: dict, group_name: str = None) -> str:
     """Save a profile to the profiles directory."""
-    profiles_dir = get_profiles_dir()
+    profiles_dir = get_profiles_dir(group_name)
     filepath = os.path.join(profiles_dir, f'{profile_name}.json')
 
     config['name'] = profile_name
@@ -38,9 +48,9 @@ def save_profile(profile_name: str, config: dict) -> str:
     return filepath
 
 
-def load_profile(profile_name: str) -> Optional[dict]:
+def load_profile(profile_name: str, group_name: str = None) -> Optional[dict]:
     """Load a profile from the profiles directory."""
-    profiles_dir = get_profiles_dir()
+    profiles_dir = get_profiles_dir(group_name)
     filepath = os.path.join(profiles_dir, f'{profile_name}.json')
 
     if not os.path.isfile(filepath):
@@ -53,9 +63,9 @@ def load_profile(profile_name: str) -> Optional[dict]:
         return None
 
 
-def list_profiles() -> list:
+def list_profiles(group_name: str = None) -> list:
     """List all available profile names."""
-    profiles_dir = get_profiles_dir()
+    profiles_dir = get_profiles_dir(group_name)
     if not os.path.isdir(profiles_dir):
         return []
 
@@ -66,9 +76,9 @@ def list_profiles() -> list:
     return sorted(profiles)
 
 
-def delete_profile(profile_name: str) -> bool:
+def delete_profile(profile_name: str, group_name: str = None) -> bool:
     """Delete a profile."""
-    profiles_dir = get_profiles_dir()
+    profiles_dir = get_profiles_dir(group_name)
     filepath = os.path.join(profiles_dir, f'{profile_name}.json')
     try:
         os.remove(filepath)

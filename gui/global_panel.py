@@ -115,7 +115,6 @@ class GlobalPanel(ctk.CTkFrame):
         self._start_btn.pack(side="right", padx=(3, 0))
         ToolTip(self._start_btn, t("tooltip.start_selected"))
 
-
     def _set_async_btns_state(self, state: str):
         """Enable or disable the buttons that trigger async background operations."""
         for btn in (self._apply_branch_btn, self._pull_btn, self._install_btn):

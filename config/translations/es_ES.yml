@@ -29,6 +29,12 @@ btn.save: "💾 Guardar"
 btn.reload: "↩ Recargar"
 btn.clone: "➕ Clonar"
 btn.rescan: "🔄 Re-escanear"
+btn.add_path: "Añadir ruta"
+btn.remove_path: "Eliminar"
+btn.rename: "Renombrar"
+btn.manage_groups: "Gestionar grupos"
+btn.add_group: "Añadir"
+btn.delete_group: "Eliminar"
 
 # ── Install button states ─────────────────────────────────────────────────────
 install.label_missing: "Install"
@@ -56,6 +62,7 @@ label.tray.running: "corriendo"
 label.tray.starting: "arrancando"
 label.ready: "Listo"
 label.scanning_status: "Escaneando repos..."
+label.group: "Grupo:"
 
 # ── Tooltips ──────────────────────────────────────────────────────────────────
 tooltip.config_btn: "Editar configuración"
@@ -85,6 +92,14 @@ tooltip.global_log_btn: "Abrir Log Global en Ventana"
 
 # ── Dialog titles ──────────────────────────────────────────────────────────────
 dialog.settings.title: "⚙ Configuración"
+dialog.workspace_groups.title: "Grupos de Workspace"
+dialog.workspace_groups.groups_label: "Grupos"
+dialog.workspace_groups.name_label: "Nombre del grupo"
+dialog.workspace_groups.name_placeholder: "Introduce un nombre..."
+dialog.workspace_groups.paths_label: "Directorios"
+dialog.workspace_groups.browse_title: "Selecciona directorio de workspace"
+dialog.workspace_groups.new_group_name: "Nuevo Grupo"
+dialog.workspace_groups.error_empty_paths: "Cada grupo debe tener al menos un directorio. Grupos sin directorios: {names}"
 dialog.clone.title: "Clonar Repositorio"
 dialog.profile.title: "Configuraciones Guardadas"
 dialog.confirm_close.title: "Servicios en ejecución"
@@ -340,6 +355,7 @@ tooltip.docker_manage_active: "Haga clic para gestionar servicios (Activo en per
 tooltip.workspace_dir: "📁 {path}\nAbrir en el explorador"
 tooltip.profile_selector: "Seleccionar Perfil de Workspace"
 tooltip.manage_profiles: "Gestionar Perfiles"
+tooltip.manage_groups: "Gestionar grupos y directorios de workspace"
 
 # ── Dialog — Docker actions ───────────────────────────────────────────────────
 dialog.docker.unavailable_title: "Docker no disponible"

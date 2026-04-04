@@ -74,10 +74,22 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         # Keep settings synced to prevent false change detection on close
         self._settings['workspace_dir'] = self._workspace_dir
 
+        from core.config_manager import get_active_group
+        active_group = get_active_group()
+        self._active_group_name = active_group if active_group else "Default"
+
+        # Per-group last profile — with fallback to legacy last_profile for Default group
+        lpg = self._settings.get('last_profile_by_group', {})
+        if self._active_group_name not in lpg:
+            # Migrate legacy last_profile for Default group
+            legacy = self._settings.get('last_profile', '')
+            lpg[self._active_group_name] = legacy
+            self._settings['last_profile_by_group'] = lpg
+        self._current_profile_name = lpg.get(self._active_group_name, '')
+
         self._service_launcher = ServiceLauncher()
         self._repo_cards = []
         self._repos = []
-        self._current_profile_name = self._settings.get('last_profile', "")
         self._current_profile_data = {}
         self._pending_profile_check = None
         self._applying_profile = False
@@ -163,6 +175,30 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._path_label.bind("<Configure>", self._update_path_label)
         self._path_tooltip = ToolTip(self._path_label, t("tooltip.workspace_dir", path=self._workspace_dir))
 
+        # Group selector area — shown in topbar when >1 group exists (replaces path label)
+        self._group_area = ctk.CTkFrame(topbar, fg_color="transparent")
+        # (packed/unpacked dynamically by _update_topbar_group_ui)
+
+        ctk.CTkLabel(
+            self._group_area, text=t("label.group"),
+            font=theme.font("base"), text_color=theme.C.text_accent
+        ).pack(side="left", padx=(0, 6))
+
+        self._topbar_group_combo = ctk.CTkComboBox(
+            self._group_area, values=[""], width=200, state="readonly",
+            command=self._on_group_changed,
+            **theme.combo_style()
+        )
+        self._topbar_group_combo.pack(side="left", padx=(0, 4))
+
+        _gear_btn = ctk.CTkButton(
+            self._group_area, text="⚙", width=32,
+            command=self._open_groups_dialog_topbar,
+            **theme.btn_style("neutral", height="md", font_size="base")
+        )
+        _gear_btn.pack(side="left")
+        ToolTip(_gear_btn, t("tooltip.manage_groups"))
+
     def _build_topbar_buttons(self, topbar):
         """Build the right-side action buttons in the top bar."""
         btn_frame = ctk.CTkFrame(topbar, fg_color="transparent")
@@ -210,6 +246,38 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             btn = ctk.CTkButton(btn_frame, text=text, width=width, command=cmd, **s)
             btn.pack(side="left", padx=3)
             ToolTip(btn, tip)
+
+    def _open_groups_dialog_topbar(self):
+        from gui.dialogs.workspace_groups import WorkspaceGroupsDialog
+        WorkspaceGroupsDialog(self, on_groups_changed=self._on_groups_updated_topbar)
+
+    def _on_groups_updated_topbar(self, groups):
+        from core.config_manager import get_active_group, set_active_group
+        self._update_topbar_group_ui(groups)
+        active = self._topbar_group_combo.get() if hasattr(self, '_topbar_group_combo') else ""
+        names = [g["name"] for g in groups]
+        if active not in names and names:
+            active = names[0]
+            set_active_group(active)
+        if active:
+            self._on_group_changed(active)
+
+    def _update_topbar_group_ui(self, groups: list):
+        """Show group combo in topbar when >1 group or active group has >1 path."""
+        names = [g["name"] for g in groups]
+        active = self._active_group_name if self._active_group_name in names else (names[0] if names else "")
+        active_group = next((g for g in groups if g["name"] == active), None)
+        active_paths = len(active_group.get("paths", [])) if active_group else 0
+        if len(names) > 1 or active_paths > 1:
+            self._path_label.pack_forget()
+            self._topbar_group_combo.configure(values=names)
+            self._topbar_group_combo.set(active)
+            if not self._group_area.winfo_ismapped():
+                self._group_area.pack(side="left", padx=(10, 0), fill="x", expand=True)
+        else:
+            self._group_area.pack_forget()
+            if not self._path_label.winfo_ismapped():
+                self._path_label.pack(side="left", padx=10, fill="x", expand=True)
 
     def _setup_cards_scroll(self):
         """Setup the scrollable cards area with overscroll prevention."""
@@ -418,15 +486,43 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         textbox.configure(state="disabled")
 
     def _scan_repos(self, _after_scan=None):
-        """Scan workspace for repositories."""
+        """Scan workspace for repositories, using workspace groups when available."""
+        from core.config_manager import get_workspace_groups, get_active_group, set_workspace_groups
+        groups = get_workspace_groups()
+        active = get_active_group()
+
+        # Migration: persist default group if it wasn't stored yet
+        from core.config_manager import _load_config_cached, get_config_path
+        if "workspace_groups" not in _load_config_cached(get_config_path()):
+            set_workspace_groups(groups)
+
+        group = next((g for g in groups if g["name"] == active), None)
+        if group and group.get("paths"):
+            paths = group["paths"]
+        else:
+            # Fallback: use first group or single workspace_dir
+            paths = groups[0]["paths"] if groups and groups[0].get("paths") else [self._workspace_dir]
+
+        self._scan_repos_for_group(paths, _after_scan=_after_scan)
+
+    def _scan_repos_for_group(self, paths: list, _after_scan=None):
+        """Scan repos across a list of paths and rebuild the UI."""
         self._log(t("log.scanning"))
         self._statusbar.configure(text=t("label.scanning_status"))
 
         def _run():
             if self.project_analyzer:
-                repos = self.project_analyzer.detect_repos(self._workspace_dir)
+                repos = self.project_analyzer.detect_repos_for_group(paths)
             else:
-                repos = detect_repos(self._workspace_dir)
+                # Fallback: use legacy detect_repos for each path and deduplicate
+                seen = set()
+                repos = []
+                for p in paths:
+                    for r in detect_repos(p):
+                        if r.path not in seen:
+                            seen.add(r.path)
+                            repos.append(r)
+                repos.sort(key=lambda r: r.name.lower())
             self._repos = repos
 
             from application.use_cases.manage_services_use_case import ManageServicesUseCase
@@ -446,6 +542,30 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             self.after(0, _update)
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def _on_group_changed(self, group_name: str):
+        """Called when the user selects a different group in the topbar combo."""
+        from core.config_manager import set_active_group, get_workspace_groups
+        set_active_group(group_name)
+        self._active_group_name = group_name
+        groups = get_workspace_groups()
+        group = next((g for g in groups if g["name"] == group_name), None)
+        if group:
+            self._scan_repos_for_group(group["paths"], _after_scan=self._reload_profiles_for_group)
+
+    def _reload_profiles_for_group(self):
+        """After group switch: load last profile for new group and refresh dropdown."""
+        lpg = self._settings.get('last_profile_by_group', {})
+        last = lpg.get(self._active_group_name, '')
+        self._current_profile_name = last
+        self._current_profile_data = {}
+        self._refresh_profile_dropdown()
+        if last:
+            from core.profile_manager import load_profile
+            data = load_profile(last, group_name=self._active_group_name)
+            if data:
+                self._current_profile_data = data
+                self._apply_config(data, _skip_dirty_check=True)
 
     def _build_cards(self, repos: list):
         """Build repo cards in vertical list (horizontal cards)."""
@@ -491,8 +611,10 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 card.after_cancel(card._badge_timer)
             card._badge_timer = card.after(3000 + 500 * idx, card._refresh_badge_loop)
 
-        # Update global panel
+        # Update global panel cards and topbar group selector
         self._global_panel.set_cards(self._repo_cards)
+        from core.config_manager import get_workspace_groups
+        self._update_topbar_group_ui(get_workspace_groups())
 
         # Re-apply active profile after (re)building cards.
         # _skip_dirty_check=True because branches are still loading async at this point;
@@ -523,7 +645,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _show_settings(self):
         """Show the settings dialog."""
-        SettingsDialog(self, self._settings, self._save_settings)
+        SettingsDialog(self, self._settings, self._save_settings,
+                       on_groups_changed=self._on_groups_updated_topbar)
 
 
     def _load_settings(self) -> dict:

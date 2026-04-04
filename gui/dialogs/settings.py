@@ -16,12 +16,13 @@ _LABEL_W = 155  # fixed width for left-column labels in the form
 class SettingsDialog(BaseDialog):
     """General settings dialog — single-card form layout."""
 
-    def __init__(self, parent, settings: dict, on_save=None):
+    def __init__(self, parent, settings: dict, on_save=None, on_groups_changed=None):
         super().__init__(parent, t("dialog.settings.title"), 580, 100)
         self.resizable(True, False)  # horizontal resize only; height auto-fits
 
         self._settings = settings
         self._on_save = on_save
+        self._on_groups_changed = on_groups_changed
         self._java_versions = dict(settings.get('java_versions', {}))
 
         self._build_save_bar()
@@ -111,19 +112,16 @@ class SettingsDialog(BaseDialog):
         row = self._row(card)
         self._row_label(row, "dialog.settings.workspace_title")
 
-        self._workspace_entry = ctk.CTkEntry(
-            row, height=32,
-            font=theme.font("base", mono=True),
-            fg_color=theme.C.section_alt,
-            border_color=theme.C.subtle_border,
+        btn = ctk.CTkButton(
+            row, text=t("btn.manage_groups"),
+            command=self._open_groups_dialog, **theme.btn_style("blue", width=150)
         )
-        self._workspace_entry.pack(side="left", fill="x", expand=True)
-        self._workspace_entry.insert(0, self._settings.get('workspace_dir', ''))
+        btn.pack(side="left", padx=(0, 14))
+        ToolTip(btn, t("tooltip.manage_groups"))
 
-        ctk.CTkButton(
-            row, text=t("btn.browse"),
-            command=self._browse_dir, **theme.btn_style("blue", width=80)
-        ).pack(side="left", padx=(8, 14))
+    def _open_groups_dialog(self):
+        from gui.dialogs.workspace_groups import WorkspaceGroupsDialog
+        WorkspaceGroupsDialog(self, on_groups_changed=self._on_groups_changed)
 
     def _build_behavior_row(self, card):
         row = self._row(card)
@@ -371,12 +369,6 @@ class SettingsDialog(BaseDialog):
 
     # ── Save ──────────────────────────────────────────────────────────────────
 
-    def _browse_dir(self):
-        d = filedialog.askdirectory(title=t("dialog.settings.workspace_select_title"))
-        if d:
-            self._workspace_entry.delete(0, "end")
-            self._workspace_entry.insert(0, d)
-
     def _save(self):
         selected_name = self._lang_combo.get() if hasattr(self, '_lang_combo') else None
         if selected_name:
@@ -399,7 +391,6 @@ class SettingsDialog(BaseDialog):
                         pass
                     messagebox.showinfo(restart_title, restart_msg, parent=self)
 
-        self._settings['workspace_dir'] = self._workspace_entry.get().strip()
         self._settings['java_versions'] = self._java_versions
         self._settings['minimize_to_tray'] = self._minimize_to_tray_var.get()
         if self._on_save:

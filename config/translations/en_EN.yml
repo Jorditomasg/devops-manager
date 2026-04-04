@@ -29,6 +29,12 @@ btn.save: "💾 Save"
 btn.reload: "↩ Reload"
 btn.clone: "➕ Clone"
 btn.rescan: "🔄 Rescan"
+btn.add_path: "Add Path"
+btn.remove_path: "Remove"
+btn.rename: "Rename"
+btn.manage_groups: "Manage Groups"
+btn.add_group: "Add"
+btn.delete_group: "Delete"
 
 # ── Install button states ─────────────────────────────────────────────────────
 install.label_missing: "Install"
@@ -56,6 +62,7 @@ label.tray.running: "running"
 label.tray.starting: "starting"
 label.ready: "Ready"
 label.scanning_status: "Scanning repos..."
+label.group: "Group:"
 
 # ── Tooltips ──────────────────────────────────────────────────────────────────
 tooltip.config_btn: "Edit configuration"
@@ -85,6 +92,14 @@ tooltip.global_log_btn: "Open Global Log in Window"
 
 # ── Dialog titles ──────────────────────────────────────────────────────────────
 dialog.settings.title: "⚙ Settings"
+dialog.workspace_groups.title: "Workspace Groups"
+dialog.workspace_groups.groups_label: "Groups"
+dialog.workspace_groups.name_label: "Group Name"
+dialog.workspace_groups.name_placeholder: "Enter group name..."
+dialog.workspace_groups.paths_label: "Directories"
+dialog.workspace_groups.browse_title: "Select workspace directory"
+dialog.workspace_groups.new_group_name: "New Group"
+dialog.workspace_groups.error_empty_paths: "Every group must have at least one directory. Groups with no directories: {names}"
 dialog.clone.title: "Clone Repository"
 dialog.profile.title: "Saved Configurations"
 dialog.confirm_close.title: "Services running"
@@ -340,6 +355,7 @@ tooltip.docker_manage_active: "Click to manage services (Active in profile)"
 tooltip.workspace_dir: "📁 {path}\nOpen in explorer"
 tooltip.profile_selector: "Select Workspace Profile"
 tooltip.manage_profiles: "Manage Profiles"
+tooltip.manage_groups: "Manage workspace groups and directories"
 
 # ── Dialog — Docker actions ───────────────────────────────────────────────────
 dialog.docker.unavailable_title: "Docker unavailable"

@@ -63,6 +63,21 @@ class ProjectAnalyzerService:
         # map() preserves input order, so alphabetical sort is already maintained
         return [r for r in results if r is not None]
 
+    def detect_repos_for_group(self, paths: list) -> list:
+        """Detect repos across all paths in a group. Deduplicates by repo path."""
+        seen = set()
+        combined = []
+        for workspace_dir in paths:
+            if not workspace_dir or not os.path.isdir(workspace_dir):
+                continue
+            for repo in self.detect_repos(workspace_dir):
+                if repo.path not in seen:
+                    seen.add(repo.path)
+                    combined.append(repo)
+        # Sort combined by name for stable display
+        combined.sort(key=lambda r: r.name.lower())
+        return combined
+
     def _classify_repo(self, name: str, path: str) -> Optional[RepoInfo]:
         """Classifies a directory against all loaded repo_types."""
         # Check all files once to avoid multiple os.walk or os.path.isfile calls

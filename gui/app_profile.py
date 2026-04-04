@@ -12,7 +12,7 @@ class ProfileManagerMixin:
     def _profile_dropdown_values(self) -> list:
         """Returns dropdown values: includes t("label.no_profile") only when no profile is active."""
         from core.profile_manager import list_profiles
-        names = list_profiles()
+        names = list_profiles(group_name=self._active_group_name)
         if self._current_profile_name and self._current_profile_name != t("label.no_profile"):
             return names
         return [t("label.no_profile")] + names
@@ -36,7 +36,7 @@ class ProfileManagerMixin:
         """Loads cached profile data for change tracking on startup."""
         if self._current_profile_name and self._current_profile_name != t("label.no_profile"):
             from core.profile_manager import load_profile
-            data = load_profile(self._current_profile_name)
+            data = load_profile(self._current_profile_name, group_name=self._active_group_name)
             if data:
                 self._current_profile_data = data
 
@@ -44,7 +44,9 @@ class ProfileManagerMixin:
         if selected_profile == t("label.no_profile"):
             self._current_profile_name = ""
             self._current_profile_data = {}
-            self._settings['last_profile'] = ""
+            lpg = self._settings.get('last_profile_by_group', {})
+            lpg[self._active_group_name] = ""
+            self._settings['last_profile_by_group'] = lpg
             self._save_settings(self._settings)
 
             # Limpiar perfiles en cards
@@ -56,7 +58,7 @@ class ProfileManagerMixin:
             return
 
         from core.profile_manager import load_profile
-        data = load_profile(selected_profile)
+        data = load_profile(selected_profile, group_name=self._active_group_name)
         if not data:
             self._log(f"Error cargando perfil: {selected_profile}")
             return
@@ -64,7 +66,9 @@ class ProfileManagerMixin:
         # Assign first, then apply -> to avoid false positive in change check
         self._current_profile_name = selected_profile
         self._current_profile_data = data
-        self._settings['last_profile'] = selected_profile
+        lpg = self._settings.get('last_profile_by_group', {})
+        lpg[self._active_group_name] = selected_profile
+        self._settings['last_profile_by_group'] = lpg
         self._save_settings(self._settings)
 
         # Hide t("label.no_profile") from dropdown now that a profile is active
@@ -85,7 +89,7 @@ class ProfileManagerMixin:
             include_config_files=True
         )
 
-        save_profile(self._current_profile_name, profile_data)
+        save_profile(self._current_profile_name, profile_data, group_name=self._active_group_name)
         self._current_profile_data = profile_data
         self._do_check_profile_changes()
         self._log(t("log.profile_saved", name=self._current_profile_name))

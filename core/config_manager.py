@@ -349,6 +349,54 @@ def auto_import_configs(repo_path: str, repo_type: str, environment_files: list 
     return imported
 
 
+# ─── Workspace Groups ────────────────────────────────────────────────────────
+
+
+def get_workspace_groups(config_path=None) -> list:
+    """Return list of group dicts [{name, paths}]. Creates default group from workspace_dir if absent."""
+    if config_path is None:
+        config_path = get_config_path()
+    data = _load_config_cached(config_path)
+    if "workspace_groups" in data:
+        return data["workspace_groups"]
+    # Migration: create default group from workspace_dir
+    workspace_dir = data.get("workspace_dir", "")
+    groups = [{"name": "Default", "paths": [workspace_dir] if workspace_dir else []}]
+    return groups
+
+
+def set_workspace_groups(groups: list, config_path=None):
+    """Persist workspace groups list to config."""
+    if config_path is None:
+        config_path = get_config_path()
+    data = _load_config_cached(config_path) or {}
+    data["workspace_groups"] = groups
+    with open(config_path, 'w', encoding='utf-8') as f:
+        import json
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    _invalidate_config_cache(config_path)
+
+
+def get_active_group(config_path=None) -> str:
+    """Return name of the active workspace group. Falls back to first group or 'Default'."""
+    if config_path is None:
+        config_path = get_config_path()
+    data = _load_config_cached(config_path)
+    return data.get("active_group", "")
+
+
+def set_active_group(group_name: str, config_path=None):
+    """Persist active group name to config."""
+    if config_path is None:
+        config_path = get_config_path()
+    data = _load_config_cached(config_path) or {}
+    data["active_group"] = group_name
+    with open(config_path, 'w', encoding='utf-8') as f:
+        import json
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    _invalidate_config_cache(config_path)
+
+
 def load_active_config(config_key: str, config_path: str = '') -> str:
     """Load the active config name for a given config_key."""
     if not config_path:
