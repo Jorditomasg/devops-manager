@@ -122,7 +122,7 @@ dialog.settings.shortcut_title: "🖥️ Acceso Rápido"
 dialog.settings.shortcut_desc: "Crea un acceso directo en el Escritorio para lanzar la aplicación sin abrir la terminal."
 dialog.settings.shortcut_desc_win: "Crea un acceso directo .lnk en el Escritorio. Se lanza con wscript.exe, sin ventana de terminal."
 dialog.settings.shortcut_desc_linux: "Crea una entrada .desktop en el launcher de aplicaciones y en el Escritorio."
-dialog.settings.language_title: "🌐 Language / Idioma"
+dialog.settings.language_title: "🌐 Idioma"
 dialog.settings.language_desc: "Seleccioná el idioma de la aplicación. Tiene efecto al reiniciar."
 dialog.settings.behavior_title: "⚙ Comportamiento"
 dialog.settings.minimize_to_tray: "Minimizar al system tray en lugar de la barra de tareas"
@@ -134,6 +134,9 @@ dialog.settings.shortcut_success_title: "Acceso directo creado"
 dialog.settings.shortcut_success_msg: "Se ha creado 'DevOps Manager' en:\n{path}"
 dialog.settings.shortcut_unavailable: "No se encontró el Escritorio. Se creó la entrada en ~/.local/share/applications/."
 dialog.settings.shortcut_error: "No se pudo determinar el directorio de la aplicación."
+dialog.settings.shortcut_err_link: "Error al crear el objeto COM IShellLink: 0x{code}"
+dialog.settings.shortcut_err_qi: "Error al obtener la interfaz IPersistFile: 0x{code}"
+dialog.settings.shortcut_err_save: "Error al guardar el archivo de acceso directo: 0x{code}"
 
 # ── Dialog — Clone ────────────────────────────────────────────────────────────
 dialog.clone.url_label: "URL del repositorio Git:"
@@ -342,6 +345,7 @@ dialog.settings.java_exe_warn_msg: "No se ha encontrado el ejecutable java en {j
 
 # ── Expand panel / repo card ──────────────────────────────────────────────────
 label.java: "Java:"
+label.java_default: "Sistema (Por Defecto)"
 label.java_recommended: "Recomendado: Java {version}"
 label.cmd: "Cmd:"
 label.cmd_placeholder: "comando de inicio"
@@ -356,6 +360,11 @@ tooltip.workspace_dir: "📁 {path}\nAbrir en el explorador"
 tooltip.profile_selector: "Seleccionar Perfil de Workspace"
 tooltip.manage_profiles: "Gestionar Perfiles"
 tooltip.manage_groups: "Gestionar grupos y directorios de workspace"
+tooltip.modify_config: "Modificar esta configuración ({name})"
+
+# ── Placeholders ──────────────────────────────────────────────────────────────
+placeholder.search: "🔍 Buscar..."
+placeholder.no_results: "Sin resultados"
 
 # ── Dialog — Docker actions ───────────────────────────────────────────────────
 dialog.docker.unavailable_title: "Docker no disponible"

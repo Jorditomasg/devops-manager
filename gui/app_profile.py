@@ -10,12 +10,12 @@ class ProfileManagerMixin:
     """Mixin providing profile load/save/detect/apply for DevOpsManagerApp."""
 
     def _profile_dropdown_values(self) -> list:
-        """Returns dropdown values: includes t("label.no_profile") only when no profile is active."""
+        """Returns dropdown values: t("label.no_profile") only when no profiles exist."""
         from core.profile_manager import list_profiles
         names = list_profiles(group_name=self._active_group_name)
-        if self._current_profile_name and self._current_profile_name != t("label.no_profile"):
+        if names:
             return names
-        return [t("label.no_profile")] + names
+        return [t("label.no_profile")]
 
     def _refresh_profile_dropdown(self, auto_select_name=None, original_name=None):
         """Reload profile options into topbar dropdown after creation/deletion."""

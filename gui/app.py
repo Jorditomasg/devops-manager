@@ -29,6 +29,7 @@ from gui.repo_card import RepoCard
 from gui.global_panel import GlobalPanel
 from gui.tooltip import ToolTip
 from gui.dialogs import CloneDialog, ConfigEditorDialog, ProfileDialog, SettingsDialog
+from gui.widgets import SearchableCombo
 from gui import theme
 from gui.app_profile import ProfileManagerMixin
 from core.repo_detector import detect_repos
@@ -184,8 +185,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             font=theme.font("base"), text_color=theme.C.text_accent
         ).pack(side="left", padx=(0, 6))
 
-        self._topbar_group_combo = ctk.CTkComboBox(
-            self._group_area, values=[""], width=200, state="readonly",
+        self._topbar_group_combo = SearchableCombo(
+            self._group_area, values=[""], width=160,
             command=self._on_group_changed,
             **theme.combo_style()
         )
@@ -217,7 +218,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         combo_kw = theme.combo_style(height="lg")
         combo_kw["border_color"] = theme.C.profile_accent
         combo_kw["button_color"] = theme.C.profile_accent
-        self._profile_combo = ctk.CTkComboBox(
+        self._profile_combo = SearchableCombo(
             btn_frame, values=profiles, width=160,
             command=self._on_profile_dropdown_change,
             **combo_kw

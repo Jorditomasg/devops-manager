@@ -56,7 +56,7 @@ class RepoCard(
         self._expanded = False
         self._is_installing = False
         self.selected_var = ctk.BooleanVar(value=True)
-        self.selected_java_var = ctk.StringVar(value="Sistema (Por Defecto)")
+        self.selected_java_var = ctk.StringVar(value=t("label.java_default"))
         self._branch_in_profile_var = ctk.BooleanVar(value=False)
 
         self._active_compose_files = set()

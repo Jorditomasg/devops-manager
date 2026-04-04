@@ -1,4 +1,5 @@
 """workspace_groups.py — Dialog for managing named workspace groups."""
+import copy
 import os
 import tkinter as tk
 import customtkinter as ctk
@@ -107,6 +108,7 @@ class WorkspaceGroupsDialog(BaseDialog):
 
         # Load data
         self._groups = get_workspace_groups()
+        self._initial_groups = copy.deepcopy(self._groups)
         self._active_group = get_active_group()
         self._selected_idx = None
         self._refresh_groups_list()
@@ -164,11 +166,16 @@ class WorkspaceGroupsDialog(BaseDialog):
             return
         if len(self._groups) <= 1:
             return  # must keep at least one group
-        del self._groups[self._selected_idx]
+        deleted_idx = self._selected_idx
+        del self._groups[deleted_idx]
         self._selected_idx = None
-        self._name_entry.delete(0, tk.END)
-        self._paths_listbox.delete(0, tk.END)
         self._refresh_groups_list()
+        if self._groups:
+            new_idx = min(deleted_idx, len(self._groups) - 1)
+            self._groups_listbox.selection_clear(0, tk.END)
+            self._groups_listbox.selection_set(new_idx)
+            self._groups_listbox.activate(new_idx)
+            self._on_group_select(None)
 
     def _rename_group(self):
         if self._selected_idx is None:
@@ -217,6 +224,6 @@ class WorkspaceGroupsDialog(BaseDialog):
         names = [g["name"] for g in self._groups]
         if self._active_group not in names and names:
             set_active_group(names[0])
-        if self._on_groups_changed:
+        if self._on_groups_changed and self._groups != self._initial_groups:
             self._on_groups_changed(self._groups)
         self.destroy()

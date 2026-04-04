@@ -5,9 +5,19 @@ import customtkinter as ctk
 import tkinter as tk
 from gui import theme
 from gui.tooltip import ToolTip
+from gui.widgets import SearchableCombo
 from gui.constants import BADGE_REFRESH_MS
 from gui.log_helpers import insert_log_line
 from core.i18n import t
+
+_JAVA_DEFAULT = None  # lazily resolved from i18n on first use
+
+
+def _java_default_label() -> str:
+    global _JAVA_DEFAULT
+    if _JAVA_DEFAULT is None:
+        _JAVA_DEFAULT = t("label.java_default")
+    return _JAVA_DEFAULT
 
 
 class ExpandPanelMixin:
@@ -123,20 +133,13 @@ class ExpandPanelMixin:
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
 
         initial_branches = self._branches_cache if getattr(self, '_branches_cache', None) else [t("label.loading")]
-        self._branch_combo = ctk.CTkComboBox(
+        self._branch_combo = SearchableCombo(
             row, values=initial_branches, width=180,
             command=self._on_branch_change, **theme.combo_style()
         )
         if getattr(self, '_current_branch', None):
             self._branch_combo.set(self._current_branch)
         self._branch_combo.pack(side="left", padx=(6, 4))
-
-        def _on_branch_type(event):
-            text = self._branch_combo.get().lower()
-            filtered = [b for b in self._branches_cache if text in b.lower()]
-            self._branch_combo.configure(values=filtered if filtered else self._branches_cache)
-
-        self._branch_combo.bind("<KeyRelease>", _on_branch_type)
 
         search_btn = ctk.CTkButton(
             row, text="🔍", width=28,
@@ -260,7 +263,7 @@ class ExpandPanelMixin:
         ctk.CTkLabel(sel_frame, text=f"{lbl_prefix}:", font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
 
-        combo = ctk.CTkComboBox(
+        combo = SearchableCombo(
             sel_frame, values=opts, width=180,
             command=lambda val, tf=target_file: self._on_config_change(val, tf),
             **theme.combo_style()
@@ -298,7 +301,7 @@ class ExpandPanelMixin:
             **theme.btn_style("neutral", font_size="xl")
         )
         cfg_btn.pack(side="left", padx=(0, 6))
-        ToolTip(cfg_btn, f"Modificar esta configuración ({mod_name})")
+        ToolTip(cfg_btn, t("tooltip.modify_config", name=mod_name))
 
         # Type label on the right as plain grey hint
         if len(all_target_files) > 1:
@@ -310,8 +313,8 @@ class ExpandPanelMixin:
         combo_style = theme.combo_style()
         ctk.CTkLabel(frame, text=t("label.java"), font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
-        java_options = ["Sistema (Por Defecto)"] + list(self._java_versions.keys())
-        self._java_combo = ctk.CTkComboBox(
+        java_options = [_java_default_label()] + list(self._java_versions.keys())
+        self._java_combo = SearchableCombo(
             frame, values=java_options, width=150,
             variable=self.selected_java_var, **combo_style
         )
@@ -324,7 +327,7 @@ class ExpandPanelMixin:
             def _on_java_change(*args):
                 if not hasattr(self, '_java_hint_label') or not self._java_hint_label.winfo_exists():
                     return
-                if self.selected_java_var.get() == "Sistema (Por Defecto)":
+                if self.selected_java_var.get() == _java_default_label():
                     self._java_hint_label.pack(side="left", padx=(0, 10))
                 else:
                     self._java_hint_label.pack_forget()
@@ -358,13 +361,13 @@ class ExpandPanelMixin:
         """Update available Java versions without restarting."""
         self._java_versions = versions
         if hasattr(self, '_java_combo'):
-            java_options = ["Sistema (Por Defecto)"] + list(self._java_versions.keys())
+            java_options = [_java_default_label()] + list(self._java_versions.keys())
             self._java_combo.configure(values=java_options)
 
             # If current selection is no longer valid, reset to default
             current = self.selected_java_var.get()
             if current not in java_options:
-                self.selected_java_var.set("Sistema (Por Defecto)")
+                self.selected_java_var.set(_java_default_label())
 
     def _build_command_row(self, content, repo):
         """Build custom start command row."""

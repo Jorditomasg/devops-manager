@@ -8,6 +8,7 @@ import customtkinter as ctk
 from gui.dialogs._base import BaseDialog
 from gui import theme
 from gui.tooltip import ToolTip
+from gui.widgets import SearchableCombo
 from core.i18n import t, list_available_languages
 
 _LABEL_W = 155  # fixed width for left-column labels in the form
@@ -101,8 +102,8 @@ class SettingsDialog(BaseDialog):
             (l["name"] for l in self._languages if l["code"] == current_code),
             lang_names[0] if lang_names else "English"
         )
-        self._lang_combo = ctk.CTkComboBox(
-            row, values=lang_names, width=190, state="readonly", **theme.combo_style()
+        self._lang_combo = SearchableCombo(
+            row, values=lang_names, width=190, **theme.combo_style()
         )
         self._lang_combo.set(current_name)
         self._lang_combo.pack(side="left")
@@ -299,7 +300,7 @@ class SettingsDialog(BaseDialog):
             byref(IID_IShellLinkW), byref(ppsl)
         )
         if hr != 0:
-            raise OSError(f'CoCreateInstance IShellLink falló: 0x{hr & 0xFFFFFFFF:08X}')
+            raise OSError(t("dialog.settings.shortcut_err_link", code=f'{hr & 0xFFFFFFFF:08X}'))
 
         def get_vtbl(iface):
             vtbl_addr = ctypes.c_void_p.from_address(iface.value).value
@@ -354,13 +355,13 @@ class SettingsDialog(BaseDialog):
             fn_qi = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, POINTER(GUID), POINTER(ctypes.c_void_p))(vtbl[0])
             hr = fn_qi(ppsl, byref(IID_IPersistFile), byref(pppf))
             if hr != 0:
-                raise OSError(f'QI IPersistFile falló: 0x{hr & 0xFFFFFFFF:08X}')
+                raise OSError(t("dialog.settings.shortcut_err_qi", code=f'{hr & 0xFFFFFFFF:08X}'))
 
             vtbl_pf = get_vtbl(pppf)
             fn_save = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int)(vtbl_pf[6])
             hr = fn_save(pppf, lnk_path, 1)
             if hr != 0:
-                raise OSError(f'IPersistFile::Save falló: 0x{hr & 0xFFFFFFFF:08X}')
+                raise OSError(t("dialog.settings.shortcut_err_save", code=f'{hr & 0xFFFFFFFF:08X}'))
 
             ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl_pf[2])(pppf)
             ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])(ppsl)
@@ -370,7 +371,7 @@ class SettingsDialog(BaseDialog):
     # ── Save ──────────────────────────────────────────────────────────────────
 
     def _save(self):
-        selected_name = self._lang_combo.get() if hasattr(self, '_lang_combo') else None
+        selected_name = self._lang_combo.get()
         if selected_name:
             selected_lang = next((l for l in self._languages if l["name"] == selected_name), None)
             if selected_lang:

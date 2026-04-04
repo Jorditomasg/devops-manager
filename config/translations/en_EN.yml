@@ -122,7 +122,7 @@ dialog.settings.shortcut_title: "🖥️ Quick Access"
 dialog.settings.shortcut_desc: "Create a Desktop shortcut to launch the application without opening a terminal."
 dialog.settings.shortcut_desc_win: "Creates a .lnk shortcut on the Desktop. Launches via wscript.exe — no terminal window."
 dialog.settings.shortcut_desc_linux: "Creates a .desktop entry in the app launcher and on the Desktop."
-dialog.settings.language_title: "🌐 Language / Idioma"
+dialog.settings.language_title: "🌐 Language"
 dialog.settings.language_desc: "Select the application language. Takes effect on restart."
 dialog.settings.behavior_title: "⚙ Behavior"
 dialog.settings.minimize_to_tray: "Minimize to system tray instead of taskbar"
@@ -134,6 +134,9 @@ dialog.settings.shortcut_success_title: "Shortcut created"
 dialog.settings.shortcut_success_msg: "Created 'DevOps Manager' at:\n{path}"
 dialog.settings.shortcut_unavailable: "No Desktop directory found. Launcher entry was created in ~/.local/share/applications/."
 dialog.settings.shortcut_error: "Could not determine application directory."
+dialog.settings.shortcut_err_link: "Failed to create IShellLink COM object: 0x{code}"
+dialog.settings.shortcut_err_qi: "Failed to query IPersistFile interface: 0x{code}"
+dialog.settings.shortcut_err_save: "Failed to save shortcut file: 0x{code}"
 
 # ── Dialog — Clone ────────────────────────────────────────────────────────────
 dialog.clone.url_label: "Git repository URL:"
@@ -342,6 +345,7 @@ dialog.settings.java_exe_warn_msg: "The java executable was not found at {java_e
 
 # ── Expand panel / repo card ──────────────────────────────────────────────────
 label.java: "Java:"
+label.java_default: "System (Default)"
 label.java_recommended: "Recommended: Java {version}"
 label.cmd: "Cmd:"
 label.cmd_placeholder: "start command"
@@ -356,6 +360,11 @@ tooltip.workspace_dir: "📁 {path}\nOpen in explorer"
 tooltip.profile_selector: "Select Workspace Profile"
 tooltip.manage_profiles: "Manage Profiles"
 tooltip.manage_groups: "Manage workspace groups and directories"
+tooltip.modify_config: "Edit this configuration ({name})"
+
+# ── Placeholders ──────────────────────────────────────────────────────────────
+placeholder.search: "🔍 Search..."
+placeholder.no_results: "No results"
 
 # ── Dialog — Docker actions ───────────────────────────────────────────────────
 dialog.docker.unavailable_title: "Docker unavailable"

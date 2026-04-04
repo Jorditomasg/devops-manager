@@ -64,15 +64,22 @@ def load_profile(profile_name: str, group_name: str = None) -> Optional[dict]:
 
 
 def list_profiles(group_name: str = None) -> list:
-    """List all available profile names."""
-    profiles_dir = get_profiles_dir(group_name)
-    if not os.path.isdir(profiles_dir):
-        return []
+    """List all available profile names.
 
+    Backward-compat: if a custom group has no profiles yet, fall back to the
+    root profiles directory so profiles saved before the groups feature was
+    introduced are still visible.
+    """
+    profiles_dir = get_profiles_dir(group_name)
     profiles = []
-    for f in os.listdir(profiles_dir):
-        if f.endswith('.json'):
-            profiles.append(f[:-5])
+    if os.path.isdir(profiles_dir):
+        profiles = [f[:-5] for f in os.listdir(profiles_dir) if f.endswith('.json')]
+
+    if not profiles and group_name and group_name != "Default":
+        root_dir = get_profiles_dir(None)
+        if os.path.isdir(root_dir):
+            profiles = [f[:-5] for f in os.listdir(root_dir) if f.endswith('.json')]
+
     return sorted(profiles)
 
 
