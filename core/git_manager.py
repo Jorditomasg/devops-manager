@@ -244,7 +244,7 @@ def get_status_summary(repo_path: str) -> dict:
     """
     import re as _re
     result = _run_git_command(
-        ['git', '--no-optional-locks', 'status', '--porcelain', '-b'],
+        ['git', '--no-optional-locks', 'status', '--porcelain', '-b', '--untracked-files=all'],
         repo_path, timeout=5
     )
     out = {'branch': 'unknown', 'behind': 0, 'staged': 0, 'unstaged': 0}
@@ -280,7 +280,7 @@ def get_status_summary(repo_path: str) -> dict:
 def count_modified_files(repo_path: str) -> int:
     """Count number of modified/untracked files."""
     try:
-        result = _run_git_command(['git', '--no-optional-locks', 'status', '--porcelain'], repo_path, timeout=5)
+        result = _run_git_command(['git', '--no-optional-locks', 'status', '--porcelain', '--untracked-files=all'], repo_path, timeout=5)
         if result.returncode == 0:
             lines = [line for line in result.stdout.splitlines() if line.strip()]
             return len(lines)
@@ -297,7 +297,7 @@ def get_local_changes(repo_path: str, ignore_files: list[str] = None) -> list[st
         ignore_files = []
     changes = []
     try:
-        result = _run_git_command(['git', '--no-optional-locks', 'status', '--porcelain'], repo_path, timeout=5)
+        result = _run_git_command(['git', '--no-optional-locks', 'status', '--porcelain', '--untracked-files=all'], repo_path, timeout=5)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 if not line.strip():
