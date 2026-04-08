@@ -58,6 +58,8 @@ class RepoCard(
         self.selected_var = ctk.BooleanVar(value=True)
         self.selected_java_var = ctk.StringVar(value=t("label.java_default"))
         self._branch_in_profile_var = ctk.BooleanVar(value=False)
+        self._profile_in_profile_vars: dict = {}   # target_file → BoolVar (per env file)
+        self._pending_profile_tracked_keys = None  # set of rel paths, populated on profile load
 
         self._active_compose_files = set()
         self._docker_compose_buttons = {}
@@ -191,6 +193,9 @@ class RepoCard(
         elif hasattr(self, '_config_combos') and self._config_combos:
             res = {}
             for tf, combo in self._config_combos.items():
+                var = self._profile_in_profile_vars.get(tf)
+                if var is not None and not var.get():
+                    continue  # this env file is excluded from profile
                 v = combo.get()
                 if v and v not in (t("label.no_selection"), ''):
                     rel = os.path.relpath(tf, self._repo.path).replace('\\', '/')
@@ -207,6 +212,48 @@ class RepoCard(
 
     def set_branch_in_profile(self, value: bool):
         self._branch_in_profile_var.set(value)
+
+    def get_profile_in_profile(self) -> bool:
+        """True if at least one env file has its checkbox on (or no vars created yet → default True)."""
+        if not self._profile_in_profile_vars:
+            return self._pending_profile_tracked_keys is None or bool(self._pending_profile_tracked_keys)
+        return any(v.get() for v in self._profile_in_profile_vars.values())
+
+    def set_profile_in_profile(self, value: bool):
+        """Set all env-file checkboxes to value (all-or-nothing override)."""
+        self._pending_profile_tracked_keys = None
+        for v in self._profile_in_profile_vars.values():
+            v.set(value)
+        if not self._profile_in_profile_vars:
+            # Panel not built yet — store as empty or full set so _build_env_file_selector picks it up
+            self._pending_profile_tracked_keys = None if value else set()
+
+    def get_profile_tracked_files(self):
+        """Return sorted list of rel paths for env files whose checkbox is on, or None if unknown."""
+        if self._profile_in_profile_vars:
+            result = []
+            for tf, var in self._profile_in_profile_vars.items():
+                if var.get():
+                    try:
+                        rel = os.path.relpath(tf, self._repo.path).replace('\\', '/')
+                    except ValueError:
+                        rel = tf
+                    result.append(rel)
+            return sorted(result)
+        if self._pending_profile_tracked_keys is not None:
+            return sorted(self._pending_profile_tracked_keys)
+        return None  # panel never built, state unknown → caller uses default
+
+    def set_profile_tracked_files(self, tracked_rels):
+        """Set per-file checkbox state from a list of tracked rel paths."""
+        keys = set(tracked_rels) if tracked_rels is not None else set()
+        self._pending_profile_tracked_keys = keys
+        for tf, var in self._profile_in_profile_vars.items():
+            try:
+                rel = os.path.relpath(tf, self._repo.path).replace('\\', '/')
+            except ValueError:
+                rel = tf
+            var.set(rel in keys)
 
     def get_name(self) -> str:
         return self._repo.name

@@ -303,6 +303,27 @@ class ExpandPanelMixin:
         cfg_btn.pack(side="left", padx=(0, 6))
         ToolTip(cfg_btn, t("tooltip.modify_config", name=mod_name))
 
+        # Per-file checkbox: determine initial tracked state
+        tracked_keys = getattr(self, '_pending_profile_tracked_keys', None)
+        if tracked_keys is None:
+            is_tracked = True  # default: all env files tracked
+        else:
+            try:
+                rel_tf = os.path.relpath(target_file, repo.path).replace('\\', '/')
+            except ValueError:
+                rel_tf = target_file
+            is_tracked = rel_tf in tracked_keys
+
+        var = self._profile_in_profile_vars.setdefault(target_file, ctk.BooleanVar(value=is_tracked))
+        profile_chk = ctk.CTkCheckBox(
+            sel_frame, text="", variable=var,
+            width=20,
+            checkbox_width=theme.G.checkbox_size, checkbox_height=theme.G.checkbox_size,
+            command=self._trigger_change_callback,
+        )
+        profile_chk.pack(side="left", padx=(0, 10))
+        ToolTip(profile_chk, t("tooltip.env_in_profile"))
+
         # Type label on the right as plain grey hint
         if len(all_target_files) > 1:
             ctk.CTkLabel(sel_frame, text=mod_name, font=theme.font("xs", mono=True),

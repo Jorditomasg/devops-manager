@@ -173,12 +173,25 @@ class ProfileManagerMixin:
                 return True
             if card.get_branch() != saved_branch:
                 return True
-        cur_prof = card.get_current_profile()
-        tgt_prof = t_cfg.get('profile')
-        if not cur_prof and not tgt_prof:
-            pass # treat None, '', and {} as perfectly equal
-        elif cur_prof != tgt_prof:
-            return True
+        saved_profile = t_cfg.get('profile')
+        profile_not_tracked = 'profile' in t_cfg and t_cfg['profile'] is None
+        if profile_not_tracked:
+            if card.get_profile_in_profile():
+                return True
+        else:
+            if not card.get_profile_in_profile():
+                return True
+            cur_prof = card.get_current_profile()
+            if not cur_prof and not saved_profile:
+                pass  # treat None, '', and {} as perfectly equal
+            elif cur_prof != saved_profile:
+                return True
+            # Check per-file checkbox state
+            saved_tracked = t_cfg.get('profile_tracked')
+            cur_tracked = card.get_profile_tracked_files()
+            if saved_tracked is not None and cur_tracked is not None:
+                if set(saved_tracked) != set(cur_tracked):
+                    return True
         if card.get_custom_command() != t_cfg.get('custom_command', ''):
             return True
         if card.is_selected() != t_cfg.get('selected', True):
@@ -232,9 +245,18 @@ class ProfileManagerMixin:
             card.set_branch_in_profile(True)
         else:
             card.set_branch_in_profile(False)
-        profile = config.get('profile')
-        if profile is not None:
-            card.set_profile(profile)
+        profile_val = config.get('profile')
+        profile_tracked = config.get('profile_tracked')
+        profile_not_tracked = 'profile' in config and config['profile'] is None
+        if profile_not_tracked:
+            card.set_profile_in_profile(False)
+        else:
+            if profile_tracked is not None:
+                card.set_profile_tracked_files(profile_tracked)
+            else:
+                card.set_profile_in_profile(True)  # backward compat: all tracked
+            if profile_val is not None:
+                card.set_profile(profile_val)
         custom_cmd = config.get('custom_command')
         if custom_cmd is not None:
             card.set_custom_command(custom_cmd)
