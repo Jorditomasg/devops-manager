@@ -285,7 +285,7 @@ class ActionsMixin:
                     break
 
         if profile and repo.run_profile_flag:
-            cmd = f"{cmd} {repo.run_profile_flag}{profile}"
+            cmd = f'{cmd} {repo.run_profile_flag}"{profile}"'
 
         env = self._prepare_start_env()
 

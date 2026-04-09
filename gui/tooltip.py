@@ -29,6 +29,8 @@ class ToolTip:
         widget.bind("<ButtonPress>", self._cancel, add="+")
 
     def _schedule(self, event=None):
+        if not self._text:
+            return
         self._cancel()
         self._after_id = self._widget.after(_TOOLTIP_DELAY_MS, self._show)
 
@@ -42,7 +44,7 @@ class ToolTip:
         self._hide()
 
     def _show(self):
-        if self._tip_window:
+        if self._tip_window or not self._text:
             return
 
         try:
@@ -108,5 +110,7 @@ class ToolTip:
             self._tip_window = None
 
     def update_text(self, text: str):
-        """Update the tooltip text dynamically."""
+        """Update the tooltip text dynamically. Cancels any pending/visible tooltip if cleared."""
         self._text = text
+        if not text:
+            self._cancel()

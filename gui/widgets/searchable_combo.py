@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import sys
 import tkinter as tk
+import tkinter.font as tkFont
 import customtkinter as ctk
 
 from gui import theme
 from gui.tooltip import ToolTip
+from gui.constants import POPUP_BORDER_PAD, COMBO_SCROLLBAR_W
 from core.i18n import t
 
 
@@ -32,6 +34,9 @@ class SearchableCombo(ctk.CTkFrame):
         value = combo.get()
         combo.configure(values=[...])
     """
+
+    _MAX_VISIBLE: int = 9   # maximum rows shown in the list (triggers scroll above this)
+    _LIST_ITEM_H: int = 36  # Increased to ensure buttons fit comfortably inside scrollable frame
 
     def __init__(
         self,
@@ -60,12 +65,22 @@ class SearchableCombo(ctk.CTkFrame):
         self._button_color = button_color
         self._button_hover_color = button_hover_color or button_color
         self._popup: ctk.CTkToplevel | None = None
+        self._popup_outer: ctk.CTkFrame | None = None
+        self._popup_w: int = 0
+        self._popup_x: int = 0
+        self._popup_y: int = 0
         self._click_bind_id: str | None = None
         self._global_click_root: tk.Misc | None = None
         self._search_var: ctk.StringVar | None = None
         self._search_trace_id: str | None = None
         self._register_after_id: str | None = None
         self._popup_btns: list[ctk.CTkButton] = []
+        self._list_canvas: tk.Canvas | None = None
+        self._inner_frame: tk.Frame | None = None
+        self._list_scrollbar: ctk.CTkScrollbar | None = None
+        self._list_canvas_host: tk.Frame | None = None
+        self._canvas_window_id: int | None = None
+        self._is_popup_scrolling: bool = False
 
         # Initial selected value
         if variable is not None:
@@ -102,21 +117,8 @@ class SearchableCombo(ctk.CTkFrame):
 
     def _build_display(self):
         """Non-editable label showing selected value + dropdown arrow button."""
-        self._display_label = ctk.CTkLabel(
-            self,
-            text=self._selected,
-            font=self._combo_font or theme.font("base"),
-            text_color=theme.C.text_primary,
-            anchor="w",
-            cursor="hand2",
-        )
-        self._display_label.pack(side="left", padx=(6, 0), pady=2, fill="x", expand=True)
-        self._display_tooltip = ToolTip(self, self._selected or "")
-
-        sep_color = self._button_color or theme.C.card_border
-        self._separator = ctk.CTkFrame(self, width=1, fg_color=sep_color, corner_radius=0)
-        self._separator.pack(side="right", fill="y", pady=2)
-
+        # Right-side elements MUST be packed first so the expanding label
+        # only fills the space that remains after the button is placed.
         self._arrow_btn = ctk.CTkButton(
             self,
             text="▾",
@@ -130,13 +132,71 @@ class SearchableCombo(ctk.CTkFrame):
         )
         self._arrow_btn.pack(side="right", padx=(0, 2), pady=2)
 
+        sep_color = self._button_color or theme.C.card_border
+        self._separator = ctk.CTkFrame(self, width=1, fg_color=sep_color, corner_radius=0)
+        self._separator.pack(side="right", fill="y", pady=2)
+
+        self._display_label = ctk.CTkLabel(
+            self,
+            text="",
+            font=self._combo_font or theme.font("base"),
+            text_color=theme.C.text_primary,
+            anchor="w",
+            cursor="hand2",
+        )
+        self._display_label.pack(side="left", padx=(6, 0), pady=2, fill="x", expand=True)
+        # Attach tooltip directly to the label — avoids unreliable event_generate propagation
+        self._display_tooltip = ToolTip(self._display_label, "")
+
         # "break" stops the event propagating to parent frames (prevents double-toggle)
         self._display_label.bind("<Button-1>", lambda e: (self._toggle_popup(), "break")[1])
+        # Re-evaluate truncation whenever the label is resized
+        self._display_label.bind("<Configure>", lambda e: self._update_display_text())
 
-        # Propagate hover events so ToolTip works when placed on this widget
-        for child in (self._display_label, self._arrow_btn):
-            child.bind("<Enter>", lambda e: self.event_generate("<Enter>"), "+")
-            child.bind("<Leave>", lambda e: self.event_generate("<Leave>"), "+")
+        self._update_display_text()
+
+    def _make_measure_font(self) -> tkFont.Font:
+        """Return a tkFont.Font matching the current combo font, for text measurement."""
+        spec = self._combo_font or theme.font("base")
+        if isinstance(spec, tuple) and len(spec) >= 2:
+            family, size = spec[0], abs(spec[1])
+            weight = "bold" if len(spec) > 2 and "bold" in str(spec[2]) else "normal"
+            return tkFont.Font(family=family, size=size, weight=weight)
+        return tkFont.nametofont("TkDefaultFont")
+
+    def _update_display_text(self):
+        """Truncate the displayed text with an ellipsis when it overflows the label width.
+
+        Sets the tooltip to the full text only when truncation occurs; clears it otherwise.
+        """
+        if not hasattr(self, "_display_label") or not self._display_label.winfo_exists():
+            return
+
+        full_text = self._selected
+        available_w = self._display_label.winfo_width()
+
+        if available_w <= 1:
+            # Widget not yet laid out — set raw text; <Configure> will re-trigger
+            self._display_label.configure(text=full_text)
+            return
+
+        if not full_text:
+            self._display_label.configure(text="")
+            self._display_tooltip.update_text("")
+            return
+
+        f = self._make_measure_font()
+        if f.measure(full_text) <= available_w:
+            self._display_label.configure(text=full_text)
+            self._display_tooltip.update_text("")
+        else:
+            ellipsis = "…"
+            max_w = available_w - f.measure(ellipsis)
+            truncated = full_text
+            while truncated and f.measure(truncated) > max_w:
+                truncated = truncated[:-1]
+            self._display_label.configure(text=truncated + ellipsis)
+            self._display_tooltip.update_text(full_text)
 
     # ── Popup lifecycle ───────────────────────────────────────────────────────
 
@@ -193,47 +253,85 @@ class SearchableCombo(ctk.CTkFrame):
             fg_color=theme.C.section,
             border_color=theme.C.default_border,
         )
-        search_entry.pack(fill="x", padx=6, pady=(6, 4))
+        search_entry.pack(fill="x", padx=6, pady=(6, 2))
 
-        # Scrollable list — height capped to 8 visible items
-        item_h = 32
-        list_h = min(len(self._values), 8) * item_h or item_h
-        self._list_frame = ctk.CTkScrollableFrame(
-            outer, fg_color="transparent", height=list_h,
+        # Canvas-based scrollable list — replaces CTkScrollableFrame (no private API access)
+        card_bg = theme.C.card  # plain str hex, safe for tk widgets
+        self._list_canvas_host = tk.Frame(outer, bg=card_bg)
+        self._list_canvas_host.pack(fill="x", padx=4, pady=(0, 4))
+        # Grid layout: column 0 = canvas (expands), column 1 = scrollbar (fixed width, optional)
+        self._list_canvas_host.grid_columnconfigure(0, weight=1)
+        self._list_canvas_host.grid_rowconfigure(0, weight=1)
+
+        self._list_canvas = tk.Canvas(
+            self._list_canvas_host,
+            highlightthickness=0,
+            bd=0,
+            yscrollincrement=20,
+            bg=card_bg,
         )
-        self._list_frame.pack(fill="both", expand=True, padx=4, pady=(0, 6))
+        self._list_canvas.grid(row=0, column=0, sticky="nsew")
 
-        # Scroll forwarder: mousewheel on any child routes to the canvas
-        try:
-            canvas = self._list_frame._parent_canvas
-            canvas.configure(yscrollincrement=20)
+        self._list_scrollbar = ctk.CTkScrollbar(
+            self._list_canvas_host,
+            orientation="vertical",
+            command=self._list_canvas.yview,
+            width=COMBO_SCROLLBAR_W,
+            fg_color="transparent",
+        )
+        # Scrollbar is NOT gridded here; _resize_popup() manages grid/grid_remove
 
-            def _forward_scroll(event):
-                if event.num == 4:
-                    canvas.yview_scroll(-1, "units")
-                elif event.num == 5:
-                    canvas.yview_scroll(1, "units")
-                else:
-                    canvas.yview_scroll(int(-event.delta / 120), "units")
+        self._inner_frame = tk.Frame(self._list_canvas, bg=card_bg)
+        self._canvas_window_id = self._list_canvas.create_window(
+            (0, 0), window=self._inner_frame, anchor="nw"
+        )
 
-            self._popup_scroll_fn = _forward_scroll
-            for _sw in (canvas, self._list_frame):
-                _sw.bind("<MouseWheel>", _forward_scroll, "+")
-                _sw.bind("<Button-4>", _forward_scroll, "+")
-                _sw.bind("<Button-5>", _forward_scroll, "+")
-        except AttributeError:
-            self._popup_scroll_fn = None
+        # Sync scrollregion only when popup is in scrolling mode.
+        # When not scrolling, _resize_popup() sets the scrollregion explicitly to match
+        # canvas height — this binding must be a no-op to avoid overriding that fix.
+        self._inner_frame.bind(
+            "<Configure>",
+            lambda e: self._list_canvas.configure(
+                scrollregion=self._list_canvas.bbox("all")
+            ) if self._is_popup_scrolling else None,
+        )
+        # Keep inner_frame width equal to canvas width
+        self._list_canvas.bind(
+            "<Configure>",
+            lambda e: self._list_canvas.itemconfigure(
+                self._canvas_window_id, width=e.width
+            ),
+        )
+
+        # Scroll forwarder: routes mousewheel to canvas, returns "break" to stop propagation
+        # to any widget behind the popup (e.g. the main app scrollable areas).
+        def _forward_scroll(event):
+            if event.num == 4:
+                self._list_canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                self._list_canvas.yview_scroll(1, "units")
+            else:
+                self._list_canvas.yview_scroll(int(-event.delta / 120), "units")
+            return "break"
+
+        self._popup_scroll_fn = _forward_scroll
+        for _sw in (self._list_canvas, self._inner_frame):
+            _sw.bind("<MouseWheel>", _forward_scroll, "+")
+            _sw.bind("<Button-4>", _forward_scroll, "+")
+            _sw.bind("<Button-5>", _forward_scroll, "+")
+
+        # Store popup state so _resize_popup() can update geometry on each filter change
+        self._popup_outer = outer
+        self._popup_w = w
+        self._popup_x = x
+        self._popup_y = y
 
         self._popup_btns = []
-        self._render_items("")
+        self._render_items("")  # also calls _resize_popup() → sets initial geometry
         self._search_trace_id = self._search_var.trace_add(
             "write", lambda *_: self._render_items(self._search_var.get())
         )
 
-        # Finalize geometry
-        popup.update_idletasks()
-        popup_h = theme.G.btn_height_md + list_h + 28  # entry + list + padding
-        popup.geometry(f"{w}x{popup_h}+{x}+{y}")
         popup.deiconify()
         popup.lift()
         search_entry.focus_set()
@@ -241,6 +339,47 @@ class SearchableCombo(ctk.CTkFrame):
         popup.bind("<Escape>", lambda _: self._close_popup())
         # Defer global bind so the opening click doesn't immediately close the popup
         self._register_after_id = self.after(50, self._register_global_click)
+
+    def _resize_popup(self):
+        """Resize the popup to fit the current number of visible items.
+
+        Uses a deterministic calculation: 44 (search area) + list_h + 4 + POPUP_BORDER_PAD.
+        Scrollbar is packed only when count > _MAX_VISIBLE, fully absent otherwise.
+        """
+        if not (self._popup and self._popup.winfo_exists()):
+            return
+        if not (self._popup_outer and self._popup_outer.winfo_exists()):
+            return
+
+        count = len(self._popup_btns)
+        visible_rows = max(1, min(count, self._MAX_VISIBLE))
+
+        # REQ-2: canvas height = min(count, _MAX_VISIBLE) * _LIST_ITEM_H
+        list_h = visible_rows * self._LIST_ITEM_H
+        self._list_canvas.configure(height=list_h)
+
+        # Scrollbar gridded ONLY when count > _MAX_VISIBLE — fully absent otherwise.
+        # Grid layout (not pack) ensures reliable space redistribution when toggling.
+        is_scrolling = count > self._MAX_VISIBLE
+        self._is_popup_scrolling = is_scrolling
+        if is_scrolling:
+            self._list_scrollbar.grid(row=0, column=1, sticky="ns")
+            self._list_canvas.configure(yscrollcommand=self._list_scrollbar.set)
+            # scrollregion is managed by inner_frame <Configure> binding (content > canvas)
+        else:
+            self._list_scrollbar.grid_remove()
+            self._list_canvas.configure(yscrollcommand="")
+            # Force scrollregion == canvas height: the <Configure> binding is disabled
+            # (is_popup_scrolling=False) so this value won't be overridden by lazy layout.
+            self._list_canvas.configure(scrollregion=(0, 0, self._popup_w, list_h))
+
+        self._list_canvas.yview_moveto(0)
+
+        # REQ-5: popup_h = 44 + list_h + 4 + POPUP_BORDER_PAD (deterministic)
+        popup_h = 44 + list_h + 4 + POPUP_BORDER_PAD
+        self._popup.geometry(
+            f"{self._popup_w}x{int(popup_h)}+{self._popup_x}+{self._popup_y}"
+        )
 
     def _render_items(self, filter_text: str):
         """Destroy and recreate list buttons matching the current filter."""
@@ -253,20 +392,38 @@ class SearchableCombo(ctk.CTkFrame):
 
         if not items:
             lbl = ctk.CTkLabel(
-                self._list_frame,
+                self._inner_frame,
                 text=t("placeholder.no_results"),
                 font=self._combo_font or theme.font("base"),
                 text_color=theme.C.text_muted,
                 anchor="center",
             )
-            lbl.pack(fill="x", pady=8)
+            lbl.pack(fill="x", padx=4, pady=6)
             self._popup_btns.append(lbl)  # type: ignore[arg-type]
+            self._resize_popup()
             return
 
+        # Prepare for truncation measurement
+        f = self._make_measure_font()
+        # avail_w: popup_w minus outer margins (22) minus button side padding (4+4=8)
+        # minus scrollbar width when active
+        is_scrolling = len(items) > self._MAX_VISIBLE
+        avail_w = self._popup_w - (30 + COMBO_SCROLLBAR_W if is_scrolling else 30)
+
         for val in items:
+            # Determine display text with ellipsis if too long
+            display_text = val
+            if f.measure(val) > avail_w:
+                ellipsis = "…"
+                target_w = avail_w - f.measure(ellipsis)
+                # Narrow down until it fits
+                while display_text and f.measure(display_text) > target_w:
+                    display_text = display_text[:-1]
+                display_text += ellipsis
+
             btn = ctk.CTkButton(
-                self._list_frame,
-                text=val,
+                self._inner_frame,
+                text=display_text,
                 anchor="w",
                 height=28,
                 fg_color=theme.C.section if val == self._selected else "transparent",
@@ -276,12 +433,18 @@ class SearchableCombo(ctk.CTkFrame):
                 corner_radius=theme.G.corner_btn,
                 command=lambda v=val: self._select(v),
             )
-            btn.pack(fill="x", pady=1)
+            btn.pack(fill="x", padx=4, pady=1)
+            
+            # Add tooltip with ORIGINAL (full) text
+            ToolTip(btn, val)
+
             if hasattr(self, "_popup_scroll_fn") and self._popup_scroll_fn:
                 btn.bind("<MouseWheel>", self._popup_scroll_fn, "+")
                 btn.bind("<Button-4>", self._popup_scroll_fn, "+")
                 btn.bind("<Button-5>", self._popup_scroll_fn, "+")
             self._popup_btns.append(btn)
+
+        self._resize_popup()
 
     def _register_global_click(self):
         """Register the outside-click handler after a short delay to skip the opening click."""
@@ -325,17 +488,21 @@ class SearchableCombo(ctk.CTkFrame):
         if self._popup and self._popup.winfo_exists():
             self._popup.destroy()
         self._popup = None
+        self._popup_outer = None
         self._popup_btns = []
         self._popup_scroll_fn = None
+        self._list_canvas = None
+        self._inner_frame = None
+        self._list_scrollbar = None
+        self._list_canvas_host = None
+        self._canvas_window_id = None
+        self._is_popup_scrolling = False
 
     def _select(self, value: str):
         """Select an item: update display, close popup, fire callback."""
         self._close_popup()
         self._selected = value
-        if hasattr(self, "_display_label"):
-            self._display_label.configure(text=value)
-        if hasattr(self, "_display_tooltip"):
-            self._display_tooltip.update_text(value)
+        self._update_display_text()
         if self._variable is not None:
             self._variable.set(value)
         if self._command:
@@ -346,10 +513,7 @@ class SearchableCombo(ctk.CTkFrame):
     def set(self, value: str):
         """Set the displayed value without firing the command callback."""
         self._selected = value
-        if hasattr(self, "_display_label"):
-            self._display_label.configure(text=value)
-        if hasattr(self, "_display_tooltip"):
-            self._display_tooltip.update_text(value)
+        self._update_display_text()
         if self._variable is not None:
             self._variable.set(value)
 
@@ -381,6 +545,7 @@ class SearchableCombo(ctk.CTkFrame):
             self._combo_font = f
             if hasattr(self, "_display_label"):
                 self._display_label.configure(font=f)
+                self._update_display_text()
         if "button_color" in kwargs:
             bc = kwargs.pop("button_color")
             self._button_color = bc

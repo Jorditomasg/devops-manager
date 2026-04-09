@@ -26,3 +26,7 @@ PORT_PATTERNS_FALLBACK = [
     r"(?:listening on|bound to).*?port\s+(\d+)",
 ]
 
+# ── Searchable combo popup ───────────────────────────────────────
+POPUP_BORDER_PAD  = 8   # extra bottom padding in popup height calculation
+COMBO_SCROLLBAR_W = 12  # width reserved for the vertical scrollbar
+

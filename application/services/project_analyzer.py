@@ -235,7 +235,7 @@ class ProjectAnalyzerService:
             if os.path.isdir(apps_dir):
                 apps = [d for d in os.listdir(apps_dir) if os.path.isdir(os.path.join(apps_dir, d)) and not d.startswith('.')]
                 main_app = apps[0] if apps else 'app'
-                cmd = cmd.replace('{main_app}', main_app)
+                cmd = cmd.replace('{main_app}', f'"{main_app}"')
                 
         return cmd
 
