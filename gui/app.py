@@ -114,8 +114,13 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._tray_icon = None
         self._init_tray()
 
+        # Snapshot of window state kept current while visible — used by tray restore
+        self._last_visible_state: dict = {}
+
         # Bind Unmap to catch minimize
         self.bind("<Unmap>", self._on_window_unmap)
+        # Track last visible state for accurate tray restore
+        self.bind("<Configure>", self._on_window_configure)
 
         self._build_ui()
         self._scan_repos()
@@ -720,12 +725,24 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 img = Image.new('RGB', (64, 64), color=color)
             self._tray_icon_images[color] = img
 
+    def _on_window_configure(self, event):
+        if event.widget != self:
+            return
+        if self.state() in ('iconic', 'withdrawn'):
+            return
+        self._last_visible_state = {
+            'geometry': self.geometry(),
+            'state': self.state(),
+            'fullscreen': bool(self.attributes('-fullscreen')),
+        }
+
     def _on_window_unmap(self, event):
         # Only handle events from the main window itself, intercept minimize
         if event.widget != self:
             return
 
         if self.state() == 'iconic' and self._settings.get('minimize_to_tray', True):
+            self._pre_tray_state = dict(self._last_visible_state)
             self.withdraw()
             
             # Recreate the tray icon to avoid state issues
@@ -755,7 +772,16 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         def _show():
             self.deiconify()
             self.attributes('-alpha', 1.0)
-            self.state('normal')
+            snap = getattr(self, '_pre_tray_state', None)
+            if snap and snap.get('fullscreen'):
+                self.attributes('-fullscreen', True)
+            elif snap and snap.get('state') == 'zoomed':
+                self.state('zoomed')
+            elif snap:
+                self.geometry(snap['geometry'])
+                self.state('normal')
+            else:
+                self.state('normal')
             self.lift()
             self.focus_force()
         self.after(0, _show)
