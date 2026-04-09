@@ -50,7 +50,7 @@ The codebase follows a layered DDD-influenced architecture:
 - **`application/`** — `ProjectAnalyzerService` (repo detection) and `ManageServicesUseCase` (service orchestration).
 - **`infrastructure/`** — `ProcessManager` (subprocess lifecycle) and YAML/properties file parsers.
 - **`core/`** — Managers for config, DB presets, git operations, Java version detection, logging, and service launching.
-- **`gui/`** — All UI code: `app.py` (main window) + `app_profile.py` (profile mixin), `repo_card/` package (per-repo accordion widget split into focused mixins), `dialogs/` package (9 dialog classes with shared `BaseDialog`), `global_panel.py` (batch controls), `constants.py` (shared magic strings/numbers), `log_helpers.py` (shared log insertion), `tooltip.py`, `theme.py` (UI theme loader).
+- **`gui/`** — All UI code: `app.py` (main window) + `app_profile.py` (profile mixin), `repo_card/` package (per-repo accordion widget split into focused mixins), `dialogs/` package (8 dialog classes with shared `BaseDialog`), `widgets/` package (reusable custom widgets: `SearchableCombo`), `global_panel.py` (batch controls), `constants.py` (shared magic strings/numbers), `log_helpers.py` (shared log insertion), `tooltip.py`, `theme.py` (UI theme loader).
 - **`config/repo_types/`** — YAML definitions that drive repository detection and available commands (one file per framework).
 - **`config/ui_theme.yml`** — Editable UI theme: colors, fonts, sizes, button variants. Overrides the defaults embedded in `gui/theme.py`.
 - **`scripts/`** — OS-separated subdirectories: `scripts/win/` (Windows: `run.vbs` silent launcher, `run.bat` console, `install.bat`, `compile.bat`, `run-compiled.bat`) and `scripts/linux/` (Linux/Unix: `run.sh`, `install.sh`, `compile.sh`, `run-compiled.sh`). `build-installer.bat` stays at `scripts/` root (CI/CD only).
@@ -113,7 +113,17 @@ Button variants available: `success`, `start`, `danger`, `danger_alt`, `danger_d
 
 `gui/dialogs/` is a package with one file per dialog group:
 - `_base.py` — `BaseDialog(ctk.CTkToplevel)`: shared title/geometry/transient/grab_set boilerplate
-- `clone.py`, `config_editor.py`, `profile.py`, `settings.py`, `repo_config_manager.py`, `docker_compose.py`
+- `clone.py` — git clone dialog
+- `config_editor.py` — YAML/properties config file editor
+- `profile.py` — profile save/load/manage dialog
+- `settings.py` — application settings (language, workspace, Java, shortcuts)
+- `repo_config_manager.py` — per-repo command and environment overrides
+- `docker_compose.py` — docker-compose profile selector and controls
+- `workspace_groups.py` — workspace group management (create, edit, assign repos to groups)
+- `confirm_close.py` — confirmation dialog shown when closing with running services
+
+`gui/widgets/` is a package of reusable custom widgets:
+- `searchable_combo.py` — `SearchableCombo`: a CTkComboBox replacement with a live-filter search entry and a scrollable popup (canvas + CTkScrollbar). Used wherever repo/branch/profile lists exceed a few items.
 
 `gui/app.py` manages the scrollable list of repo cards and system tray integration (pystray). Profile load/save/detect/apply logic lives in `gui/app_profile.py` (`ProfileManagerMixin`).
 
@@ -132,5 +142,7 @@ Button variants available: `success`, `start`, `danger`, `danger_alt`, `danger_d
 **Git badge concurrency cap** (`gui/repo_card/_git.py`): `_GIT_BADGE_SEMAPHORE = threading.Semaphore(GIT_BADGE_SEMAPHORE_COUNT)` (value: 3) is a class variable on `GitMixin` limiting concurrent `git status` subprocesses. Badge refresh runs every 30 s per card (`BADGE_REFRESH_MS = 30_000` in `gui/constants.py`). Docker compose status polls every 15 s (`DOCKER_POLL_MS = 15_000`). Do not lower these intervals.
 
 **Constants** (`gui/constants.py`): Timing values, regex patterns, event-binding strings, and limits live here. Never add hardcoded intervals like `30000` to GUI files — import from `gui.constants` instead. User-visible strings must NOT go in `constants.py`; they belong in the translation YAML files.
+
+**System tray window state** (`gui/app.py`): `_on_window_configure` tracks every non-iconic/non-withdrawn `<Configure>` event into `self._last_visible_state` (keys: `geometry`, `state`, `fullscreen`). `_restore_window` reads this snapshot to reapply the exact state before hide — fullscreen, zoomed/maximized, or normal with geometry. Do NOT snapshot state inside `_on_window_unmap`; by the time `<Unmap>` fires Tk has already transitioned to iconic, making both `self.state()` and `self.attributes('-fullscreen')` stale.
 
 **Internationalisation** (`core/i18n.py` + `config/translations/`): All user-visible strings are translated via `t("key")`. Call `init_i18n(language_code)` once at startup in `main.py` before any widget is created. Translation files live in `config/translations/<code>.yml` (e.g. `en_EN.yml`, `es_ES.yml`). Keys follow a dot-namespaced convention: `btn.*`, `label.*`, `tooltip.*`, `dialog.<name>.*`, `log.*`, `misc.*`, `install.*`. Adding a new user-visible string requires: (1) add the key to both YAML files, (2) use `t("key")` in the GUI code. Never hardcode user-visible strings in Python. The language setting is stored in `devops_manager_config.json` under `"language"` and takes effect on next restart.
