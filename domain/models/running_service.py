@@ -16,4 +16,3 @@ class RunningService:
     thread: Optional[threading.Thread] = None
     status: str = 'stopped'  # running, starting, stopped, error
     port: Optional[int] = None
-    profile: Optional[str] = None

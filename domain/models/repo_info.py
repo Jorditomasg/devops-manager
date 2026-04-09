@@ -9,7 +9,7 @@ class RepoInfo:
     path: str
     repo_type: str
 
-    # Spring profiles / Angular environments
+    # Detected environment/profile names (Spring, Angular)
     profiles: List[str] = field(default_factory=list)
 
     # Git info
@@ -20,7 +20,6 @@ class RepoInfo:
     run_install_cmd: Optional[str] = None
     run_reinstall_cmd: Optional[str] = None
     run_command: Optional[str] = None
-    run_profile_flag: Optional[str] = None
 
     # Config/environment files
     environment_files: List[str] = field(default_factory=list)

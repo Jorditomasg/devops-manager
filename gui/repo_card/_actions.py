@@ -275,27 +275,15 @@ class ActionsMixin:
                 self._log(f"[{repo.name}] ⚠ Sin comando de inicio definido en la configuración YAML.")
             return
 
-        # Append profile flag if selected
-        profile = ''
-        if hasattr(self, '_config_combos') and self._config_combos:
-            for _, combo in self._config_combos.items():
-                v = combo.get()
-                if v and v not in (t("label.no_selection"), ''):
-                    profile = v
-                    break
-
-        if profile and repo.run_profile_flag:
-            cmd = f'{cmd} {repo.run_profile_flag}"{profile}"'
-
         env = self._prepare_start_env()
 
         self._update_status(repo.name, 'starting')
         if self._log:
             self._log(f"[{repo.name}] ▶ {cmd}")
 
-        self._action_pool.submit(self._run_start_thread, cmd, env, profile)
+        self._action_pool.submit(self._run_start_thread, cmd, env)
 
-    def _run_start_thread(self, cmd, env, profile):
+    def _run_start_thread(self, cmd, env):
         """Thread body: launch the service subprocess, stream output, then update status."""
         repo = self._repo
         try:
@@ -303,7 +291,7 @@ class ActionsMixin:
 
             # Track process in legacy launcher so stop/restart work
             from domain.models.running_service import RunningService
-            svc = RunningService(name=repo.name, repo_path=repo.path, port=0, profile=profile, status='starting')
+            svc = RunningService(name=repo.name, repo_path=repo.path, port=0, status='starting')
             svc.process = process
             self._launcher._services[repo.name] = svc
 

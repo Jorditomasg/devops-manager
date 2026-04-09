@@ -177,7 +177,6 @@ class ProjectAnalyzerService:
 
         commands = r_type.get('commands', {})
         repo.run_command = self._resolve_run_command(path, commands)
-        repo.run_profile_flag = commands.get('profile_flag')
         repo.run_install_cmd = commands.get('install_cmd')
         repo.run_reinstall_cmd = commands.get('reinstall_cmd')
         repo.ready_pattern = commands.get('ready_pattern')

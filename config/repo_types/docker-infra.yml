@@ -16,7 +16,6 @@ commands:
   install_cmd: ""
   start_cmd: "docker-compose up -d"
   stop_cmd: "docker-compose down"
-  profile_flag: ""
 
 env_files:
   default_dir: "."

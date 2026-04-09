@@ -62,8 +62,7 @@ class ServiceLauncher:
             from core.java_manager import build_java_env
             env = build_java_env(java_home)
 
-        svc = RunningService(name=name, repo_path=repo_path, port=0,
-                             profile='', status='starting')
+        svc = RunningService(name=name, repo_path=repo_path, port=0, status='starting')
         self._services[name] = svc
 
         if log:

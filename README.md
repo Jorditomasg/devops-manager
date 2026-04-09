@@ -116,8 +116,6 @@ commands:
   windows_start_cmd: "npm run dev"
   unix_start_cmd:    "npm run dev"
   stop_cmd: ""          # Vacío = el proceso se mata con SIGTERM
-  # Flag que se añade al start_cmd para seleccionar perfil/entorno
-  profile_flag: "--mode "
   # Regex que indica en los logs que el servicio ya está listo
   ready_pattern: "ready in|Local:.*http"
   # Regex que detecta un fallo fatal en los logs

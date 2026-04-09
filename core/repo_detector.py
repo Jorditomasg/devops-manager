@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 MVNW_CMD_WINDOWS = 'mvnw.cmd'
-CONFIG_FLAG = '--configuration='
 
 
 def detect_repos(workspace_dir: str) -> list[RepoInfo]:

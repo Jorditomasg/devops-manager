@@ -20,7 +20,6 @@ commands:
   start_cmd: "mvn spring-boot:run"
   windows_start_cmd: "mvn spring-boot:run"
   unix_start_cmd: "./mvnw spring-boot:run"
-  profile_flag: "-Dspring-boot.run.profiles="
   ready_pattern: "Started \\w+ in"
   error_pattern: "Application run failed"
   port_patterns:

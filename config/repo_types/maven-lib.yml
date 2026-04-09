@@ -18,7 +18,6 @@ commands:
   start_cmd: "mvn clean install -DskipTests -B"
   windows_start_cmd: "mvnw.cmd clean install -DskipTests -B"
   unix_start_cmd: "./mvnw clean install -DskipTests -B"
-  profile_flag: ""
   ready_pattern: "BUILD SUCCESS"
   error_pattern: "BUILD FAILURE"
 
