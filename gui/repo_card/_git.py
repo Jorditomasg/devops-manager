@@ -55,6 +55,8 @@ class GitMixin:
                         self._update_header_hints()
 
                 self.after(0, _update)
+            except Exception:
+                pass
             finally:
                 self._GIT_BADGE_SEMAPHORE.release()
         threading.Thread(target=_run, daemon=True).start()

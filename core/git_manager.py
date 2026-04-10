@@ -243,11 +243,14 @@ def get_status_summary(repo_path: str) -> dict:
     Returns: {'branch': str, 'behind': int, 'staged': int, 'unstaged': int}
     """
     import re as _re
-    result = _run_git_command(
-        ['git', '--no-optional-locks', 'status', '--porcelain', '-b', '--untracked-files=all'],
-        repo_path, timeout=5
-    )
     out = {'branch': 'unknown', 'behind': 0, 'staged': 0, 'unstaged': 0}
+    try:
+        result = _run_git_command(
+            ['git', '--no-optional-locks', 'status', '--porcelain', '-b', '--untracked-files=normal'],
+            repo_path, timeout=10
+        )
+    except (subprocess.SubprocessError, OSError):
+        return out
     if result.returncode != 0:
         return out
 
