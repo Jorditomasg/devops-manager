@@ -414,6 +414,8 @@ class ActionsMixin:
 
     def _pull(self):
         """Pull latest changes."""
+        self._log(t("log.pull_start"))
+
         def _run():
             from core.git_manager import get_local_changes, get_commits_behind, get_current_branch, pull
 
@@ -432,7 +434,7 @@ class ActionsMixin:
                 return
 
             branch = get_current_branch(self._repo.path)
-            commits = get_commits_behind(self._repo.path, branch)
+            commits = get_commits_behind(self._repo.path)
 
             if commits > 0:
                 def _ask():

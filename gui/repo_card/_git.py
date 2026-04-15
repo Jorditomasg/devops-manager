@@ -85,6 +85,33 @@ class GitMixin:
 
         threading.Thread(target=_run, daemon=True).start()
 
+    def _reload_repo(self):
+        """Reload branch, branch list, and git status from local state (no network)."""
+        self._log(t("log.reload_start"))
+
+        def _run():
+            from core.git_manager import get_current_branch, get_branches
+            current = get_current_branch(self._repo.path)
+            branches = get_branches(self._repo.path)
+            self._branches_cache = branches
+
+            def _update():
+                if not self.winfo_exists():
+                    return
+                self._current_branch = current
+                if branches and hasattr(self, '_branch_combo'):
+                    self._branch_combo.configure(values=branches)
+                if hasattr(self, '_branch_combo'):
+                    self._branch_combo.set(current)
+                self._update_header_hints()
+                self._check_pull_status()
+                self._refresh_badge()
+                self._trigger_change_callback()
+                self._log(t("log.reload_done", branch=current))
+            self.after(0, _update)
+
+        threading.Thread(target=_run, daemon=True).start()
+
     def _fetch_branches(self):
         """Fetch remote branches."""
         def _run():

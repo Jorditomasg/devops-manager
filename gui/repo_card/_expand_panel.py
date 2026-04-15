@@ -141,12 +141,12 @@ class ExpandPanelMixin:
             self._branch_combo.set(self._current_branch)
         self._branch_combo.pack(side="left", padx=(6, 4))
 
-        search_btn = ctk.CTkButton(
-            row, text="🔍", width=28,
-            command=self._fetch_branches, **theme.btn_style("log_action")
+        reload_btn = ctk.CTkButton(
+            row, text="🔄", width=28,
+            command=self._reload_repo, **theme.btn_style("log_action")
         )
-        search_btn.pack(side="left", padx=(0, 6))
-        ToolTip(search_btn, t("tooltip.fetch_branches"))
+        reload_btn.pack(side="left", padx=(0, 6))
+        ToolTip(reload_btn, t("tooltip.reload_repo"))
 
         branch_chk = ctk.CTkCheckBox(
             row, text="", variable=self._branch_in_profile_var,
