@@ -74,7 +74,7 @@ class GitMixin:
                 self._current_branch = current
                 if branches:
                     if hasattr(self, '_branch_combo'):
-                        self._branch_combo.configure(values=branches)
+                        self._branch_combo.configure(values=sorted(branches))
                 if hasattr(self, '_branch_combo'):
                     self._branch_combo.set(current)
                 self._update_header_hints()

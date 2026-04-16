@@ -113,6 +113,15 @@ class HeaderMixin:
         self._changes_count_label.bind("<Button-1>", self._show_modified_files)
         ToolTip(self._changes_count_label, t("tooltip.modified_files"))
 
+        # Danger env badge (yellow, shown when a dangerous env is active)
+        self._danger_env_badge = ctk.CTkLabel(
+            frame, text="",
+            font=theme.font("xs", bold=True), text_color=theme.C.text_warning_badge, anchor="w"
+        )
+        self._danger_env_badge.pack(side="left", padx=(4, 0))
+        ToolTip(self._danger_env_badge, t("tooltip.danger_env_badge"))
+        self._danger_env_badge.bind(BTN_CLICK, self._toggle_expand)
+
         # Warning badge (yellow, shown only when deps missing)
         self._branch_hint_warn = ctk.CTkLabel(
             frame, text="",

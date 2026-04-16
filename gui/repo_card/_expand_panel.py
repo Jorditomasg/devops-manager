@@ -49,6 +49,9 @@ class ExpandPanelMixin:
         # Row 4: Logs
         self._build_log_row(content)
 
+        # Sync danger badge borders now that combos exist
+        self.after(50, self._update_danger_badge)
+
         # Docker status prefetch — runs once on first expand, not at startup
         if getattr(self._repo, 'docker_compose_files', None):
             self.after(600, self._prefetch_docker_status)
@@ -258,7 +261,7 @@ class ExpandPanelMixin:
 
         config_key = self.get_config_key(target_file)
         configs = load_repo_configs(config_key)
-        opts = [t("label.no_selection")] + list(configs.keys())
+        opts = [t("label.no_selection")] + sorted(configs.keys())
 
         ctk.CTkLabel(sel_frame, text=f"{lbl_prefix}:", font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
@@ -334,7 +337,7 @@ class ExpandPanelMixin:
         combo_style = theme.combo_style()
         ctk.CTkLabel(frame, text=t("label.java"), font=theme.font("lg"),
                      text_color=theme.C.text_secondary, width=50, anchor="e").pack(side="left")
-        java_options = [_java_default_label()] + list(self._java_versions.keys())
+        java_options = [_java_default_label()] + sorted(self._java_versions.keys())
         self._java_combo = SearchableCombo(
             frame, values=java_options, width=150,
             variable=self.selected_java_var, **combo_style
@@ -382,7 +385,7 @@ class ExpandPanelMixin:
         """Update available Java versions without restarting."""
         self._java_versions = versions
         if hasattr(self, '_java_combo'):
-            java_options = [_java_default_label()] + list(self._java_versions.keys())
+            java_options = [_java_default_label()] + sorted(self._java_versions.keys())
             self._java_combo.configure(values=java_options)
 
             # If current selection is no longer valid, reset to default

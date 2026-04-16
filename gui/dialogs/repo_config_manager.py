@@ -98,6 +98,8 @@ class RepoConfigManagerDialog(BaseDialog):
 
     def _build_editor_panel(self, frame):
         self._title_var = ctk.StringVar(value=t("dialog.env_manager.select_hint"))
+        self._danger_var = ctk.BooleanVar(value=False)
+
         header = ctk.CTkFrame(frame, fg_color="transparent")
         header.pack(fill="x", pady=(0, 10))
 
@@ -127,6 +129,15 @@ class RepoConfigManagerDialog(BaseDialog):
         )
         self._btn_delete.pack(side="left", padx=3)
 
+        self._btn_danger = ctk.CTkButton(
+            self._actions_frame, text="⚠", width=32,
+            command=self._cmd_toggle_danger, state="disabled",
+            **theme.btn_style("neutral")
+        )
+        self._btn_danger.pack(side="left", padx=(12, 3))
+        from gui.tooltip import ToolTip
+        self._danger_tooltip = ToolTip(self._btn_danger, t("tooltip.mark_danger_off"))
+
         # Editor
         self._editor = ctk.CTkTextbox(
             frame, font=theme.font("base", mono=True),
@@ -144,17 +155,60 @@ class RepoConfigManagerDialog(BaseDialog):
         )
         self._btn_save.pack(side="right")
 
+    def _cmd_toggle_danger(self):
+        if not self._current_selected:
+            return
+        from core.config_manager import load_danger_configs, save_danger_configs
+        danger_set = load_danger_configs(self._config_key)
+        is_now_danger = self._current_selected not in danger_set
+        if is_now_danger:
+            danger_set.add(self._current_selected)
+        else:
+            danger_set.discard(self._current_selected)
+        self._danger_var.set(is_now_danger)
+        save_danger_configs(self._config_key, danger_set)
+        self._apply_danger_btn_style(is_now_danger)
+        self._refresh_list()
+
+    def _apply_danger_btn_style(self, is_danger: bool):
+        """Update the ⚠ button appearance to reflect the current danger state."""
+        if is_danger:
+            self._btn_danger.configure(
+                fg_color="#4a3310",
+                hover_color="#d97706",
+                border_color=theme.C.text_warning_badge,
+                border_width=1,
+                text_color=theme.C.text_warning_badge,
+            )
+            self._danger_tooltip.update_text(t("tooltip.mark_danger_on"))
+        else:
+            style = theme.btn_style("neutral")
+            self._btn_danger.configure(
+                fg_color=style["fg_color"],
+                hover_color=style["hover_color"],
+                border_color=style["border_color"],
+                border_width=1,
+                text_color=theme.C.text_muted,
+            )
+            self._danger_tooltip.update_text(t("tooltip.mark_danger_off"))
+
     def _refresh_list(self):
+        from core.config_manager import load_danger_configs
         for widget in self._list_frame.winfo_children():
             widget.destroy()
         self._config_btns.clear()
 
         _blue = theme.btn_style("blue")
+        danger_set = load_danger_configs(self._config_key)
         for name in sorted(self._configs.keys()):
+            is_danger = name in danger_set
             fg = _blue["fg_color"] if name == self._current_selected else "transparent"
+            display_text = f"⚠ {name}" if is_danger else name
+            text_color = theme.C.text_warning_badge if is_danger else theme.C.text_primary
             btn = ctk.CTkButton(
-                self._list_frame, text=name, anchor="w",
+                self._list_frame, text=display_text, anchor="w",
                 fg_color=fg, hover_color=_blue["hover_color"],
+                text_color=text_color,
                 command=lambda n=name: self._select_config(n)
             )
             btn.pack(fill="x", pady=2)
@@ -190,6 +244,13 @@ class RepoConfigManagerDialog(BaseDialog):
             self._btn_duplicate.configure(state="normal")
             self._btn_delete.configure(state="normal")
             self._btn_save.configure(state="normal")
+            self._btn_danger.configure(state="normal")
+
+            from core.config_manager import load_danger_configs
+            danger_set = load_danger_configs(self._config_key)
+            is_danger = name in danger_set
+            self._danger_var.set(is_danger)
+            self._apply_danger_btn_style(is_danger)
         else:
             self._title_var.set(t("dialog.env_manager.select_hint"))
             self._editor.delete("1.0", "end")
@@ -199,6 +260,9 @@ class RepoConfigManagerDialog(BaseDialog):
             self._btn_duplicate.configure(state="disabled")
             self._btn_delete.configure(state="disabled")
             self._btn_save.configure(state="disabled")
+            self._btn_danger.configure(state="disabled")
+            self._danger_var.set(False)
+            self._apply_danger_btn_style(False)
 
     def _check_unsaved_changes(self):
         if not self._current_selected or self._current_selected not in self._configs:

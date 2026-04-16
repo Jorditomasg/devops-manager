@@ -325,6 +325,8 @@ dialog.env_manager.auto_import_title: "Auto-Import"
 dialog.env_manager.auto_import_no_files: "No se encontraron ficheros de configuración en el directorio para importar."
 dialog.env_manager.auto_import_success: "Se han importado {added} configuraciones correctamente."
 dialog.env_manager.auto_import_exists: "No hay configuraciones nuevas que importar (las encontradas ya existen)."
+tooltip.mark_danger_off: "Marcar este entorno como peligroso"
+tooltip.mark_danger_on: "⚠ Entorno marcado como peligroso — clic para desmarcar"
 
 # ── Dialog — Settings (Java / Workspace) ─────────────────────────────────────
 dialog.settings.java_no_versions: "(Sin versiones configuradas. Usa '➕ Añadir Java' o '🔍 Auto-detectar')"
@@ -366,8 +368,11 @@ tooltip.profile_selector: "Seleccionar Perfil de Workspace"
 tooltip.manage_profiles: "Gestionar Perfiles"
 tooltip.manage_groups: "Gestionar grupos y directorios de workspace"
 tooltip.modify_config: "Modificar esta configuración ({name})"
+tooltip.danger_env_badge: "⚠ Entorno peligroso activo"
 
 # ── Placeholders ──────────────────────────────────────────────────────────────
+badge.danger_env: "⚠ ENV"
+
 placeholder.search: "🔍 Buscar..."
 placeholder.no_results: "Sin resultados"
 

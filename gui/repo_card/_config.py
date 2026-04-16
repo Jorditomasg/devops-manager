@@ -138,12 +138,52 @@ class ConfigMixin:
         def _run_change():
             if config_name == t("label.no_selection"):
                 self._handle_unselect_config(target_file, skip_log, is_real_change)
-                return
-
-            configs = load_repo_configs(config_key)
-            self._apply_config_data(target_file, config_name, configs.get(config_name), skip_log, is_real_change)
+            else:
+                configs = load_repo_configs(config_key)
+                self._apply_config_data(target_file, config_name, configs.get(config_name), skip_log, is_real_change)
+            self.after(0, self._update_danger_badge)
 
         threading.Thread(target=_run_change, daemon=True).start()
+
+    def _update_danger_badge(self):
+        """Update the danger-env header badge and combo borders based on active configs."""
+        from core.config_manager import load_active_config, load_danger_configs
+
+        repo = self._repo
+        if not getattr(repo, 'environment_files', None):
+            return
+
+        # Deduplicate target files (same logic as _build_config_combo_section)
+        env_dirs: dict = {}
+        for f in repo.environment_files:
+            parent = os.path.dirname(f)
+            basename = os.path.basename(f)
+            if parent not in env_dirs:
+                env_dirs[parent] = f
+            else:
+                current = env_dirs[parent]
+                if (current.endswith('.properties') and basename.endswith('.yml')) or basename == 'environment.ts':
+                    env_dirs[parent] = f
+
+        any_danger = False
+        for target_file in env_dirs.values():
+            config_key = self.get_config_key(target_file)
+            active = load_active_config(config_key)
+            danger_set = load_danger_configs(config_key)
+            is_danger = bool(active and active != t("label.no_selection") and active in danger_set)
+            if is_danger:
+                any_danger = True
+
+            if hasattr(self, '_config_combos'):
+                combo = self._config_combos.get(target_file)
+                if combo and combo.winfo_exists():
+                    border_color = theme.C.text_warning_badge if is_danger else theme.C.default_border
+                    combo.configure(border_color=border_color)
+
+        if hasattr(self, '_danger_env_badge') and self._danger_env_badge.winfo_exists():
+            self._danger_env_badge.configure(
+                text=t("badge.danger_env") if any_danger else ""
+            )
 
     def _open_config_manager(self, target_file: str = None):
         """Open the RepoConfigManagerDialog for this repository."""
@@ -161,7 +201,7 @@ class ConfigMixin:
             def _do_update():
                 from core.config_manager import load_repo_configs
                 configs = load_repo_configs(config_key)
-                opts = [t("label.no_selection")] + list(configs.keys())
+                opts = [t("label.no_selection")] + sorted(configs.keys())
                 if hasattr(self, '_config_combos'):
                     combo = self._config_combos.get(target_file)
                     if combo and combo.winfo_exists():
@@ -176,6 +216,7 @@ class ConfigMixin:
                     if curr not in opts:
                         self._config_combo.set(t("label.no_selection"))
                         self._update_header_hints()
+                self._update_danger_badge()
             self.after(0, _do_update)
 
         RepoConfigManagerDialog(

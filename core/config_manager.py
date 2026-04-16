@@ -397,6 +397,40 @@ def set_active_group(group_name: str, config_path=None):
     _invalidate_config_cache(config_path)
 
 
+def load_danger_configs(config_key: str, config_path: str = '') -> set:
+    """Return the set of env names marked as dangerous for a config key."""
+    if not config_path:
+        config_path = get_config_path()
+    raw = _load_config_cached(config_path).get('repo_config_danger', {}).get(config_key, [])
+    return set(raw)
+
+
+def save_danger_configs(config_key: str, danger_set: set, config_path: str = ''):
+    """Save (or clear) the dangerous env names for a config key."""
+    if not config_path:
+        config_path = get_config_path()
+    try:
+        if os.path.isfile(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        else:
+            config = {}
+
+        if 'repo_config_danger' not in config:
+            config['repo_config_danger'] = {}
+
+        if danger_set:
+            config['repo_config_danger'][config_key] = sorted(danger_set)
+        else:
+            config['repo_config_danger'].pop(config_key, None)
+
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        _invalidate_config_cache(config_path)
+    except (OSError, json.JSONDecodeError):
+        pass
+
+
 def load_active_config(config_key: str, config_path: str = '') -> str:
     """Load the active config name for a given config_key."""
     if not config_path:

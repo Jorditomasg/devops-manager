@@ -96,6 +96,7 @@ class RepoCard(
 
         self._branch_load_id = self.after(200, self._refresh_branch)
         self._badge_timer = self.after(400, self._refresh_badge_loop)
+        self.after(300, self._update_danger_badge)
 
         # Docker prefetch runs lazily on first expand (see _expand_panel.py)
 

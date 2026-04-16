@@ -155,6 +155,13 @@ class SearchableCombo(ctk.CTkFrame):
 
         self._update_display_text()
 
+        # Close popup when this widget is destroyed (e.g. app shutdown)
+        self.bind("<Destroy>", self._on_self_destroy)
+
+    def _on_self_destroy(self, event):
+        if event.widget is self:
+            self._close_popup()
+
     def _make_measure_font(self) -> tkFont.Font:
         """Return a tkFont.Font matching the current combo font, for text measurement."""
         spec = self._combo_font or theme.font("base")
