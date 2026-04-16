@@ -1,7 +1,7 @@
 """RepoConfigManagerDialog — manage per-repo config files."""
 import os
 import tkinter as tk
-from tkinter import messagebox
+from gui.dialogs.messagebox import show_info, show_error, ask_yes_no
 import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
@@ -269,7 +269,7 @@ class RepoConfigManagerDialog(BaseDialog):
             return
         current_text = self._editor.get("1.0", "end-1c")
         if current_text != self._configs[self._current_selected]:
-            if messagebox.askyesno(t("dialog.env_manager.unsaved_title"), t("dialog.env_manager.unsaved_msg", name=self._current_selected)):
+            if ask_yes_no(self, t("dialog.env_manager.unsaved_title"), t("dialog.env_manager.unsaved_msg", name=self._current_selected)):
                 self._cmd_save_text()
 
     def _cmd_save_text(self):
@@ -278,7 +278,7 @@ class RepoConfigManagerDialog(BaseDialog):
         new_text = self._editor.get("1.0", "end-1c")
         self._configs[self._current_selected] = new_text
         self._persist_to_db()
-        messagebox.showinfo(t("dialog.env_manager.saved_title"), t("dialog.env_manager.saved_msg", name=self._current_selected))
+        show_info(self, t("dialog.env_manager.saved_title"), t("dialog.env_manager.saved_msg", name=self._current_selected))
 
     def _cmd_new(self):
         dlg = _AskNameDialog(self, t("dialog.env_manager.new_title"), t("dialog.env_manager.new_prompt"))
@@ -288,7 +288,7 @@ class RepoConfigManagerDialog(BaseDialog):
             if not name:
                 return
             if name in self._configs:
-                messagebox.showerror(t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
+                show_error(self, t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
                 return
             self._configs[name] = ""
             self._persist_to_db()
@@ -305,7 +305,7 @@ class RepoConfigManagerDialog(BaseDialog):
             if not new_name or new_name == self._current_selected:
                 return
             if new_name in self._configs:
-                messagebox.showerror(t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
+                show_error(self, t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
                 return
 
             # Transfer data
@@ -324,7 +324,7 @@ class RepoConfigManagerDialog(BaseDialog):
             if not new_name:
                 return
             if new_name in self._configs:
-                messagebox.showerror(t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
+                show_error(self, t("misc.error_title"), t("dialog.env_manager.error_duplicate"))
                 return
 
             self._configs[new_name] = self._configs[self._current_selected]
@@ -335,7 +335,7 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_delete(self):
         if not self._current_selected:
             return
-        if messagebox.askyesno(t("dialog.env_manager.delete_title"), t("dialog.env_manager.delete_msg", name=self._current_selected)):
+        if ask_yes_no(self, t("dialog.env_manager.delete_title"), t("dialog.env_manager.delete_msg", name=self._current_selected)):
             del self._configs[self._current_selected]
             self._persist_to_db()
             self._current_selected = None
@@ -345,7 +345,7 @@ class RepoConfigManagerDialog(BaseDialog):
     def _cmd_auto_import(self):
         env_files = getattr(self._repo, 'environment_files', [])
         if not env_files:
-            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
+            show_info(self, t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
             return
 
         # Filter to source_dir when available, otherwise use all env files
@@ -355,7 +355,7 @@ class RepoConfigManagerDialog(BaseDialog):
             selected_files = env_files
 
         if not selected_files:
-            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
+            show_info(self, t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
             return
 
         from core.config_manager import auto_import_configs
@@ -366,7 +366,7 @@ class RepoConfigManagerDialog(BaseDialog):
             env_patterns=getattr(self._repo, 'env_patterns', None) or None,
         )
         if not imported:
-            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
+            show_info(self, t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_no_files"))
             return
 
         added = 0
@@ -378,9 +378,9 @@ class RepoConfigManagerDialog(BaseDialog):
         if added > 0:
             self._persist_to_db()
             self._refresh_list()
-            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_success", added=added))
+            show_info(self, t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_success", added=added))
         else:
-            messagebox.showinfo(t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_exists"))
+            show_info(self, t("dialog.env_manager.auto_import_title"), t("dialog.env_manager.auto_import_exists"))
 
     def _persist_to_db(self):
         from core.config_manager import save_repo_configs

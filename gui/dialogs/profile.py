@@ -3,7 +3,8 @@ import os
 import json
 import threading
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import filedialog
+from gui.dialogs.messagebox import show_info, show_warning, show_error, ask_yes_no
 import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
@@ -147,7 +148,7 @@ class ProfileDialog(BaseDialog):
     def _save_profile(self):
         name = self._save_name.get().strip()
         if not name:
-            messagebox.showwarning(t("misc.error_title"), t("dialog.profile.error_no_name"))
+            show_warning(self, t("misc.error_title"), t("dialog.profile.error_no_name"))
             return
 
         from core.profile_manager import build_profile_data, save_profile, list_profiles
@@ -155,7 +156,7 @@ class ProfileDialog(BaseDialog):
         # Check if profile with this name already exists
         existing_profiles = list_profiles()
         if name in existing_profiles:
-            if not messagebox.askyesno(t("dialog.profile.overwrite_title"), t("dialog.profile.overwrite_msg", name=name)):
+            if not ask_yes_no(self, t("dialog.profile.overwrite_title"), t("dialog.profile.overwrite_msg", name=name)):
                 return
 
         include_files = self._include_files_var.get()
@@ -171,7 +172,7 @@ class ProfileDialog(BaseDialog):
             extra_str = " (con config files)" if include_files else ""
             self._log(f"Configuración guardada: {name}{extra_str}")
 
-        messagebox.showinfo(t("dialog.profile.saved_title"), t("dialog.profile.saved_msg", name=name))
+        show_info(self, t("dialog.profile.saved_title"), t("dialog.profile.saved_msg", name=name))
         self._refresh_list()
         self._select_profile_item(name)
 
@@ -181,13 +182,13 @@ class ProfileDialog(BaseDialog):
     def _load_profile(self):
         name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
-            messagebox.showwarning(t("misc.warning_title"), t("dialog.profile.error_no_selection"))
+            show_warning(self, t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
         from core.profile_manager import load_profile
         data = load_profile(name)
         if not data:
-            messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_load_failed", name=name))
+            show_error(self, t("misc.error_title"), t("dialog.profile.error_load_failed", name=name))
             return
 
         self._apply_profile_data(data)
@@ -284,7 +285,7 @@ class ProfileDialog(BaseDialog):
             self._on_profile_loaded(data)
         if self._log:
             self._log(t("log.profile_applied", name=data.get('name', '??')))
-        messagebox.showinfo(t("dialog.profile.loaded_title"), t("dialog.profile.loaded_msg"))
+        show_info(self, t("dialog.profile.loaded_title"), t("dialog.profile.loaded_msg"))
         self.destroy()
 
     def _on_import_complete(self, data: dict, did_clone: bool):
@@ -308,10 +309,10 @@ class ProfileDialog(BaseDialog):
     def _delete_profile(self):
         name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
-            messagebox.showwarning(t("misc.warning_title"), t("dialog.profile.error_no_selection"))
+            show_warning(self, t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
-        if messagebox.askyesno(t("dialog.profile.confirm_delete_title"), t("dialog.profile.confirm_delete_msg", name=name)):
+        if ask_yes_no(self, t("dialog.profile.confirm_delete_title"), t("dialog.profile.confirm_delete_msg", name=name)):
             from core.profile_manager import delete_profile
             delete_profile(name)
             if self._log:
@@ -324,13 +325,13 @@ class ProfileDialog(BaseDialog):
     def _export_profile(self):
         name = self._selected_profile.get()
         if not name or name == "(Sin configs)":
-            messagebox.showwarning(t("misc.warning_title"), t("dialog.profile.error_no_selection"))
+            show_warning(self, t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
         from core.profile_manager import load_profile, export_profile_to_file
         data = load_profile(name)
         if not data:
-            messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_export_failed"))
+            show_error(self, t("misc.error_title"), t("dialog.profile.error_export_failed"))
             return
 
         dest = filedialog.asksaveasfilename(
@@ -341,9 +342,9 @@ class ProfileDialog(BaseDialog):
         )
         if dest:
             if export_profile_to_file(data, dest):
-                messagebox.showinfo(t("dialog.profile.exported_title"), t("dialog.profile.exported_msg", path=dest))
+                show_info(self, t("dialog.profile.exported_title"), t("dialog.profile.exported_msg", path=dest))
             else:
-                messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_export_failed"))
+                show_error(self, t("misc.error_title"), t("dialog.profile.error_export_failed"))
 
     def _import_profile(self):
         filepath = filedialog.askopenfilename(
@@ -356,7 +357,7 @@ class ProfileDialog(BaseDialog):
         from core.profile_manager import import_profile_from_file, list_profiles, load_profile
         data = import_profile_from_file(filepath)
         if not data:
-            messagebox.showerror(t("misc.error_title"), t("dialog.profile.error_invalid_file"))
+            show_error(self, t("misc.error_title"), t("dialog.profile.error_invalid_file"))
             return
 
         original_name = data.get('name', os.path.splitext(os.path.basename(filepath))[0])
@@ -366,7 +367,8 @@ class ProfileDialog(BaseDialog):
         if original_name in existing:
             existing_data = load_profile(original_name)
             if existing_data and _profiles_equal(data, existing_data):
-                messagebox.showinfo(
+                show_info(
+                    self,
                     t("dialog.profile.no_changes_title"),
                     t("dialog.profile.no_changes_identical", name=original_name)
                 )
@@ -748,7 +750,7 @@ class ImportOptionsDialog(BaseDialog):
             self._apply_btn.pack_forget()
             self._cancel_btn.configure(state="normal", text=t("dialog.import.btn_close"), command=_close, **theme.btn_style("success", height="lg"))
             
-            messagebox.showinfo(t("dialog.import.done_title"), t("log.import_complete"))
+            show_info(self, t("dialog.import.done_title"), t("log.import_complete"))
         self.after(0, _done)
 
     def _execute_import_steps(self, settings: dict):

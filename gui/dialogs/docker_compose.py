@@ -1,7 +1,6 @@
 """DockerComposeDialog — manage and monitor docker-compose services."""
 import os
 import threading
-from tkinter import messagebox
 import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog

@@ -5,7 +5,7 @@ import re
 import threading
 import subprocess
 import time
-from tkinter import messagebox
+from gui.dialogs.messagebox import ask_yes_no, show_error
 from gui.log_helpers import insert_log_line
 from gui import theme
 from core.i18n import t
@@ -132,7 +132,7 @@ class ActionsMixin:
                     break
 
         if hasattr(self, '_install_btn') and already_installed and not bypass_confirm:
-            if not messagebox.askyesno(t("dialog.reinstall.title"), t("dialog.reinstall.confirm")):
+            if not ask_yes_no(self, t("dialog.reinstall.title"), t("dialog.reinstall.confirm")):
                 if on_complete:
                     on_complete()
                 return
@@ -371,7 +371,7 @@ class ActionsMixin:
 
     def _show_docker_unavailable_alert(self):
         """Show an error dialog when Docker daemon is not reachable."""
-        messagebox.showerror(t("dialog.docker.unavailable_title"), t("dialog.docker.unavailable_msg"))
+        show_error(self, t("dialog.docker.unavailable_title"), t("dialog.docker.unavailable_msg"))
 
     def _stop(self):
         """Stop the service using the service launcher."""
@@ -426,7 +426,8 @@ class ActionsMixin:
                 def _err():
                     limit = 10
                     display_changes = "\n".join(changes[:limit]) + ("\n..." if len(changes) > limit else "")
-                    messagebox.showerror(
+                    show_error(
+                        self,
                         t("dialog.pull.error_title"),
                         t("dialog.pull.error_msg", name=self._repo.name, changes=display_changes),
                     )
@@ -438,7 +439,8 @@ class ActionsMixin:
 
             if commits > 0:
                 def _ask():
-                    if messagebox.askyesno(
+                    if ask_yes_no(
+                        self,
                         t("dialog.pull.confirm_title"),
                         t("dialog.pull.confirm_msg", commits=commits, branch=branch),
                     ):
@@ -481,7 +483,8 @@ class ActionsMixin:
 
     def _clean_repo(self):
         """Clean all local untracked and modified files, removing env overrides."""
-        if not messagebox.askyesno(
+        if not ask_yes_no(
+            self,
             t("dialog.clean.confirm_title"),
             t("dialog.clean.confirm_msg"),
         ):

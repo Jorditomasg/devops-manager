@@ -2,7 +2,7 @@
 from __future__ import annotations
 import os
 import threading
-from tkinter import messagebox
+from gui.dialogs.messagebox import show_error
 import customtkinter as ctk
 from gui import theme
 from core.i18n import t
@@ -115,7 +115,7 @@ class ConfigMixin:
             if self._log and should_log:
                 self._log(f"[{self._repo.name}] Configuración '{config_name}' aplicada.")
         elif should_log:
-            self.after(0, lambda tf=target_file: messagebox.showerror(t("misc.error_title"), t("dialog.config.write_error", path=tf)))
+            self.after(0, lambda tf=target_file: show_error(self, t("misc.error_title"), t("dialog.config.write_error", path=tf)))
 
         self.after(0, self._update_header_hints)
         if res:

@@ -3,7 +3,7 @@ global_panel.py — Global settings panel to control all repos at once.
 Uses card.is_selected() / card.set_selected() for selection from the card checkboxes.
 """
 import customtkinter as ctk
-from tkinter import messagebox
+from gui.dialogs.messagebox import show_warning
 import threading
 
 from gui.tooltip import ToolTip
@@ -137,12 +137,12 @@ class GlobalPanel(ctk.CTkFrame):
         """Apply a branch to all selected repos. Alert if branch not found in some."""
         branch = self._branch_entry.get().strip()
         if not branch:
-            messagebox.showwarning(t("misc.warning_title"), t("misc.enter_branch"))
+            show_warning(self, t("misc.warning_title"), t("misc.enter_branch"))
             return
 
         selected = self._get_selected_cards()
         if not selected:
-            messagebox.showwarning(t("misc.warning_title"), t("misc.no_repos_selected"))
+            show_warning(self, t("misc.warning_title"), t("misc.no_repos_selected"))
             return
 
         self._set_async_btns_state("disabled")
@@ -161,7 +161,8 @@ class GlobalPanel(ctk.CTkFrame):
         self._set_async_btns_state("normal")
         if not_found:
             repos_str = "\n".join(f"  • {r}" for r in not_found)
-            messagebox.showwarning(
+            show_warning(
+                self,
                 t("misc.branch_not_found_title"),
                 t("misc.branch_not_found_msg", branch=branch, repos=repos_str),
             )

@@ -2,7 +2,8 @@
 import os
 import sys
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import filedialog
+from gui.dialogs.messagebox import show_info, show_warning, show_error, ask_yes_no
 import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
@@ -188,7 +189,7 @@ class SettingsDialog(BaseDialog):
         """Create a Desktop shortcut appropriate for the current OS."""
         app_dir = getattr(self.master, '_app_dir', None)
         if not app_dir:
-            messagebox.showerror("Error", t("dialog.settings.shortcut_error"), parent=self)
+            show_error(self, "Error", t("dialog.settings.shortcut_error"))
             return
         try:
             if sys.platform == 'win32':
@@ -196,7 +197,7 @@ class SettingsDialog(BaseDialog):
             else:
                 self._create_shortcut_linux(app_dir)
         except Exception as e:
-            messagebox.showerror("Error", str(e), parent=self)
+            show_error(self, "Error", str(e))
 
     def _create_shortcut_windows(self, app_dir: str):
         run_vbs = os.path.join(app_dir, "scripts", "win", "run.vbs")
@@ -213,10 +214,10 @@ class SettingsDialog(BaseDialog):
         lnk_path = os.path.join(desktop, "DevOps Manager.lnk")
 
         self._create_lnk_ctypes(wscript, lnk_path, icon_path, app_dir, "DevOps Manager", arguments)
-        messagebox.showinfo(
+        show_info(
+            self,
             t("dialog.settings.shortcut_success_title"),
             t("dialog.settings.shortcut_success_msg", path=lnk_path),
-            parent=self
         )
 
     def _create_shortcut_linux(self, app_dir: str):
@@ -263,16 +264,16 @@ class SettingsDialog(BaseDialog):
             created.append(path)
 
         if created:
-            messagebox.showinfo(
+            show_info(
+                self,
                 t("dialog.settings.shortcut_success_title"),
                 t("dialog.settings.shortcut_success_msg", path="\n".join(created)),
-                parent=self
             )
         else:
-            messagebox.showwarning(
+            show_warning(
+                self,
                 t("misc.warning_title"),
                 t("dialog.settings.shortcut_unavailable"),
-                parent=self
             )
 
     @staticmethod
@@ -390,7 +391,7 @@ class SettingsDialog(BaseDialog):
                         restart_msg = restart_msg.format(name=selected_lang["name"])
                     except (KeyError, ValueError):
                         pass
-                    messagebox.showinfo(restart_title, restart_msg, parent=self)
+                    show_info(self, restart_title, restart_msg)
 
         self._settings['java_versions'] = self._java_versions
         self._settings['minimize_to_tray'] = self._minimize_to_tray_var.get()
@@ -493,8 +494,8 @@ class JavaVersionsManagerDialog(BaseDialog):
         self._refresh()
 
     def _delete(self, name: str):
-        if messagebox.askyesno(t("dialog.settings.java_delete_title"),
-                               t("dialog.settings.java_delete_msg", name=name), parent=self):
+        if ask_yes_no(self, t("dialog.settings.java_delete_title"),
+                      t("dialog.settings.java_delete_msg", name=name)):
             del self._java_versions[name]
             self._refresh()
 
@@ -509,11 +510,11 @@ class JavaVersionsManagerDialog(BaseDialog):
         self._refresh()
 
         if added_count > 0:
-            messagebox.showinfo(t("dialog.settings.java_detected_title"),
-                                t("dialog.settings.java_detected_msg", added_count=added_count), parent=self)
+            show_info(self, t("dialog.settings.java_detected_title"),
+                      t("dialog.settings.java_detected_msg", added_count=added_count))
         else:
-            if messagebox.askyesno(t("dialog.settings.java_not_found_title"),
-                                   t("dialog.settings.java_not_found_msg"), parent=self):
+            if ask_yes_no(self, t("dialog.settings.java_not_found_title"),
+                          t("dialog.settings.java_not_found_msg")):
                 self._add()
 
     def _close(self):
@@ -580,16 +581,16 @@ class JavaVersionEditorDialog(BaseDialog):
         path = self._path_entry.get().strip()
 
         if not name:
-            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_name_required"), parent=self)
+            show_warning(self, t("misc.error_title"), t("dialog.settings.java_name_required"))
             return
         if not path or not os.path.isdir(path):
-            messagebox.showwarning(t("misc.error_title"), t("dialog.settings.java_path_required"), parent=self)
+            show_warning(self, t("misc.error_title"), t("dialog.settings.java_path_required"))
             return
 
         java_exe = os.path.join(path, "bin", "java.exe" if os.name == 'nt' else "java")
         if not os.path.isfile(java_exe):
-            if not messagebox.askyesno(t("dialog.settings.java_exe_warn_title"),
-                                       t("dialog.settings.java_exe_warn_msg", java_exe=java_exe), parent=self):
+            if not ask_yes_no(self, t("dialog.settings.java_exe_warn_title"),
+                              t("dialog.settings.java_exe_warn_msg", java_exe=java_exe)):
                 return
 
         if self._on_save:

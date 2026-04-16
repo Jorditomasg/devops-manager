@@ -2,7 +2,7 @@
 import os
 import threading
 import tkinter as tk
-from tkinter import messagebox
+from gui.dialogs.messagebox import show_warning, show_info, show_error
 
 import customtkinter as ctk
 
@@ -65,12 +65,12 @@ class CloneDialog(BaseDialog):
     def _start_clone(self):
         url = self._url_entry.get().strip()
         if not url:
-            messagebox.showwarning(t("misc.error_title"), t("dialog.clone.error_no_url"))
+            show_warning(self, t("misc.error_title"), t("dialog.clone.error_no_url"))
             return
 
         name, dest = self._build_clone_cmd(url, self._name_entry.get().strip())
         if os.path.isdir(dest):
-            messagebox.showwarning(t("misc.error_title"), t("dialog.clone.error_folder_exists", name=name))
+            show_warning(self, t("misc.error_title"), t("dialog.clone.error_folder_exists", name=name))
             return
 
         self._clone_btn.configure(state="disabled", text=t("dialog.clone.btn_cloning"))
@@ -91,12 +91,12 @@ class CloneDialog(BaseDialog):
         def _done():
             if success:
                 self._progress.set(1.0)
-                messagebox.showinfo(t("dialog.clone.success_title"), t("dialog.clone.success_msg", name=name))
+                show_info(self, t("dialog.clone.success_title"), t("dialog.clone.success_msg", name=name))
                 if self._on_complete:
                     self._on_complete()
                 self.destroy()
             else:
-                messagebox.showerror(t("misc.error_title"), t("dialog.clone.error_clone_msg", msg=msg))
+                show_error(self, t("misc.error_title"), t("dialog.clone.error_clone_msg", msg=msg))
                 self._clone_btn.configure(state="normal", text=t("dialog.clone.btn"))
                 self._progress.set(0)
 

@@ -3,7 +3,8 @@ import copy
 import os
 import tkinter as tk
 import customtkinter as ctk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
+from gui.dialogs.messagebox import show_error
 
 from core.config_manager import get_workspace_groups, set_workspace_groups, get_active_group, set_active_group
 from core.i18n import t
@@ -215,7 +216,8 @@ class WorkspaceGroupsDialog(BaseDialog):
     def _save(self):
         empty = [g["name"] for g in self._groups if not g.get("paths")]
         if empty:
-            messagebox.showerror(
+            show_error(
+                self,
                 t("misc.warning_title"),
                 t("dialog.workspace_groups.error_empty_paths", names=", ".join(empty))
             )

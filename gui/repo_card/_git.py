@@ -134,7 +134,7 @@ class GitMixin:
 
         def _run():
             from core.git_manager import checkout, get_current_branch
-            from tkinter import messagebox
+            from gui.dialogs.messagebox import show_error
             success, msg = checkout(self._repo.path, branch, self._log)
             actual_branch = get_current_branch(self._repo.path)
 
@@ -152,7 +152,7 @@ class GitMixin:
             else:
                 def _err():
                     if not self.winfo_exists(): return
-                    messagebox.showerror(t("dialog.git.checkout_error_title"), t("dialog.git.checkout_error_msg", branch=branch, msg=msg))
+                    show_error(self, t("dialog.git.checkout_error_title"), t("dialog.git.checkout_error_msg", branch=branch, msg=msg))
                     if hasattr(self, '_branch_combo'):
                         self._branch_combo.set(actual_branch)
                         self._update_header_hints()

@@ -1,6 +1,6 @@
 """ConfigEditorDialog — dialog for editing config files."""
 import os
-from tkinter import messagebox
+from gui.dialogs.messagebox import ask_yes_no, show_info, show_error
 
 import customtkinter as ctk
 
@@ -73,10 +73,10 @@ class ConfigEditorDialog(BaseDialog):
 
     def _on_close(self):
         """Prompt for confirmation when closing with unsaved changes."""
-        if self._dirty and not messagebox.askyesno(
+        if self._dirty and not ask_yes_no(
+            self,
             t("dialog.config_editor.unsaved_title"),
             t("dialog.config_editor.unsaved_msg"),
-            parent=self,
         ):
             return
         self.destroy()
@@ -87,11 +87,11 @@ class ConfigEditorDialog(BaseDialog):
         if write_config_file_raw(self._filepath, content):
             if self._log:
                 self._log(f"Guardado: {os.path.basename(self._filepath)}")
-            messagebox.showinfo(t("dialog.config_editor.saved_title"), t("dialog.config_editor.saved_msg"))
+            show_info(self, t("dialog.config_editor.saved_title"), t("dialog.config_editor.saved_msg"))
             self._dirty = False
             self.destroy()
         else:
-            messagebox.showerror(t("misc.error_title"), t("dialog.config_editor.error_save"))
+            show_error(self, t("misc.error_title"), t("dialog.config_editor.error_save"))
 
     def _reload(self):
         from core.config_manager import read_config_file_raw
