@@ -462,6 +462,9 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 items.append(self._global_log_queue.get_nowait())
         except queue.Empty:
             pass
+        # [DEBUG-perf]
+        from gui._perf_probe import log_drain
+        log_drain(len(items))
         if not items:
             return
         text = ''.join(items)
@@ -767,23 +770,27 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         if self._tray_icon:
             self._tray_icon.stop()
             self._tray_icon = None
-        
+
         # Must schedule the UI update in the main thread
         def _show():
-            self.deiconify()
-            self.attributes('-alpha', 1.0)
-            snap = getattr(self, '_pre_tray_state', None)
-            if snap and snap.get('fullscreen'):
-                self.attributes('-fullscreen', True)
-            elif snap and snap.get('state') == 'zoomed':
-                self.state('zoomed')
-            elif snap:
-                self.geometry(snap['geometry'])
-                self.state('normal')
-            else:
-                self.state('normal')
-            self.lift()
-            self.focus_force()
+            # [DEBUG-perf]
+            from gui._perf_probe import time_restore
+            with time_restore():
+                self.deiconify()
+                self.attributes('-alpha', 1.0)
+                snap = getattr(self, '_pre_tray_state', None)
+                if snap and snap.get('fullscreen'):
+                    self.attributes('-fullscreen', True)
+                elif snap and snap.get('state') == 'zoomed':
+                    self.state('zoomed')
+                elif snap:
+                    self.geometry(snap['geometry'])
+                    self.state('normal')
+                else:
+                    self.state('normal')
+                self.lift()
+                self.focus_force()
+                self.update_idletasks()  # [DEBUG-perf] force paint so timing reflects user-perceived latency
         self.after(0, _show)
 
     def _quit_app(self, icon, item):
@@ -794,6 +801,9 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _do_update_tray_status(self):
         """Update tray icon color and tooltip based on running services."""
+        # [DEBUG-perf]
+        from gui._perf_probe import perf_snapshot
+        perf_snapshot(self)
         running = [
             card for card in self._repo_cards
             if getattr(card, '_status', '') in ('running', 'starting')
