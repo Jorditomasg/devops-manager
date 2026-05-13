@@ -2,16 +2,45 @@
 
 **Status:** Phase 4 (Instrument) complete. Awaiting data from key computer.
 
-This document is a self-contained handoff. A future session (or human) can pick up here without prior chat context. Engram topic key for cross-session recall: `devops-manager/perf/2026-05-12-tray-restore-uptime-slowdown`.
+**Branch is THROWAWAY.** It exists only to transfer this context across machines. After diagnosis + fix lands on `master`, delete this branch. The single source of truth for this investigation is this file plus the `perf_probe.log` it produces.
+
+This document is fully self-contained. It does **not** depend on engram memory (which is per-machine in Claude Code) or on the original chat history. Everything needed to continue is below.
+
+## 0. First message to paste into Claude on the OTHER computer
+
+After you `git checkout perf/diagnose-tray-uptime` on the key computer and run the data-collection procedure (§4), open Claude Code in the repo root and paste this verbatim:
+
+> Estoy continuando una sesión de `/diagnose` sobre performance en devops-manager. El contexto completo (problema, hipótesis, instrumentación, procedimiento, mapa de interpretación, fixes pre-planeados) está en `PERF_DIAGNOSIS.md` en la raíz del repo. La instrumentación ya está aplicada en la rama `perf/diagnose-tray-uptime`. Acabo de correr la app siguiendo la sección §4 y tengo el archivo `perf_probe.log`. Por favor:
+>
+> 1. Leé `PERF_DIAGNOSIS.md` completo.
+> 2. Leé `perf_probe.log` completo.
+> 3. Para cada métrica en §5 decime qué confirma o descarta.
+> 4. Identificá la(s) hipótesis confirmada(s) y procedé con la fase 5 (fix + regresión) usando los fixes pre-planeados en §6.
+> 5. Cuando termines de aplicar el fix, repetí el procedimiento §4 y verificá la regresión según §7. Después actualizá §10 ("Findings") de este doc con qué confirmó qué.
 
 ## 1. Problem
 
-Two perf complaints on Windows 10/11 with ~10 repo cards loaded:
+Two perf complaints reported by the user on **Windows** with **~10 repo cards** in the typical workspace:
 
-- **A — Tray restore slow.** Restoring the app window from the system tray feels sluggish — content takes noticeable time to render.
-- **B — Long-uptime slowdown.** After the laptop has been plugged in for days (services running in the background), the whole UI gets slower over time.
+- **A — Tray restore slow.** Restoring the app window from the system tray feels sluggish — content takes noticeable time to render. Happens **every time**, independent of uptime.
+- **B — Long-uptime slowdown.** After the laptop has been plugged in for **several days** with services running in the background, the whole UI gets slower over time.
 
-User asked whether picking customtkinter was the wrong choice. **CTk is not the suspected root cause.** It contributes (canvas-based rounded corners are expensive to repaint), but "after days of uptime" points to accumulation, which is logic-level, not framework-level.
+When both happen together (services running + app open for days + restore from tray), the worst case stacks.
+
+User asked whether picking customtkinter was the wrong choice. **CTk is not the suspected root cause.** It contributes (canvas-based rounded corners are expensive to repaint), but "after days of uptime" is accumulation — logic-level, not framework-level. Switching frameworks would be a 4-week rewrite for an unproven win; first prove which sub-system actually leaks.
+
+### Architectural facts to know before reading hypotheses
+
+- The app uses **customtkinter** (Tk under the hood) for the UI.
+- **Each repo card** is a composite widget with a header, expandable panel, status badges, combos, multiple buttons.
+- **Background work per card:** a git-badge refresh on a 30 s timer, a docker-compose status poller (when compose files exist), branch fetching, status detection from log streams.
+- **System tray** uses `pystray`. `_on_window_unmap` creates a `pystray.Icon` and calls `run_detached()`; `_restore_window` calls `stop()` on it.
+- **Global stdout/stderr is redirected** to a thread-safe queue and drained every 100 ms onto the main thread into a CTkTextbox capped at 1000 lines. Any `print` from anywhere in the app (including services started by the app via `subprocess`) flows through this queue.
+- **Constants** that govern poll cadences live in `gui/constants.py`:
+  - `BADGE_REFRESH_MS = 30_000`
+  - `DOCKER_POLL_MS = 15_000`
+  - `GIT_BADGE_SEMAPHORE_COUNT = 3` (limits concurrent `git status` subprocesses).
+- **No test suite exists** in this repo. Verification is empirical — re-run the probe.
 
 ## 2. Ranked hypotheses
 
@@ -101,18 +130,35 @@ There is no Python test suite in this repo. The "feedback loop" for Phase 5 is t
 
 ## 8. Cleanup when done
 
+This branch is throwaway. Recommended flow:
+
+1. On the key computer, cherry-pick or re-implement the confirmed fix(es) onto a **new** branch off `master` (e.g. `fix/perf-thread-pool` or `fix/perf-tray-restore`). Do **NOT** include the `[DEBUG-perf]` instrumentation in the fix branch.
+2. PR the fix branch into master. Verify with a fresh probe run on the fix branch (you can temporarily cherry-pick the probe commit `0718132` to validate, then drop).
+3. Delete this branch locally and on origin: `git branch -D perf/diagnose-tray-uptime && git push origin --delete perf/diagnose-tray-uptime`.
+
+If for some reason you DO want to keep the probe but strip it cleanly:
+
 ```bash
 rm gui/_perf_probe.py
 rm PERF_DIAGNOSIS.md
 rm perf_probe.log
 # revert the [DEBUG-perf] hunks in gui/app.py (3 locations)
-grep -rn '[DEBUG-perf]' gui/   # should return zero matches
+grep -rn '\[DEBUG-perf\]' gui/   # should return zero matches
 ```
 
-Or simpler: merge the fix into master, then drop this branch entirely.
+## 9. Memory note
 
-## 9. Engram
+Engram is **per-machine**. The original session ran on a WSL host that no longer has authority over this diagnosis. **Do not** rely on `mem_search` to recover context — assume the engram store on the key computer is empty for this topic. This Markdown file is the canonical source of truth.
 
-Topic key: `devops-manager/perf/2026-05-12-tray-restore-uptime-slowdown`
+(For historical reference only, the original session saved memory under topic key `devops-manager/perf/2026-05-12-tray-restore-uptime-slowdown` on its own host. Not portable.)
 
-A future Claude session should `mem_search` with that key to retrieve full context, including hypothesis tradeoffs and reasoning.
+## 10. Findings (fill in after analysis)
+
+Leave this section blank for now. When the next session interprets `perf_probe.log`, append:
+
+- Date of run, machine, uptime at end of run.
+- Per-hypothesis verdict: **confirmed / rejected / inconclusive** with the specific metric line from the log that justified the call.
+- Decision: which fix from §6 was applied (or a new approach if data pointed elsewhere).
+- Result of regression run after the fix.
+
+This becomes the audit trail for the fix's commit message.
