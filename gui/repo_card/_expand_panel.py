@@ -34,7 +34,7 @@ class ExpandPanelMixin:
 
         ctk.CTkFrame(self._expand_panel, height=1, fg_color=theme.C.divider).pack(fill="x", padx=10)
 
-        content = ctk.CTkFrame(self._expand_panel, fg_color="transparent")
+        content = ctk.CTkFrame(self._expand_panel, corner_radius=0, fg_color="transparent")
         content.pack(fill="x", padx=12, pady=(4, 4))
 
         # Row 1: Branch + secondary buttons
@@ -58,10 +58,10 @@ class ExpandPanelMixin:
 
     def _build_log_row(self, content):
         """Build the repository log console."""
-        self._log_frame = ctk.CTkFrame(content, fg_color="transparent")
+        self._log_frame = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         self._log_frame.pack(fill="x", pady=(4, 0))
 
-        header = ctk.CTkFrame(self._log_frame, fg_color="transparent")
+        header = ctk.CTkFrame(self._log_frame, corner_radius=0, fg_color="transparent")
         header.pack(fill="x")
 
         self._log_section_label = ctk.CTkLabel(header, text=t("label.log_section"), font=theme.font("base", bold=True), text_color=theme.C.text_secondary)
@@ -93,7 +93,7 @@ class ExpandPanelMixin:
 
     def _build_branch_row(self, content, repo):
         """Build branch + secondary buttons row."""
-        row1 = ctk.CTkFrame(content, fg_color="transparent")
+        row1 = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         row1.pack(fill="x")
 
         self._build_branch_combo_section(row1)
@@ -124,7 +124,7 @@ class ExpandPanelMixin:
             ToolTip(edit_btn, t("tooltip.config_btn"))
 
         # Right-aligned frame for install buttons
-        self.right_frame = ctk.CTkFrame(row1, fg_color="transparent", width=0, height=0)
+        self.right_frame = ctk.CTkFrame(row1, corner_radius=0, fg_color="transparent", width=0, height=0)
         self.right_frame.pack(side="right", padx=(10, 0))
 
         # Install Button
@@ -239,7 +239,7 @@ class ExpandPanelMixin:
                 lbl_prefix = selectors[0].get('label', 'App').replace(':', '')
 
         # Vertical container — use fill=x only, no expand, to keep compact height
-        selectors_container = ctk.CTkFrame(frame, fg_color="transparent")
+        selectors_container = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
         selectors_container.pack(side="left", padx=0, fill="x", expand=True)
 
         for target_file in target_files:
@@ -249,7 +249,7 @@ class ExpandPanelMixin:
         """Build one selector row (combo + config button + hint label) for a single env file."""
         from core.config_manager import load_repo_configs, load_active_config
 
-        sel_frame = ctk.CTkFrame(container, fg_color="transparent")
+        sel_frame = ctk.CTkFrame(container, corner_radius=0, fg_color="transparent")
         sel_frame.pack(side="top", fill="x", pady=(0, 4))
 
         # Identify submodule name for tooltip/label
@@ -361,7 +361,7 @@ class ExpandPanelMixin:
 
     def _build_selector_row(self, content, repo):
         """Build conditional selector row (profile, DB, env, docker)."""
-        row2 = ctk.CTkFrame(content, fg_color="transparent")
+        row2 = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         has_row2 = False
 
         if repo.environment_files and repo.repo_type != 'docker-infra':
@@ -371,7 +371,7 @@ class ExpandPanelMixin:
         if has_row2:
             row2.pack(fill="x", pady=(4, 0))
 
-        row_java = ctk.CTkFrame(content, fg_color="transparent")
+        row_java = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         has_row_java = False
 
         if 'java_version' in repo.features:
@@ -395,7 +395,7 @@ class ExpandPanelMixin:
 
     def _build_command_row(self, content, repo):
         """Build custom start command row."""
-        row3 = ctk.CTkFrame(content, fg_color="transparent")
+        row3 = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         row3.pack(fill="x", pady=(4, 0))
 
         ctk.CTkLabel(row3, text=t("label.cmd"), font=theme.font("lg"),
@@ -426,10 +426,10 @@ class ExpandPanelMixin:
         if 'docker_checkboxes' not in repo.features or not repo.docker_compose_files:
             return
 
-        row_docker = ctk.CTkFrame(content, fg_color="transparent")
+        row_docker = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         row_docker.pack(fill="x", pady=(4, 0))
 
-        docker_frame = ctk.CTkFrame(row_docker, fg_color="transparent")
+        docker_frame = ctk.CTkFrame(row_docker, corner_radius=0, fg_color="transparent")
         docker_frame.pack(side="left", padx=(1, 0))
 
         for dc_file in repo.docker_compose_files:

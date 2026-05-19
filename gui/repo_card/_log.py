@@ -63,7 +63,7 @@ class LogMixin:
         self.after(100, lambda: self._detached_log_window.lift())
         self.after(110, lambda: self._detached_log_window.focus_force())
 
-        header = ctk.CTkFrame(self._detached_log_window, fg_color="transparent")
+        header = ctk.CTkFrame(self._detached_log_window, corner_radius=0, fg_color="transparent")
         header.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkButton(
             header, text=t("btn.clear_log"), width=60,

@@ -40,7 +40,7 @@ class HeaderMixin:
 
     def _build_header(self):
         """Build the collapsed header bar."""
-        self._header = ctk.CTkFrame(self, fg_color="transparent", cursor="hand2")
+        self._header = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent", cursor="hand2")
         self._header.pack(fill="x", padx=6, pady=4)
         self._header.bind(BTN_CLICK, self._toggle_expand)
 
@@ -184,7 +184,7 @@ class HeaderMixin:
 
     def _build_action_buttons(self, frame):
         """Build the start/stop/restart action buttons."""
-        self._action_btns_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        self._action_btns_frame = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
         self._action_btns_frame.pack(side="right", padx=(0, 4))
 
         self._start_btn = ctk.CTkButton(

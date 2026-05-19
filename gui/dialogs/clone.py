@@ -39,7 +39,7 @@ class CloneDialog(BaseDialog):
         self._progress.set(0)
 
         # Buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=10)
 
         self._clone_btn = ctk.CTkButton(

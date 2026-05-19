@@ -26,7 +26,7 @@ class ConfirmCloseDialog(BaseDialog):
             font=theme.font("base"),
         ).pack(padx=20, pady=(24, 16), anchor="w")
 
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=(0, 16))
 
         ctk.CTkButton(

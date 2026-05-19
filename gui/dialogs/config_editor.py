@@ -20,7 +20,7 @@ class ConfigEditorDialog(BaseDialog):
         self._base_title = f"Editor: {os.path.basename(filepath)}"
 
         # Header with file path
-        header = ctk.CTkFrame(self, fg_color="transparent")
+        header = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         header.pack(fill="x", padx=15, pady=(15, 5))
 
         ctk.CTkLabel(header, text=filepath, font=theme.font("xs", mono=True),
@@ -43,7 +43,7 @@ class ConfigEditorDialog(BaseDialog):
         self._editor._textbox.bind("<<Modified>>", self._on_editor_modified)
 
         # Buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         btn_frame.pack(fill="x", padx=15, pady=10)
 
         ctk.CTkButton(

@@ -40,7 +40,7 @@ class DockerComposeDialog(BaseDialog):
     # ─── UI construction ──────────────────────────────────────────────────────
 
     def _build_ui(self):
-        header = ctk.CTkFrame(self, fg_color="transparent")
+        header = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         header.pack(fill="x", padx=15, pady=(15, 5))
 
         ctk.CTkLabel(header, text=t("docker.title"),
@@ -54,7 +54,7 @@ class DockerComposeDialog(BaseDialog):
 
         self._build_control_buttons(header)
 
-        self._list_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._list_frame = ctk.CTkScrollableFrame(self, corner_radius=0, fg_color="transparent")
         self._list_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         if not self._services:
@@ -68,7 +68,7 @@ class DockerComposeDialog(BaseDialog):
         self._build_log_panel(self)
 
     def _build_control_buttons(self, frame):
-        actions = ctk.CTkFrame(frame, fg_color="transparent")
+        actions = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
         actions.pack(side="right")
 
         self._auto_refresh_var = ctk.BooleanVar(value=True)
@@ -97,7 +97,7 @@ class DockerComposeDialog(BaseDialog):
         row.pack_propagate(False)
 
         # Right side first (so info_frame expand fills the remaining space correctly)
-        right_frame = ctk.CTkFrame(row, fg_color="transparent")
+        right_frame = ctk.CTkFrame(row, corner_radius=0, fg_color="transparent")
         right_frame.pack(side="right", padx=(0, 10))
         self._build_service_buttons(right_frame, name)
 
@@ -114,7 +114,7 @@ class DockerComposeDialog(BaseDialog):
         if srv.get('ports'):
             details += f"  ·  {', '.join(srv['ports'])}"
 
-        info_frame = ctk.CTkFrame(row, fg_color="transparent")
+        info_frame = ctk.CTkFrame(row, corner_radius=0, fg_color="transparent")
         info_frame.pack(side="left", fill="x", expand=True)
 
         ctk.CTkLabel(info_frame, text=name,
@@ -150,7 +150,7 @@ class DockerComposeDialog(BaseDialog):
         self._service_rows[name]["profile_var"] = profile_var
 
     def _build_service_buttons(self, row_frame, name: str):
-        btn_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
+        btn_frame = ctk.CTkFrame(row_frame, corner_radius=0, fg_color="transparent")
         btn_frame.pack(side="right", padx=(0, 10))
 
         ctk.CTkButton(
@@ -172,7 +172,7 @@ class DockerComposeDialog(BaseDialog):
         ).pack(side="left", padx=(8, 0))
 
     def _build_log_panel(self, frame):
-        logs_header = ctk.CTkFrame(frame, fg_color="transparent")
+        logs_header = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
         logs_header.pack(fill="x", padx=15, pady=(5, 0))
 
         self._logs_title = ctk.CTkLabel(

@@ -182,7 +182,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._path_tooltip = ToolTip(self._path_label, t("tooltip.workspace_dir", path=self._workspace_dir))
 
         # Group selector area — shown in topbar when >1 group exists (replaces path label)
-        self._group_area = ctk.CTkFrame(topbar, fg_color="transparent")
+        self._group_area = ctk.CTkFrame(topbar, corner_radius=0, fg_color="transparent")
         # (packed/unpacked dynamically by _update_topbar_group_ui)
 
         ctk.CTkLabel(
@@ -207,7 +207,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _build_topbar_buttons(self, topbar):
         """Build the right-side action buttons in the top bar."""
-        btn_frame = ctk.CTkFrame(topbar, fg_color="transparent")
+        btn_frame = ctk.CTkFrame(topbar, corner_radius=0, fg_color="transparent")
         btn_frame.pack(side="right", padx=15)
 
         btn_defs = [
@@ -372,7 +372,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self.after(100, lambda: self._detached_global_log_window.lift())
         self.after(110, lambda: self._detached_global_log_window.focus_force())
         
-        header = ctk.CTkFrame(self._detached_global_log_window, fg_color="transparent")
+        header = ctk.CTkFrame(self._detached_global_log_window, corner_radius=0, fg_color="transparent")
         header.pack(fill="x", padx=8, pady=(6, 0))
         log_btn_s = theme.btn_style("log_action", height="sm", font_size="sm")
         ctk.CTkButton(

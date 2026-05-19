@@ -21,14 +21,14 @@ class WorkspaceGroupsDialog(BaseDialog):
         self._build_form_content()
 
     def _build_form_content(self):
-        container = ctk.CTkFrame(self, fg_color="transparent")
+        container = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         container.pack(fill="both", expand=True, padx=16, pady=12)
         container.grid_columnconfigure(0, weight=1)
         container.grid_columnconfigure(1, weight=2)
         container.grid_rowconfigure(1, weight=1)
 
         # ── Left: group list ─────────────────────────────────────────
-        left = ctk.CTkFrame(container, fg_color="transparent")
+        left = ctk.CTkFrame(container, corner_radius=0, fg_color="transparent")
         left.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 8))
         left.grid_rowconfigure(1, weight=1)
         left.grid_columnconfigure(0, weight=1)
@@ -46,7 +46,7 @@ class WorkspaceGroupsDialog(BaseDialog):
         self._groups_listbox.grid(row=1, column=0, sticky="nsew")
         self._groups_listbox.bind("<<ListboxSelect>>", self._on_group_select)
 
-        btn_row = ctk.CTkFrame(left, fg_color="transparent")
+        btn_row = ctk.CTkFrame(left, corner_radius=0, fg_color="transparent")
         btn_row.grid(row=2, column=0, sticky="ew", pady=(4, 0))
 
         ctk.CTkButton(btn_row, text=t("btn.add_group"), width=60,
@@ -57,7 +57,7 @@ class WorkspaceGroupsDialog(BaseDialog):
                       command=self._delete_group).pack(side="left")
 
         # ── Right: group editor ──────────────────────────────────────
-        right = ctk.CTkFrame(container, fg_color="transparent")
+        right = ctk.CTkFrame(container, corner_radius=0, fg_color="transparent")
         right.grid(row=0, column=1, rowspan=2, sticky="nsew")
         right.grid_rowconfigure(3, weight=1)
         right.grid_columnconfigure(0, weight=1)
@@ -65,7 +65,7 @@ class WorkspaceGroupsDialog(BaseDialog):
         ctk.CTkLabel(right, text=t("dialog.workspace_groups.name_label"),
                      font=theme.font("sm", bold=True)).grid(row=0, column=0, sticky="w", pady=(0, 2))
 
-        name_row = ctk.CTkFrame(right, fg_color="transparent")
+        name_row = ctk.CTkFrame(right, corner_radius=0, fg_color="transparent")
         name_row.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         name_row.grid_columnconfigure(0, weight=1)
 
@@ -92,7 +92,7 @@ class WorkspaceGroupsDialog(BaseDialog):
         )
         self._paths_listbox.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
 
-        paths_btn_row = ctk.CTkFrame(right, fg_color="transparent")
+        paths_btn_row = ctk.CTkFrame(right, corner_radius=0, fg_color="transparent")
         paths_btn_row.grid(row=4, column=0, sticky="ew", pady=(4, 0))
 
         ctk.CTkButton(paths_btn_row, text=t("btn.add_path"), width=80,

@@ -47,7 +47,7 @@ class ProfileDialog(BaseDialog):
         self._on_rescan = on_rescan
         self._on_profiles_changed = on_profiles_changed
 
-        self._main_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._main_scroll = ctk.CTkScrollableFrame(self, corner_radius=0, fg_color="transparent")
         self._main_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
         ctk.CTkLabel(self._main_scroll, text=t("dialog.profile.section_title"),
@@ -72,7 +72,7 @@ class ProfileDialog(BaseDialog):
         ctk.CTkLabel(save_frame, text=t("dialog.profile.save_current"),
                      font=theme.font("base", bold=True)).pack(anchor="w", padx=10, pady=(10, 5))
 
-        name_row = ctk.CTkFrame(save_frame, fg_color="transparent")
+        name_row = ctk.CTkFrame(save_frame, corner_radius=0, fg_color="transparent")
         name_row.pack(fill="x", padx=10, pady=(0, 4))
 
         self._save_name = ctk.CTkEntry(name_row, width=300,
@@ -84,7 +84,7 @@ class ProfileDialog(BaseDialog):
             command=self._save_profile, **theme.btn_style("success")
         ).pack(side="left")
 
-        opts_row = ctk.CTkFrame(save_frame, fg_color="transparent")
+        opts_row = ctk.CTkFrame(save_frame, corner_radius=0, fg_color="transparent")
         opts_row.pack(fill="x", padx=10, pady=(0, 10))
 
         self._include_files_var = ctk.BooleanVar(value=True)
@@ -113,7 +113,7 @@ class ProfileDialog(BaseDialog):
         self._profile_btns: dict = {}   # profile_name -> CTkButton (avoids full list rebuild on selection)
         self._refresh_list()
 
-        btn_row = ctk.CTkFrame(load_frame, fg_color="transparent")
+        btn_row = ctk.CTkFrame(load_frame, corner_radius=0, fg_color="transparent")
         btn_row.pack(pady=(0, 10))
 
         ctk.CTkButton(
@@ -468,16 +468,16 @@ class ImportOptionsDialog(BaseDialog):
 
         self._init_java_info(parent, profile_data)
 
-        self._main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self._main_container = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self._main_container.pack(fill="both", expand=True)
 
         self._build_buttons_frame(self._main_container)
 
-        self._content_area = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._content_area = ctk.CTkFrame(self._main_container, corner_radius=0, fg_color="transparent")
         self._content_area.pack(side="top", fill="both", expand=True, padx=5, pady=(5, 0))
 
         # --- STEP 1 ---
-        self._step1_scroll = ctk.CTkScrollableFrame(self._content_area, fg_color="transparent")
+        self._step1_scroll = ctk.CTkScrollableFrame(self._content_area, corner_radius=0, fg_color="transparent")
         self._step1_scroll.pack(fill="both", expand=True)
 
         self._build_header_frame(self._step1_scroll)
@@ -490,7 +490,7 @@ class ImportOptionsDialog(BaseDialog):
         self._build_preview_section(self._step1_scroll)
 
         # --- STEP 2 ---
-        self._step2_frame = ctk.CTkFrame(self._content_area, fg_color="transparent")
+        self._step2_frame = ctk.CTkFrame(self._content_area, corner_radius=0, fg_color="transparent")
         self._build_progress_section(self._step2_frame)
 
         self._base_changes_text = changes_text
@@ -519,7 +519,7 @@ class ImportOptionsDialog(BaseDialog):
 
     def _build_buttons_frame(self, container):
         """Build the bottom Accept/Cancel buttons bar."""
-        self._btn_frame = ctk.CTkFrame(container, fg_color="transparent")
+        self._btn_frame = ctk.CTkFrame(container, corner_radius=0, fg_color="transparent")
         self._btn_frame.pack(side="bottom", fill="x", padx=20, pady=10)
 
         self._apply_btn = ctk.CTkButton(
@@ -571,7 +571,7 @@ class ImportOptionsDialog(BaseDialog):
                          text_color=theme.C.status_starting).pack(anchor="w", padx=10, pady=(5, 0))
 
             for missing_jv in self._missing_javas:
-                row = ctk.CTkFrame(frame, fg_color="transparent")
+                row = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
                 row.pack(fill="x", padx=15, pady=2)
                 ctk.CTkLabel(row, text=t("dialog.import.java_needs", version=missing_jv), width=140, anchor="e").pack(side="left", padx=(0, 10))
                 options = ["Sistema (Por Defecto)"] + self._local_javas

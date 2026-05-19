@@ -37,7 +37,7 @@ class SettingsDialog(BaseDialog):
     # ── Save bar ──────────────────────────────────────────────────────────────
 
     def _build_save_bar(self):
-        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         bar.pack(side="bottom", fill="x", padx=20, pady=12)
 
         ctk.CTkButton(
@@ -53,7 +53,7 @@ class SettingsDialog(BaseDialog):
     # ── Form (single card) ────────────────────────────────────────────────────
 
     def _build_form(self):
-        outer = ctk.CTkFrame(self, fg_color="transparent")
+        outer = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         outer.pack(fill="both", expand=True, padx=10, pady=(8, 0))
 
         card = ctk.CTkFrame(
@@ -79,7 +79,7 @@ class SettingsDialog(BaseDialog):
 
     def _row(self, parent):
         """Create a horizontal form row and return it."""
-        r = ctk.CTkFrame(parent, fg_color="transparent")
+        r = ctk.CTkFrame(parent, corner_radius=0, fg_color="transparent")
         r.pack(fill="x", padx=0)
         return r
 
@@ -415,7 +415,7 @@ class JavaVersionsManagerDialog(BaseDialog):
 
     def _build_ui(self):
         # Close / apply bar
-        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         bar.pack(side="bottom", fill="x", padx=16, pady=12)
 
         ctk.CTkButton(
@@ -455,7 +455,7 @@ class JavaVersionsManagerDialog(BaseDialog):
             return
 
         for name, path in self._java_versions.items():
-            row = ctk.CTkFrame(self._list_frame, fg_color="transparent")
+            row = ctk.CTkFrame(self._list_frame, corner_radius=0, fg_color="transparent")
             row.pack(fill="x", pady=3)
 
             ctk.CTkLabel(
@@ -535,11 +535,11 @@ class JavaVersionEditorDialog(BaseDialog):
         ctk.CTkLabel(self, text=t("dialog.settings.java_config_header"),
                      font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
-        form = ctk.CTkFrame(self, fg_color="transparent")
+        form = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         form.pack(fill="x", padx=20)
         self._build_fields(form, version_name, version_path)
 
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=15)
 
         ctk.CTkButton(

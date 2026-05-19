@@ -31,7 +31,7 @@ class GlobalPanel(ctk.CTkFrame):
     def _build_ui(self):
         """Build the global panel UI."""
         # Title + Select All
-        title_frame = ctk.CTkFrame(self, fg_color="transparent")
+        title_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         title_frame.pack(fill="x", padx=15, pady=(8, 4))
 
         ctk.CTkLabel(
@@ -51,7 +51,7 @@ class GlobalPanel(ctk.CTkFrame):
         ).pack(side="right", padx=(10, 0))
 
         # ─── Row: Branch (left) + Action buttons (right) ───
-        row = ctk.CTkFrame(self, fg_color="transparent")
+        row = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         row.pack(fill="x", padx=15, pady=(0, 8))
 
         ctk.CTkLabel(row, text=t("label.global_branch"), font=theme.font("base"),

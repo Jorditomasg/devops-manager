@@ -23,7 +23,7 @@ class _AskNameDialog(BaseDialog):
         self._entry.insert(0, initial_value)
         self._entry.select_range(0, "end")
 
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         btn_frame.pack(pady=(0, 14))
 
         ctk.CTkButton(btn_frame, text=t("btn.accept"), width=110,
@@ -73,7 +73,7 @@ class RepoConfigManagerDialog(BaseDialog):
         left_panel.pack(side="left", fill="y", padx=0, pady=0)
         left_panel.pack_propagate(False)
 
-        right_panel = ctk.CTkFrame(self, fg_color="transparent")
+        right_panel = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         right_panel.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
         self._build_list_panel(left_panel)
@@ -83,7 +83,7 @@ class RepoConfigManagerDialog(BaseDialog):
     def _build_list_panel(self, frame):
         ctk.CTkLabel(frame, text=t("dialog.env_manager.title"), font=theme.font("h2", bold=True)).pack(pady=(15, 10))
 
-        self._list_frame = ctk.CTkScrollableFrame(frame, fg_color="transparent")
+        self._list_frame = ctk.CTkScrollableFrame(frame, corner_radius=0, fg_color="transparent")
         self._list_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         ctk.CTkButton(
@@ -100,12 +100,12 @@ class RepoConfigManagerDialog(BaseDialog):
         self._title_var = ctk.StringVar(value=t("dialog.env_manager.select_hint"))
         self._danger_var = ctk.BooleanVar(value=False)
 
-        header = ctk.CTkFrame(frame, fg_color="transparent")
+        header = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
         header.pack(fill="x", pady=(0, 10))
 
         ctk.CTkLabel(header, textvariable=self._title_var, font=theme.font("h2", bold=True)).pack(side="left")
 
-        self._actions_frame = ctk.CTkFrame(header, fg_color="transparent")
+        self._actions_frame = ctk.CTkFrame(header, corner_radius=0, fg_color="transparent")
         self._actions_frame.pack(side="right")
 
         self._btn_rename = ctk.CTkButton(

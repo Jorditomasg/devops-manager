@@ -52,15 +52,15 @@ class _AppMessageDialog(BaseDialog):
         bar.pack_propagate(False)
 
         # Main content
-        content = ctk.CTkFrame(root, fg_color="transparent")
+        content = ctk.CTkFrame(root, corner_radius=0, fg_color="transparent")
         content.pack(side="left", fill="both", expand=True, padx=18, pady=10)
 
         # Button row anchored to bottom — must be packed BEFORE msg_row
-        btn_row = ctk.CTkFrame(content, fg_color="transparent")
+        btn_row = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         btn_row.pack(side="bottom", fill="x")
 
         # Icon + message row above buttons
-        msg_row = ctk.CTkFrame(content, fg_color="transparent")
+        msg_row = ctk.CTkFrame(content, corner_radius=0, fg_color="transparent")
         msg_row.pack(side="top", fill="x", pady=(0, 10))
 
         ctk.CTkLabel(
