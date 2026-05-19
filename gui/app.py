@@ -725,6 +725,30 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 img = Image.new('RGB', (64, 64), color=color)
             self._tray_icon_images[color] = img
 
+    def _set_taskbar_visible(self, visible: bool):
+        """Hide/show the window from the Windows taskbar without changing visibility.
+        Walks up to the topmost wrapper HWND that Windows displays in the taskbar
+        and flips WS_EX_TOOLWINDOW / WS_EX_APPWINDOW. No-op on non-Windows."""
+        if sys.platform != 'win32':
+            return
+        try:
+            hwnd = self.winfo_id()
+            parent = ctypes.windll.user32.GetParent(hwnd)
+            while parent:
+                hwnd = parent
+                parent = ctypes.windll.user32.GetParent(hwnd)
+            GWL_EXSTYLE = -20
+            WS_EX_TOOLWINDOW = 0x00000080
+            WS_EX_APPWINDOW = 0x00040000
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            if visible:
+                style = (style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
+            else:
+                style = (style | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+        except (AttributeError, OSError):
+            pass
+
     def _on_window_configure(self, event):
         if event.widget != self:
             return
@@ -743,15 +767,18 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
         if self.state() == 'iconic' and self._settings.get('minimize_to_tray', True):
             self._pre_tray_state = dict(self._last_visible_state)
-            self.withdraw()
-            
+            # Keep the window iconic (HWND alive, GDI surface cached by DWM)
+            # and just hide its taskbar entry. Restore via deiconify() is then
+            # native-fast — no CTk Canvas repaint, no full re-render.
+            self._set_taskbar_visible(False)
+
             # Recreate the tray icon to avoid state issues
             any_running = False
             for card in getattr(self, '_repo_cards', []):
                 if getattr(card, '_status', '') in ('running', 'starting'):
                     any_running = True
                     break
-                    
+
             from PIL import Image
             import pystray
             color = "green" if any_running else "red"
@@ -759,7 +786,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
             menu = pystray.Menu(self._build_tray_menu)
             self._tray_icon = pystray.Icon("devops_manager", image, "DevOps Manager", menu)
-            
+
             # run_detached handles the background thread natively in pystray
             self._tray_icon.run_detached()
 
@@ -767,11 +794,13 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         if self._tray_icon:
             self._tray_icon.stop()
             self._tray_icon = None
-        
-        # Must schedule the UI update in the main thread
+
         def _show():
+            # Window was kept iconic (not withdrawn) so deiconify() is native-fast:
+            # Windows DWM still holds the GDI surface and CTk does not re-render.
+            self._set_taskbar_visible(True)
             self.deiconify()
-            self.attributes('-alpha', 1.0)
+
             snap = getattr(self, '_pre_tray_state', None)
             if snap and snap.get('fullscreen'):
                 self.attributes('-fullscreen', True)
@@ -784,7 +813,21 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 self.state('normal')
             self.lift()
             self.focus_force()
+
+            # Fire a one-shot refresh on all cards so the user sees fresh git
+            # status immediately after coming back from the tray. Scheduled
+            # slightly after restore so the UI is fully painted first.
+            self.after(50, self._refresh_all_cards_after_restore)
         self.after(0, _show)
+
+    def _refresh_all_cards_after_restore(self):
+        """Trigger an immediate badge refresh on every card after un-minimize."""
+        for card in self._repo_cards:
+            try:
+                if card.winfo_exists():
+                    card._refresh_badge()
+            except Exception:
+                pass
 
     def _quit_app(self, icon, item):
         self.after(0, self._on_close)

@@ -149,7 +149,16 @@ class DockerMixin:
         """Background thread to poll docker container status for active compose files."""
         def _loop():
             while self._compose_status_thread_running and self.winfo_exists():
-                self._poll_compose_status(self._compose_stop_event, DOCKER_POLL_MS // 1000)
+                # Skip the docker compose ps subprocess when minimized to tray —
+                # keeps the loop alive so it resumes on un-minimize.
+                # We use the tray icon presence as the iconic indicator because
+                # Tk's state() is not safe to call from a background thread.
+                try:
+                    in_tray = getattr(self.winfo_toplevel(), '_tray_icon', None) is not None
+                except Exception:
+                    in_tray = False
+                if not in_tray:
+                    self._poll_compose_status(self._compose_stop_event, DOCKER_POLL_MS // 1000)
                 self._compose_stop_event.wait(timeout=DOCKER_POLL_MS // 1000)
                 if self._compose_stop_event.is_set():
                     break

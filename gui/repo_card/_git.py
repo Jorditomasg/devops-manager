@@ -20,6 +20,16 @@ class GitMixin:
 
     def _refresh_badge(self, event=None):
         """Single git call to refresh branch, behind count, staged and unstaged badges."""
+        # Skip work when the app is minimized to tray. The loop reschedules
+        # itself via _refresh_badge_loop, so it resumes on un-minimize.
+        # NOTE: do NOT skip on collapsed cards — header badges (_pull_count_label,
+        # _changes_count_label) are visible even when the expand panel is hidden.
+        try:
+            if self.winfo_toplevel().state() == 'iconic':
+                return
+        except Exception:
+            pass
+
         def _run():
             if not self._GIT_BADGE_SEMAPHORE.acquire(blocking=False):
                 return  # Too many concurrent git calls — skip this cycle

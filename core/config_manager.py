@@ -99,47 +99,7 @@ def write_spring_config(resources_dir: str, profile: str, config: dict) -> bool:
         return False
 
 
-def get_active_spring_profile(repo_path: str) -> str:
-    """Try to determine the active Spring profile for a repo."""
-    resources_dir = os.path.join(repo_path, 'src', 'main', 'resources')
-    config = read_spring_config(resources_dir, 'default')
-    spring = config.get('spring', {}) or {}
-    profiles = spring.get('profiles', {}) or {}
-    active = profiles.get('active', '')
-    return active if active else 'default'
-
-
 # ─── Angular Environment Files ──────────────────────────────────────────────
-
-def read_angular_environment(env_file: str) -> dict:
-    """Parse an Angular environment.ts file into a dict of key-value pairs."""
-    if not os.path.isfile(env_file):
-        return {}
-
-    try:
-        with open(env_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        result = {}
-        # Match key: 'value' or key: "value" or key: value patterns
-        pattern = r"(\w+)\s*:\s*['\"]?(.*?)['\"]?\s*[,}]"
-        for match in re.finditer(pattern, content):
-            key = match.group(1)
-            value = match.group(2)
-            result[key] = value
-        return result
-    except OSError:
-        return {}
-
-
-def read_angular_environment_raw(env_file: str) -> str:
-    """Read raw content of an Angular environment file."""
-    try:
-        with open(env_file, 'r', encoding='utf-8') as f:
-            return f.read()
-    except OSError:
-        return ''
-
 
 def write_angular_environment_raw(env_file: str, content: str) -> bool:
     """Write raw content to an Angular environment file."""
