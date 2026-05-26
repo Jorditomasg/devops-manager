@@ -10,6 +10,7 @@ from core.i18n import t
 class GitMixin:
     """Mixin providing git badge refresh, branch fetching, and log detection."""
     _GIT_BADGE_SEMAPHORE = threading.Semaphore(GIT_BADGE_SEMAPHORE_COUNT)
+    _GIT_BRANCH_SEMAPHORE = threading.Semaphore(GIT_BADGE_SEMAPHORE_COUNT)
 
     def _refresh_badge_loop(self):
         """Periodically refresh the unsigned changes badge."""
@@ -72,29 +73,43 @@ class GitMixin:
                 self._GIT_BADGE_SEMAPHORE.release()
         threading.Thread(target=_run, daemon=True).start()
 
-    def _refresh_branch(self):
+    def _refresh_branch(self, _suppress_change_cb: bool = False):
         """Refresh current branch display."""
         def _run():
-            from core.git_manager import get_current_branch, get_branches
-            current = get_current_branch(self._repo.path)
-            branches = get_branches(self._repo.path)
-            self._branches_cache = branches
+            self._GIT_BRANCH_SEMAPHORE.acquire()
+            try:
+                from core.git_manager import get_current_branch, get_branches
+                current = get_current_branch(self._repo.path)
+                branches = get_branches(self._repo.path)
+                self._branches_cache = branches
 
-            def _update():
-                if not self.winfo_exists(): return
-                self._current_branch = current
-                if branches:
+                if not self._repo.git_remote_url:
+                    from core.git_manager import get_remote_url
+                    url = get_remote_url(self._repo.path)
+                    self._repo.git_remote_url = url
+
+                def _update():
+                    if not self.winfo_exists(): return
+                    self._current_branch = current
+                    if branches:
+                        if hasattr(self, '_branch_combo'):
+                            self._branch_combo.configure(values=sorted(branches))
                     if hasattr(self, '_branch_combo'):
-                        self._branch_combo.configure(values=sorted(branches))
-                if hasattr(self, '_branch_combo'):
-                    self._branch_combo.set(current)
-                self._update_header_hints()
-                self._check_pull_status()
-                self._refresh_badge()
-                self._trigger_change_callback()
-            self.after(0, _update)
+                        self._branch_combo.set(current)
+                    self._update_header_hints()
+                    self._check_pull_status()
+                    self._refresh_badge()
+                    if not _suppress_change_cb:
+                        self._trigger_change_callback()
+                self.after(0, _update)
+            finally:
+                self._GIT_BRANCH_SEMAPHORE.release()
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def _refresh_branch_startup(self):
+        """Startup variant: loads branch without triggering profile dirty check."""
+        self._refresh_branch(_suppress_change_cb=True)
 
     def _reload_repo(self):
         """Reload branch, branch list, and git status from local state (no network)."""

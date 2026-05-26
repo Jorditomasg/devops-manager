@@ -28,7 +28,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from gui.repo_card import RepoCard
 from gui.global_panel import GlobalPanel
 from gui.tooltip import ToolTip
-from gui.dialogs import CloneDialog, ConfigEditorDialog, ProfileDialog, SettingsDialog
 from gui.widgets import SearchableCombo
 from gui import theme
 from gui.app_profile import ProfileManagerMixin
@@ -609,7 +608,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             # Stagger branch loading (30ms apart)
             if card._branch_load_id:
                 card.after_cancel(card._branch_load_id)
-            card._branch_load_id = card.after(30 * idx, card._refresh_branch)
+            card._branch_load_id = card.after(30 * idx, card._refresh_branch_startup)
 
             # Stagger badge refresh (500ms apart, starting at 3s) so all N cards
             # don't saturate the git semaphore simultaneously on startup.
@@ -630,14 +629,17 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _open_config_editor(self, filepath: str):
         """Open the config editor dialog for a file."""
+        from gui.dialogs.config_editor import ConfigEditorDialog
         ConfigEditorDialog(self, filepath, self._log)
 
     def _show_clone_dialog(self):
         """Show the clone dialog."""
+        from gui.dialogs.clone import CloneDialog
         CloneDialog(self, self._workspace_dir, self._log, self._scan_repos)
 
     def _show_configs(self):
         """Show the saved configurations dialog."""
+        from gui.dialogs.profile import ProfileDialog
         ProfileDialog(
             parent=self,
             workspace_dir=self._workspace_dir,
@@ -651,6 +653,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _show_settings(self):
         """Show the settings dialog."""
+        from gui.dialogs.settings import SettingsDialog
         SettingsDialog(self, self._settings, self._save_settings,
                        on_groups_changed=self._on_groups_updated_topbar)
 
@@ -714,16 +717,22 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._settings['repo_state'] = state
 
     def _init_tray(self):
-        from PIL import Image
         self._tray_icon = None
         self._tray_icon_images = {}
-        for color in ("red", "green"):
-            icon_path = os.path.join(self._icons_dir, f"icon_{color}.ico")
-            try:
-                img = Image.open(icon_path) if os.path.exists(icon_path) else Image.new('RGB', (64, 64), color=color)
-            except Exception:
-                img = Image.new('RGB', (64, 64), color=color)
-            self._tray_icon_images[color] = img
+
+    def _get_tray_image(self, color: str):
+        """Lazy-load a tray icon image, importing PIL only on first access."""
+        cached = self._tray_icon_images.get(color)
+        if cached is not None:
+            return cached
+        from PIL import Image
+        icon_path = os.path.join(self._icons_dir, f"icon_{color}.ico")
+        try:
+            img = Image.open(icon_path) if os.path.exists(icon_path) else Image.new('RGB', (64, 64), color=color)
+        except Exception:
+            img = Image.new('RGB', (64, 64), color=color)
+        self._tray_icon_images[color] = img
+        return img
 
     def _set_taskbar_visible(self, visible: bool):
         """Hide/show the window from the Windows taskbar without changing visibility.
@@ -779,10 +788,9 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                     any_running = True
                     break
 
-            from PIL import Image
             import pystray
             color = "green" if any_running else "red"
-            image = self._tray_icon_images.get(color, Image.new('RGB', (64, 64), color='red'))
+            image = self._get_tray_image(color)
 
             menu = pystray.Menu(self._build_tray_menu)
             self._tray_icon = pystray.Icon("devops_manager", image, "DevOps Manager", menu)
@@ -857,12 +865,10 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                         except Exception:
                             pass
         if self._tray_icon:
-            img = self._tray_icon_images.get(color)
-            if img:
-                try:
-                    self._tray_icon.icon = img
-                except (OSError, ValueError):
-                    pass
+            try:
+                self._tray_icon.icon = self._get_tray_image(color)
+            except (OSError, ValueError):
+                pass
             try:
                 self._tray_icon.title = f"DevOps Manager — {len(running)}/{len(self._repo_cards)} corriendo"
             except (OSError, ValueError):

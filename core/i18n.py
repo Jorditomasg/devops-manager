@@ -79,14 +79,38 @@ def list_available_languages() -> list[dict]:
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
 def _load_yaml(path: str, keep_meta: bool = False) -> dict:
-    """Load a YAML file and return a flat dict, optionally keeping the _meta section."""
+    """Load a YAML translation file with a JSON sidecar cache for faster startup.
+
+    Writes a .json cache next to the YAML; on subsequent loads, reads JSON
+    directly (skipping PyYAML) when the YAML hasn't changed.
+    """
     try:
+        import json as _json
+        cache_path = path + ".cache.json"
+        yaml_mtime = os.path.getmtime(path)
+        try:
+            if os.path.getmtime(cache_path) >= yaml_mtime:
+                with open(cache_path, "r", encoding="utf-8") as cf:
+                    data = _json.load(cf)
+                if not keep_meta:
+                    data.pop("_meta", None)
+                return data
+        except (OSError, ValueError):
+            pass
+
         import yaml
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
+        data = {k: str(v) if not isinstance(v, dict) else v
+                for k, v in data.items()}
+        try:
+            with open(cache_path, "w", encoding="utf-8") as cf:
+                _json.dump(data, cf, ensure_ascii=False)
+        except OSError:
+            pass
+
         if not keep_meta:
             data.pop("_meta", None)
-        return {k: str(v) if not isinstance(v, dict) else v
-                for k, v in data.items()}
+        return data
     except Exception:
         return {}

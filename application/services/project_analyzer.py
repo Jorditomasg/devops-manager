@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Dict, Any
 from domain.models.repo_info import RepoInfo
 from infrastructure.config.yaml_parser import YamlParser
-from core.git_manager import get_remote_url
 
 class ProjectAnalyzerService:
     """
@@ -173,7 +172,6 @@ class ProjectAnalyzerService:
         """Build a RepoInfo instance from the matched configuration."""
         
         repo = RepoInfo(name=name, path=path, repo_type=r_type.get('type'))
-        repo.git_remote_url = get_remote_url(path)
 
         commands = r_type.get('commands', {})
         repo.run_command = self._resolve_run_command(path, commands)
@@ -241,16 +239,36 @@ class ProjectAnalyzerService:
     def _resolve_env_files(self, path: str, repo_type: str, env_files_conf: Dict[str, Any]) -> tuple[List[str], List[str]]:
         patterns = env_files_conf.get('patterns', [])
         exclude_dirs = env_files_conf.get('exclude_dirs', ['.git', 'node_modules'])
-        
+
         env_files_found = []
         profiles_found = set()
-        
+
         if not patterns:
             return env_files_found, list(profiles_found)
-            
+
         import fnmatch
+        exclude_set = set(exclude_dirs)
+
+        default_dir = env_files_conf.get('default_dir', '')
+        if default_dir:
+            target = os.path.join(path, default_dir) if default_dir != '.' else path
+            if os.path.isdir(target):
+                for f in os.listdir(target):
+                    if not os.path.isfile(os.path.join(target, f)):
+                        continue
+                    for pattern in patterns:
+                        if fnmatch.fnmatch(f, pattern):
+                            env_files_found.append(os.path.join(target, f))
+                            self._extract_profile_from_filename(f, pattern, profiles_found)
+                            break
+
+                if env_files_found:
+                    if repo_type == 'spring-boot' and any(f.endswith(('application.yml', 'application.yaml', 'application.properties')) for f in env_files_found):
+                        profiles_found.add('default')
+                    return env_files_found, sorted(profiles_found)
+
         for root, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            dirs[:] = [d for d in dirs if d not in exclude_set]
             for f in files:
                 for pattern in patterns:
                     if fnmatch.fnmatch(f, pattern):
@@ -259,7 +277,7 @@ class ProjectAnalyzerService:
 
         if repo_type == 'spring-boot' and any(f.endswith(('application.yml', 'application.yaml', 'application.properties')) for f in env_files_found):
             profiles_found.add('default')
-            
+
         return env_files_found, sorted(profiles_found)
 
     def _extract_profile_from_filename(self, filename: str, pattern: str, profiles_found: set):

@@ -16,6 +16,16 @@ BTN_CLICK = "<Button-1>"
 class HeaderMixin:
     """Mixin providing header UI construction and update methods."""
 
+    def _open_remote_url(self):
+        """Open the repo's remote URL in the browser, fetching it lazily if needed."""
+        url = self._repo.git_remote_url
+        if url is None:
+            from core.git_manager import get_remote_url
+            url = get_remote_url(self._repo.path)
+            self._repo.git_remote_url = url
+        if url:
+            webbrowser.open(url)
+
     def _on_hover_enter(self, event=None):
         self._header.configure(fg_color=theme.C.card_hover)
 
@@ -87,9 +97,8 @@ class HeaderMixin:
         )
         name_label.pack(side="left")
         name_label.bind(BTN_CLICK, self._toggle_expand)
-        if repo.git_remote_url:
-            ToolTip(name_label, t("tooltip.open_repo"))
-            name_label.bind("<Button-3>", lambda e: webbrowser.open(repo.git_remote_url))
+        ToolTip(name_label, t("tooltip.open_repo"))
+        name_label.bind("<Button-3>", lambda e: self._open_remote_url())
 
         self._build_header_name_hints(frame)
 

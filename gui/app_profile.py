@@ -112,15 +112,19 @@ class ProfileManagerMixin:
             return
         if dirty:
             self._profile_combo.configure(
-                text_color=theme.C.status_logging,
-                button_color=theme.C.profile_accent,
-                button_hover_color=theme.C.profile_accent,
-                font=theme.font("base") + ("italic",),
+                text_color=theme.C.text_warning_badge,
+                border_color=theme.C.status_logging,
+                fg_color="#2a1a00",
+                button_color=theme.C.status_logging,
+                button_hover_color=theme.C.status_logging,
+                font=theme.font("base", bold=True),
             )
             self._profile_combo.set(f"{self._current_profile_name}{PROFILE_DIRTY_SUFFIX}")
         else:
             self._profile_combo.configure(
                 text_color=theme.C.text_primary,
+                border_color=theme.C.profile_accent,
+                fg_color=theme.C.section,
                 button_color=theme.C.profile_accent,
                 button_hover_color=theme.C.profile_accent,
                 font=theme.font("base"),
@@ -221,8 +225,8 @@ class ProfileManagerMixin:
     def _apply_config(self, profile_data: dict, _skip_dirty_check: bool = False):
         """Apply a loaded configuration to all repos.
         Suppresses per-card change callbacks during the loop; runs one check at the end.
-        Pass _skip_dirty_check=True on startup to avoid false-positive dirty state
-        while async branch loads are still in flight."""
+        Pass _skip_dirty_check=True on startup — branch loads use _refresh_branch_startup
+        which suppresses change callbacks, so no false-positive dirty state occurs."""
         self._current_profile_data = profile_data
         self._applying_profile = True
         try:
