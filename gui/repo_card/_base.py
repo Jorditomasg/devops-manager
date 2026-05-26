@@ -52,6 +52,7 @@ class RepoCard(
         self._status = 'stopped'
         self._branches_cache = []
         self._current_branch = ''
+        self._cached_behind = 0
         self._branch_load_id = None
         self._expanded = False
         self._is_installing = False

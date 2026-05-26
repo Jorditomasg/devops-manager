@@ -354,6 +354,7 @@ badge.danger_env: "⚠ ENV"
 
 placeholder.search: "🔍 Buscar..."
 placeholder.no_results: "Sin resultados"
+placeholder.more_items: "+{count} más — refiná la búsqueda"
 
 # ── Dialog — Docker actions ───────────────────────────────────────────────────
 dialog.docker.unavailable_title: "Docker no disponible"

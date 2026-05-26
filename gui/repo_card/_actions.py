@@ -416,8 +416,11 @@ class ActionsMixin:
         """Pull latest changes."""
         self._log(t("log.pull_start"))
 
+        branch = self._current_branch or '?'
+        commits = self._cached_behind
+
         def _run():
-            from core.git_manager import get_local_changes, get_commits_behind, get_current_branch, pull
+            from core.git_manager import get_local_changes
 
             ignore = getattr(self._repo, 'env_pull_ignore_patterns', [])
 
@@ -433,9 +436,6 @@ class ActionsMixin:
                     )
                 self.after(0, _err)
                 return
-
-            branch = get_current_branch(self._repo.path)
-            commits = get_commits_behind(self._repo.path)
 
             if commits > 0:
                 def _ask():
@@ -453,33 +453,24 @@ class ActionsMixin:
             from core.git_manager import pull
             pull(self._repo.path, self._log)
             self._refresh_branch()
-            self._check_pull_status()
             self._refresh_badge()
 
         self._action_pool.submit(_run)
 
     def _check_pull_status(self):
-        """Update pull button state with commits behind count."""
-        def _run():
-            from core.git_manager import get_commits_behind
-            commits = get_commits_behind(self._repo.path)
-
-            def _update():
-                if hasattr(self, '_pull_btn'):
-                    if commits > 0:
-                        self._pull_btn.configure(
-                            text=f"⬇ Pull ({commits})",
-                            fg_color=theme.btn_style("blue_active")["fg_color"],
-                        )
-                    else:
-                        self._pull_btn.configure(
-                            text="⬇ Pull",
-                            fg_color=theme.btn_style("blue")["fg_color"],
-                        )
-
-            self.after(0, _update)
-
-        self._action_pool.submit(_run)
+        """Update pull button state from cached behind count."""
+        commits = self._cached_behind
+        if hasattr(self, '_pull_btn'):
+            if commits > 0:
+                self._pull_btn.configure(
+                    text=f"⬇ Pull ({commits})",
+                    fg_color=theme.btn_style("blue_active")["fg_color"],
+                )
+            else:
+                self._pull_btn.configure(
+                    text="⬇ Pull",
+                    fg_color=theme.btn_style("blue")["fg_color"],
+                )
 
     def _clean_repo(self):
         """Clean all local untracked and modified files, removing env overrides."""

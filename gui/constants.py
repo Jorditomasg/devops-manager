@@ -27,6 +27,8 @@ PORT_PATTERNS_FALLBACK = [
 ]
 
 # ── Searchable combo popup ───────────────────────────────────────
-POPUP_BORDER_PAD  = 8   # extra bottom padding in popup height calculation
-COMBO_SCROLLBAR_W = 12  # width reserved for the vertical scrollbar
+POPUP_BORDER_PAD       = 8    # extra bottom padding in popup height calculation
+COMBO_SCROLLBAR_W      = 12   # width reserved for the vertical scrollbar
+COMBO_SEARCH_DEBOUNCE  = 150  # ms debounce for search input before re-rendering
+COMBO_MAX_RENDER_ITEMS = 30   # max items rendered in popup (avoids CTk widget flood)
 

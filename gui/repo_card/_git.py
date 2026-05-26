@@ -39,6 +39,7 @@ class GitMixin:
                 current = s['branch']
                 behind = s['behind']
                 unstaged = s['unstaged']
+                self._cached_behind = behind
 
                 def _update():
                     if not self.winfo_exists():

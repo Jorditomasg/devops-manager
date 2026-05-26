@@ -18,7 +18,7 @@ import customtkinter as ctk
 
 from gui import theme
 from gui.tooltip import ToolTip
-from gui.constants import POPUP_BORDER_PAD, COMBO_SCROLLBAR_W
+from gui.constants import POPUP_BORDER_PAD, COMBO_SCROLLBAR_W, COMBO_SEARCH_DEBOUNCE, COMBO_MAX_RENDER_ITEMS
 from core.i18n import t
 
 
@@ -81,6 +81,7 @@ class SearchableCombo(ctk.CTkFrame):
         self._list_canvas_host: tk.Frame | None = None
         self._canvas_window_id: int | None = None
         self._is_popup_scrolling: bool = False
+        self._render_after_id: str | None = None
 
         # Initial selected value
         if variable is not None:
@@ -336,7 +337,7 @@ class SearchableCombo(ctk.CTkFrame):
         self._popup_btns = []
         self._render_items("")  # also calls _resize_popup() → sets initial geometry
         self._search_trace_id = self._search_var.trace_add(
-            "write", lambda *_: self._render_items(self._search_var.get())
+            "write", lambda *_: self._schedule_render()
         )
 
         popup.deiconify()
@@ -388,14 +389,28 @@ class SearchableCombo(ctk.CTkFrame):
             f"{self._popup_w}x{int(popup_h)}+{self._popup_x}+{self._popup_y}"
         )
 
+    def _schedule_render(self):
+        """Debounce search input: cancel pending render and schedule a new one."""
+        if self._render_after_id:
+            try:
+                self.after_cancel(self._render_after_id)
+            except Exception:
+                pass
+        self._render_after_id = self.after(
+            COMBO_SEARCH_DEBOUNCE,
+            lambda: self._render_items(self._search_var.get() if self._search_var else ""),
+        )
+
     def _render_items(self, filter_text: str):
         """Destroy and recreate list buttons matching the current filter."""
+        self._render_after_id = None
         for btn in self._popup_btns:
             btn.destroy()
         self._popup_btns.clear()
 
         q = filter_text.strip().lower()
         items = [v for v in self._values if q in v.lower()] if q else self._values
+        total_matches = len(items)
 
         if not items:
             lbl = ctk.CTkLabel(
@@ -410,14 +425,16 @@ class SearchableCombo(ctk.CTkFrame):
             self._resize_popup()
             return
 
+        capped = items[:COMBO_MAX_RENDER_ITEMS]
+
         # Prepare for truncation measurement
         f = self._make_measure_font()
         # avail_w: popup_w minus outer margins (22) minus button side padding (4+4=8)
         # minus scrollbar width when active
-        is_scrolling = len(items) > self._MAX_VISIBLE
+        is_scrolling = len(capped) > self._MAX_VISIBLE
         avail_w = self._popup_w - (30 + COMBO_SCROLLBAR_W if is_scrolling else 30)
 
-        for val in items:
+        for val in capped:
             # Determine display text with ellipsis if too long
             display_text = val
             if f.measure(val) > avail_w:
@@ -441,7 +458,7 @@ class SearchableCombo(ctk.CTkFrame):
                 command=lambda v=val: self._select(v),
             )
             btn.pack(fill="x", padx=4, pady=1)
-            
+
             # Add tooltip with ORIGINAL (full) text
             ToolTip(btn, val)
 
@@ -450,6 +467,18 @@ class SearchableCombo(ctk.CTkFrame):
                 btn.bind("<Button-4>", self._popup_scroll_fn, "+")
                 btn.bind("<Button-5>", self._popup_scroll_fn, "+")
             self._popup_btns.append(btn)
+
+        if total_matches > COMBO_MAX_RENDER_ITEMS:
+            remaining = total_matches - COMBO_MAX_RENDER_ITEMS
+            hint = ctk.CTkLabel(
+                self._inner_frame,
+                text=t("placeholder.more_items", count=remaining),
+                font=theme.font("xs"),
+                text_color=theme.C.text_faint,
+                anchor="center",
+            )
+            hint.pack(fill="x", padx=4, pady=(2, 4))
+            self._popup_btns.append(hint)  # type: ignore[arg-type]
 
         self._resize_popup()
 
@@ -470,6 +499,13 @@ class SearchableCombo(ctk.CTkFrame):
             self._close_popup()
 
     def _close_popup(self):
+        # Cancel pending debounced render
+        if self._render_after_id:
+            try:
+                self.after_cancel(self._render_after_id)
+            except Exception:
+                pass
+            self._render_after_id = None
         # Cancel pending after() that registers the global click handler
         if self._register_after_id:
             try:
