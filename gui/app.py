@@ -30,6 +30,7 @@ from gui.global_panel import GlobalPanel
 from gui.tooltip import ToolTip
 from gui.widgets import SearchableCombo
 from gui import theme
+from gui.constants import FOCUS_REFRESH_DEBOUNCE_MS
 from gui.app_profile import ProfileManagerMixin
 from core.repo_detector import detect_repos
 from core.i18n import t
@@ -120,6 +121,15 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self.bind("<Unmap>", self._on_window_unmap)
         # Track last visible state for accurate tray restore
         self.bind("<Configure>", self._on_window_configure)
+        # Refresh git state when the app regains focus (reflects external branch
+        # changes instantly + throttled fetch for pull count). Debounced.
+        # Track focus at the APPLICATION level: <FocusIn> on the toplevel also
+        # fires for child widgets, and on re-activation the focus often lands on
+        # a child (not self), so a strict event.widget==self guard misses it.
+        self._app_has_focus = False
+        self._focus_refresh_after = None
+        self.bind("<FocusIn>", self._on_window_focus)
+        self.bind("<FocusOut>", self._on_window_focusout)
 
         self._build_ui()
         self._scan_repos()
@@ -775,6 +785,9 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             return
 
         if self.state() == 'iconic' and self._settings.get('minimize_to_tray', True):
+            # The window is gone but a topmost tooltip toplevel would stay painted
+            # on the desktop — its widget never gets <Leave>. Dismiss any open one.
+            ToolTip.hide_all()
             self._pre_tray_state = dict(self._last_visible_state)
             # Keep the window iconic (HWND alive, GDI surface cached by DWM)
             # and just hide its taskbar entry. Restore via deiconify() is then
@@ -825,15 +838,65 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             # Fire a one-shot refresh on all cards so the user sees fresh git
             # status immediately after coming back from the tray. Scheduled
             # slightly after restore so the UI is fully painted first.
-            self.after(50, self._refresh_all_cards_after_restore)
+            self.after(50, self._refresh_all_cards_on_focus)
         self.after(0, _show)
 
-    def _refresh_all_cards_after_restore(self):
-        """Trigger an immediate badge refresh on every card after un-minimize."""
-        for card in self._repo_cards:
+    def _on_window_focus(self, event):
+        """Debounced handler for the app regaining focus from another application.
+
+        <FocusIn> fires for the toplevel AND its descendants, so we don't filter
+        by event.widget (re-activation often focuses a child, not self). Instead
+        we act only on the transition unfocused -> focused, tracked via
+        _on_window_focusout. Internal widget-to-widget focus changes keep the
+        flag True and are ignored, so this won't spam git on every click.
+        """
+        if self._app_has_focus:
+            return
+        self._app_has_focus = True
+        if self._focus_refresh_after is not None:
             try:
-                if card.winfo_exists():
-                    card._refresh_badge()
+                self.after_cancel(self._focus_refresh_after)
+            except Exception:
+                pass
+        self._focus_refresh_after = self.after(
+            FOCUS_REFRESH_DEBOUNCE_MS, self._refresh_all_cards_on_focus
+        )
+
+    def _on_window_focusout(self, event):
+        """Mark the app unfocused only when focus leaves it for ANOTHER app.
+
+        Deferred to after_idle so Tk settles: when focus merely moves to a child
+        widget, focus_displayof() still returns a widget in THIS application and
+        the flag stays True. It returns None only when another app holds focus.
+        """
+        def _check():
+            try:
+                if self.focus_displayof() is None:
+                    self._app_has_focus = False
+            except Exception:
+                self._app_has_focus = False
+        self.after_idle(_check)
+
+    def _refresh_all_cards_on_focus(self):
+        """Refresh every card on focus/restore: instant branch reflection plus a
+        throttled background fetch for an accurate pull count.
+
+        Cards the user is actually looking at (expanded panel) or with a running
+        service are refreshed first. The per-card git calls are semaphore-capped
+        and non-blocking, so the first cards in the loop grab the slots and update
+        immediately; the rest catch up on the next 30s badge cycle.
+        """
+        self._focus_refresh_after = None
+        cards = [c for c in self._repo_cards if c.winfo_exists()]
+
+        def _priority(c):
+            visible = getattr(c, '_expanded', False)
+            active = getattr(c, '_status', '') in ('running', 'starting')
+            return 0 if (visible or active) else 1
+
+        for card in sorted(cards, key=_priority):
+            try:
+                card._on_app_focus()
             except Exception:
                 pass
 
@@ -917,6 +980,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
     def _on_close(self):
         """Handle window close — show confirmation if services are running."""
+        ToolTip.hide_all()
         running_count = sum(
             1 for card in self._repo_cards
             if getattr(card, '_status', '') in ('running', 'starting')

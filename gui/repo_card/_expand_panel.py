@@ -106,6 +106,14 @@ class ExpandPanelMixin:
         self._pull_btn.pack(side="left", padx=(0, 3))
         ToolTip(self._pull_btn, t("tooltip.pull_btn"))
 
+        # Merge
+        self._merge_btn = ctk.CTkButton(
+            row1, text=t("btn.merge"), width=80,
+            command=self._open_merge_dialog, **theme.btn_style("purple_alt")
+        )
+        self._merge_btn.pack(side="left", padx=(0, 3))
+        ToolTip(self._merge_btn, t("tooltip.merge_btn"))
+
         # Clean
         self._clean_btn = ctk.CTkButton(
             row1, text=t("btn.clean"), width=80,
@@ -138,6 +146,7 @@ class ExpandPanelMixin:
         initial_branches = self._branches_cache if getattr(self, '_branches_cache', None) else [t("label.loading")]
         self._branch_combo = SearchableCombo(
             row, values=initial_branches, width=180,
+            separator_after=getattr(self, '_branches_recent_count', 0),
             command=self._on_branch_change, **theme.combo_style()
         )
         if getattr(self, '_current_branch', None):

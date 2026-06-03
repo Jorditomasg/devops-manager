@@ -122,6 +122,15 @@ class HeaderMixin:
         self._changes_count_label.bind("<Button-1>", self._show_modified_files)
         ToolTip(self._changes_count_label, t("tooltip.modified_files"))
 
+        # Merge-conflict badge (red, shown only while unmerged paths exist)
+        self._conflict_count_label = ctk.CTkLabel(
+            frame, text="",
+            font=theme.font("md", bold=True), text_color=theme.C.status_error
+        )
+        self._conflict_count_label.pack(side="left", padx=(0, 4))
+        self._conflict_count_label.bind("<Button-1>", self._show_conflicts)
+        ToolTip(self._conflict_count_label, t("tooltip.conflict_files"))
+
         # Danger env badge (yellow, shown when a dangerous env is active)
         self._danger_env_badge = ctk.CTkLabel(
             frame, text="",

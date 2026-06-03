@@ -18,7 +18,10 @@ import customtkinter as ctk
 
 from gui import theme
 from gui.tooltip import ToolTip
-from gui.constants import POPUP_BORDER_PAD, COMBO_SCROLLBAR_W, COMBO_SEARCH_DEBOUNCE, COMBO_MAX_RENDER_ITEMS
+from gui.constants import (
+    POPUP_BORDER_PAD, COMBO_SCROLLBAR_W, COMBO_SEARCH_DEBOUNCE,
+    COMBO_MAX_RENDER_ITEMS, COMBO_PAGE_SIZE,
+)
 from core.i18n import t
 
 
@@ -55,6 +58,7 @@ class SearchableCombo(ctk.CTkFrame):
         font=None,
         state: str = "readonly",
         variable=None,
+        separator_after: int | None = None,
         **kwargs,
     ):
         self._values: list[str] = list(values or [])
@@ -71,6 +75,8 @@ class SearchableCombo(ctk.CTkFrame):
         self._popup_y: int = 0
         self._click_bind_id: str | None = None
         self._global_click_root: tk.Misc | None = None
+        self._unmap_bind_id: str | None = None
+        self._unmap_root: tk.Misc | None = None
         self._search_var: ctk.StringVar | None = None
         self._search_trace_id: str | None = None
         self._register_after_id: str | None = None
@@ -82,6 +88,16 @@ class SearchableCombo(ctk.CTkFrame):
         self._canvas_window_id: int | None = None
         self._is_popup_scrolling: bool = False
         self._render_after_id: str | None = None
+        # Optional visual divider: when set (and no search filter is active), a thin
+        # line is drawn after the first `_separator_after` items — used to split a
+        # "recent" group from the alphabetical remainder.
+        self._separator_after: int | None = separator_after
+        self._popup_separators: list = []
+        self._extra_h: int = 0
+        # Infinite scroll: full filtered list + how many are currently rendered.
+        self._filtered_items: list[str] = []
+        self._rendered_count: int = 0
+        self._load_more_pending: bool = False
 
         # Initial selected value
         if variable is not None:
@@ -345,14 +361,30 @@ class SearchableCombo(ctk.CTkFrame):
         search_entry.focus_set()
 
         popup.bind("<Escape>", lambda _: self._close_popup())
+        # Close the popup if the main window is minimized/withdrawn — otherwise this
+        # separate toplevel lingers on the desktop. Bound immediately (not deferred)
+        # so an instant minimize right after opening is still caught.
+        self._unmap_root = self.winfo_toplevel()
+        self._unmap_bind_id = self._unmap_root.bind("<Unmap>", self._on_root_unmap, "+")
         # Defer global bind so the opening click doesn't immediately close the popup
         self._register_after_id = self.after(50, self._register_global_click)
 
-    def _resize_popup(self):
+    def _on_root_unmap(self, event):
+        """Close the popup when the ROOT window is minimized/withdrawn.
+
+        <Unmap> from descendant widgets also bubbles through the toplevel's bind
+        tag, so filter to the root window itself — mirrors app._on_window_unmap.
+        """
+        if event.widget is self._unmap_root and self._popup and self._popup.winfo_exists():
+            self._close_popup()
+
+    def _resize_popup(self, preserve_scroll: bool = False):
         """Resize the popup to fit the current number of visible items.
 
         Uses a deterministic calculation: 44 (search area) + list_h + 4 + POPUP_BORDER_PAD.
         Scrollbar is packed only when count > _MAX_VISIBLE, fully absent otherwise.
+        `preserve_scroll` keeps the current scroll offset (used when appending pages
+        via infinite scroll); the first render of a list resets to the top.
         """
         if not (self._popup and self._popup.winfo_exists()):
             return
@@ -364,27 +396,33 @@ class SearchableCombo(ctk.CTkFrame):
 
         # REQ-2: canvas height = min(count, _MAX_VISIBLE) * _LIST_ITEM_H
         list_h = visible_rows * self._LIST_ITEM_H
-        self._list_canvas.configure(height=list_h)
+        # When not scrolling, the divider lives inside the visible viewport, so its
+        # height must be added; when scrolling, the viewport is fixed and the divider
+        # is part of the scrollable content (handled by the bbox scrollregion).
+        is_scrolling = count > self._MAX_VISIBLE
+        canvas_h = list_h if is_scrolling else list_h + self._extra_h
+        self._list_canvas.configure(height=canvas_h)
 
         # Scrollbar gridded ONLY when count > _MAX_VISIBLE — fully absent otherwise.
         # Grid layout (not pack) ensures reliable space redistribution when toggling.
-        is_scrolling = count > self._MAX_VISIBLE
         self._is_popup_scrolling = is_scrolling
         if is_scrolling:
             self._list_scrollbar.grid(row=0, column=1, sticky="ns")
-            self._list_canvas.configure(yscrollcommand=self._list_scrollbar.set)
+            # Route scroll updates through _on_yscroll so reaching the bottom loads more.
+            self._list_canvas.configure(yscrollcommand=self._on_yscroll)
             # scrollregion is managed by inner_frame <Configure> binding (content > canvas)
         else:
             self._list_scrollbar.grid_remove()
             self._list_canvas.configure(yscrollcommand="")
             # Force scrollregion == canvas height: the <Configure> binding is disabled
             # (is_popup_scrolling=False) so this value won't be overridden by lazy layout.
-            self._list_canvas.configure(scrollregion=(0, 0, self._popup_w, list_h))
+            self._list_canvas.configure(scrollregion=(0, 0, self._popup_w, canvas_h))
 
-        self._list_canvas.yview_moveto(0)
+        if not preserve_scroll:
+            self._list_canvas.yview_moveto(0)
 
-        # REQ-5: popup_h = 44 + list_h + 4 + POPUP_BORDER_PAD (deterministic)
-        popup_h = 44 + list_h + 4 + POPUP_BORDER_PAD
+        # REQ-5: popup_h = 44 + canvas_h + 4 + POPUP_BORDER_PAD (deterministic)
+        popup_h = 44 + canvas_h + 4 + POPUP_BORDER_PAD
         self._popup.geometry(
             f"{self._popup_w}x{int(popup_h)}+{self._popup_x}+{self._popup_y}"
         )
@@ -402,17 +440,23 @@ class SearchableCombo(ctk.CTkFrame):
         )
 
     def _render_items(self, filter_text: str):
-        """Destroy and recreate list buttons matching the current filter."""
+        """Reset the list for a new filter and render the first page. Additional pages
+        load on demand via infinite scroll (_render_page)."""
         self._render_after_id = None
         for btn in self._popup_btns:
             btn.destroy()
         self._popup_btns.clear()
+        for sep in self._popup_separators:
+            sep.destroy()
+        self._popup_separators.clear()
+        self._extra_h = 0
+        self._rendered_count = 0
+        self._load_more_pending = False
 
         q = filter_text.strip().lower()
-        items = [v for v in self._values if q in v.lower()] if q else self._values
-        total_matches = len(items)
+        self._filtered_items = [v for v in self._values if q in v.lower()] if q else list(self._values)
 
-        if not items:
+        if not self._filtered_items:
             lbl = ctk.CTkLabel(
                 self._inner_frame,
                 text=t("placeholder.no_results"),
@@ -425,22 +469,37 @@ class SearchableCombo(ctk.CTkFrame):
             self._resize_popup()
             return
 
-        capped = items[:COMBO_MAX_RENDER_ITEMS]
+        self._render_page(initial=True)
 
-        # Prepare for truncation measurement
+    def _render_page(self, initial: bool = False):
+        """Append the next slice of item buttons. Called for the first page and again
+        each time the user scrolls near the bottom (infinite scroll)."""
+        items = self._filtered_items
+        start = self._rendered_count
+        # First page size is COMBO_MAX_RENDER_ITEMS; subsequent pages COMBO_PAGE_SIZE.
+        page = COMBO_MAX_RENDER_ITEMS if initial else COMBO_PAGE_SIZE
+        end = min(start + page, len(items))
+        if start >= end:
+            return
+
+        q = self._search_var.get().strip().lower() if self._search_var else ""
         f = self._make_measure_font()
-        # avail_w: popup_w minus outer margins (22) minus button side padding (4+4=8)
-        # minus scrollbar width when active
-        is_scrolling = len(capped) > self._MAX_VISIBLE
+        # Once the total exceeds _MAX_VISIBLE the scrollbar is shown; reserve its width.
+        is_scrolling = len(items) > self._MAX_VISIBLE
         avail_w = self._popup_w - (30 + COMBO_SCROLLBAR_W if is_scrolling else 30)
 
-        for val in capped:
-            # Determine display text with ellipsis if too long
+        # The recent/alphabetical divider is drawn only on the unfiltered list, after
+        # item index `_separator_after - 1` (always within the first page).
+        show_separator = (not q) and bool(self._separator_after) and 0 < self._separator_after < len(items)
+        divider_color = theme.C.divider
+        divider_color = divider_color if isinstance(divider_color, str) else divider_color[0]
+
+        for idx in range(start, end):
+            val = items[idx]
             display_text = val
             if f.measure(val) > avail_w:
                 ellipsis = "…"
                 target_w = avail_w - f.measure(ellipsis)
-                # Narrow down until it fits
                 while display_text and f.measure(display_text) > target_w:
                     display_text = display_text[:-1]
                 display_text += ellipsis
@@ -468,19 +527,41 @@ class SearchableCombo(ctk.CTkFrame):
                 btn.bind("<Button-5>", self._popup_scroll_fn, "+")
             self._popup_btns.append(btn)
 
-        if total_matches > COMBO_MAX_RENDER_ITEMS:
-            remaining = total_matches - COMBO_MAX_RENDER_ITEMS
-            hint = ctk.CTkLabel(
-                self._inner_frame,
-                text=t("placeholder.more_items", count=remaining),
-                font=theme.font("xs"),
-                text_color=theme.C.text_faint,
-                anchor="center",
-            )
-            hint.pack(fill="x", padx=4, pady=(2, 4))
-            self._popup_btns.append(hint)  # type: ignore[arg-type]
+            if show_separator and idx == self._separator_after - 1:
+                sep = tk.Frame(self._inner_frame, height=1, bg=divider_color)
+                sep.pack(fill="x", padx=8, pady=4)
+                self._popup_separators.append(sep)
+                self._extra_h += 9  # 1px line + 4px pady top/bottom
+                if hasattr(self, "_popup_scroll_fn") and self._popup_scroll_fn:
+                    sep.bind("<MouseWheel>", self._popup_scroll_fn, "+")
+                    sep.bind("<Button-4>", self._popup_scroll_fn, "+")
+                    sep.bind("<Button-5>", self._popup_scroll_fn, "+")
 
-        self._resize_popup()
+        self._rendered_count = end
+        # Preserve the scroll position when appending; only the first page resets to top.
+        self._resize_popup(preserve_scroll=not initial)
+
+    def _on_yscroll(self, first, last):
+        """yscrollcommand wrapper: drive the scrollbar AND trigger infinite-scroll loading
+        when the view nears the bottom and more filtered items remain."""
+        if self._list_scrollbar is not None:
+            try:
+                self._list_scrollbar.set(first, last)
+            except tk.TclError:
+                return
+        try:
+            near_bottom = float(last) >= 0.985
+        except (ValueError, TypeError):
+            return
+        if near_bottom and self._rendered_count < len(self._filtered_items) \
+                and not self._load_more_pending:
+            self._load_more_pending = True
+            self.after_idle(self._do_load_more)
+
+    def _do_load_more(self):
+        self._load_more_pending = False
+        if self._popup and self._popup.winfo_exists() and self._inner_frame is not None:
+            self._render_page()
 
     def _register_global_click(self):
         """Register the outside-click handler after a short delay to skip the opening click."""
@@ -521,6 +602,14 @@ class SearchableCombo(ctk.CTkFrame):
                 pass
         self._click_bind_id = None
         self._global_click_root = None
+        # Remove the root <Unmap> binding
+        if self._unmap_bind_id and self._unmap_root:
+            try:
+                self._unmap_root.unbind("<Unmap>", self._unmap_bind_id)
+            except Exception:
+                pass
+        self._unmap_bind_id = None
+        self._unmap_root = None
         # Remove the search trace to avoid stale callbacks
         if self._search_var and self._search_trace_id:
             try:
@@ -533,6 +622,11 @@ class SearchableCombo(ctk.CTkFrame):
         self._popup = None
         self._popup_outer = None
         self._popup_btns = []
+        self._popup_separators = []
+        self._extra_h = 0
+        self._filtered_items = []
+        self._rendered_count = 0
+        self._load_more_pending = False
         self._popup_scroll_fn = None
         self._list_canvas = None
         self._inner_frame = None
@@ -568,8 +662,13 @@ class SearchableCombo(ctk.CTkFrame):
 
     def configure(self, **kwargs):
         """Handle combo-specific kwargs before forwarding the rest to CTkFrame."""
+        refresh_popup = False
         if "values" in kwargs:
             self._values = list(kwargs.pop("values"))
+            refresh_popup = True
+        if "separator_after" in kwargs:
+            self._separator_after = kwargs.pop("separator_after")
+            refresh_popup = True
         if "state" in kwargs:
             s = kwargs.pop("state")
             self._state = s
@@ -599,5 +698,10 @@ class SearchableCombo(ctk.CTkFrame):
                 self._separator.configure(fg_color=effective)
         if "button_hover_color" in kwargs:
             kwargs.pop("button_hover_color")  # absorbed into button_color logic
+        # Live-refresh an OPEN dropdown when its data changed (e.g. async branch load),
+        # so the list updates in place instead of requiring a close/reopen.
+        if refresh_popup and self._popup is not None and self._popup.winfo_exists() \
+                and self._inner_frame is not None:
+            self._render_items(self._search_var.get() if self._search_var else "")
         if kwargs:
             super().configure(**kwargs)

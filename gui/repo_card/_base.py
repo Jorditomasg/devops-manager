@@ -51,6 +51,7 @@ class RepoCard(
         self._on_change_callback = on_change_callback
         self._status = 'stopped'
         self._branches_cache = []
+        self._branches_recent_count = 0  # separator index: leading "recent" branches
         self._current_branch = ''
         self._cached_behind = 0
         self._branch_load_id = None

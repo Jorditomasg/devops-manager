@@ -248,6 +248,10 @@ class BaseDialog(ctk.CTkToplevel):
         if not self.winfo_ismapped():
             self.deiconify()
         self._apply_parent_overlay(self._parent_ref)
+        # grab_set() re-routes pointer events to this modal, so any tooltip open
+        # over the parent never receives <Leave> and would linger. Dismiss them.
+        from gui.tooltip import ToolTip
+        ToolTip.hide_all()
         self.grab_set()
         self.lift()
         self.focus_force()

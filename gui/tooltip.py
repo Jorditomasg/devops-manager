@@ -18,6 +18,12 @@ class ToolTip:
         ToolTip(my_button, "Descriptive text here")
     """
 
+    # Registry of tooltips that are currently scheduled or visible. Lets callers
+    # force-dismiss every tooltip when a <Leave>/<ButtonPress> will never arrive
+    # — e.g. a modal grab_set() steals pointer events, or the window is hidden to
+    # the system tray. A class-level set keeps a single source of truth.
+    _active_tips: "set[ToolTip]" = set()
+
     def __init__(self, widget, text: str):
         self._widget = widget
         self._text = text
@@ -28,11 +34,26 @@ class ToolTip:
         widget.bind("<Leave>", self._cancel, add="+")
         widget.bind("<ButtonPress>", self._cancel, add="+")
 
+    @classmethod
+    def hide_all(cls) -> None:
+        """Cancel and hide every scheduled/visible tooltip immediately.
+
+        Call this whenever an event that would normally trigger <Leave> may not
+        fire: opening a modal (grab_set re-routes pointer events) or hiding the
+        window to the tray. Iterates a copy because _cancel() mutates the set.
+        """
+        for tip in list(cls._active_tips):
+            try:
+                tip._cancel()
+            except Exception:
+                pass
+
     def _schedule(self, event=None):
         if not self._text:
             return
         self._cancel()
         self._after_id = self._widget.after(_TOOLTIP_DELAY_MS, self._show)
+        ToolTip._active_tips.add(self)
 
     def _cancel(self, event=None):
         if self._after_id:
@@ -44,7 +65,24 @@ class ToolTip:
         self._hide()
 
     def _show(self):
+        # The scheduled after() has now fired, so nothing is pending. Either we
+        # create a visible window below (and stay registered) or we bail out — in
+        # which case drop ourselves from the registry so it only holds live tips.
+        self._after_id = None
         if self._tip_window or not self._text:
+            ToolTip._active_tips.discard(self)
+            return
+
+        # If a modal holds the grab, never paint over it. This closes the race
+        # where the scheduled after() fires AFTER a dialog's grab_set() (hide_all
+        # only dismisses tips that already exist). A tooltip inside the grabbing
+        # window is fine — only suppress when the grabber is a different toplevel.
+        try:
+            grabber = self._widget.grab_current()
+        except tk.TclError:
+            grabber = None
+        if grabber is not None and grabber is not self._widget.winfo_toplevel():
+            ToolTip._active_tips.discard(self)
             return
 
         try:
@@ -56,14 +94,16 @@ class ToolTip:
             w_widget = self._widget.winfo_width()
             h_widget = self._widget.winfo_height()
             
-            if not (x_widget <= x_mouse <= x_widget + w_widget and 
+            if not (x_widget <= x_mouse <= x_widget + w_widget and
                     y_widget <= y_mouse <= y_widget + h_widget):
+                ToolTip._active_tips.discard(self)
                 return
 
             # Position: below and slightly right of the widget
             x = x_widget + 12
             y = y_widget + h_widget + 4
         except tk.TclError:
+            ToolTip._active_tips.discard(self)
             return
 
         self._tip_window = tw = ctk.CTkToplevel(self._widget)
@@ -105,6 +145,7 @@ class ToolTip:
         tw.deiconify()
 
     def _hide(self):
+        ToolTip._active_tips.discard(self)
         if self._tip_window:
             self._tip_window.destroy()
             self._tip_window = None

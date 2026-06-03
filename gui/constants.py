@@ -10,9 +10,12 @@ BTN_CLICK          = "<Button-1>"
 BADGE_REFRESH_MS   = 30_000   # git badge poll interval per card
 DOCKER_POLL_MS     = 15_000   # docker-compose status poll
 PROFILE_DEBOUNCE_MS = 300     # profile-change debounce
+FOCUS_REFRESH_DEBOUNCE_MS = 400   # collapse rapid <FocusIn> bursts into one refresh
+FOCUS_FETCH_THROTTLE_S    = 300   # min seconds between background fetches per card on focus
 
 # ── Concurrency limits ──────────────────────────────────────────
 GIT_BADGE_SEMAPHORE_COUNT = 3
+GIT_FETCH_SEMAPHORE_COUNT = 2   # network fetch is heavier — cap lower than local status
 
 # ── Log limits ──────────────────────────────────────────────────
 LOG_MAX_LINES      = 500
@@ -30,5 +33,6 @@ PORT_PATTERNS_FALLBACK = [
 POPUP_BORDER_PAD       = 8    # extra bottom padding in popup height calculation
 COMBO_SCROLLBAR_W      = 12   # width reserved for the vertical scrollbar
 COMBO_SEARCH_DEBOUNCE  = 150  # ms debounce for search input before re-rendering
-COMBO_MAX_RENDER_ITEMS = 30   # max items rendered in popup (avoids CTk widget flood)
+COMBO_MAX_RENDER_ITEMS = 30   # initial page size; more load on scroll (infinite scroll)
+COMBO_PAGE_SIZE        = 30   # items appended each time the user scrolls near the bottom
 

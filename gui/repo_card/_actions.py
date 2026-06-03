@@ -457,6 +457,30 @@ class ActionsMixin:
 
         self._action_pool.submit(_run)
 
+    def _open_merge_dialog(self):
+        """Open the per-card merge dialog."""
+        from gui.dialogs import MergeBranchDialog
+        parent = self.master.master if hasattr(self, 'master') and hasattr(self.master, 'master') else self
+        # Share the card's recency-ordered branch list + separator index so the dialog
+        # opens instantly with the same recents — no reorder flicker, consistent on reopen.
+        branches = list(self._branches_cache) if self._branches_cache else []
+        MergeBranchDialog(
+            parent,
+            self._repo.path,
+            self._repo.name,
+            branches,
+            self._current_branch,
+            recent_count=getattr(self, '_branches_recent_count', 0),
+            dirty_ignore=getattr(self._repo, 'env_pull_ignore_patterns', []),
+            log_callback=self._log,
+            on_complete=self._post_merge_refresh,
+        )
+
+    def _post_merge_refresh(self):
+        """Refresh branch + badges after a merge changed branch/working-tree state."""
+        self._refresh_branch()
+        self._refresh_badge()
+
     def _check_pull_status(self):
         """Update pull button state from cached behind count."""
         commits = self._cached_behind
