@@ -21,6 +21,7 @@ from gui.tooltip import ToolTip
 from gui.constants import (
     POPUP_BORDER_PAD, COMBO_SCROLLBAR_W, COMBO_SEARCH_DEBOUNCE,
     COMBO_MAX_RENDER_ITEMS, COMBO_PAGE_SIZE,
+    BTN_CLICK, EVENT_CONFIGURE, EVENT_MOUSEWHEEL, EVENT_SCROLL_UP, EVENT_SCROLL_DOWN,
 )
 from core.i18n import t
 
@@ -166,9 +167,9 @@ class SearchableCombo(ctk.CTkFrame):
         self._display_tooltip = ToolTip(self._display_label, "")
 
         # "break" stops the event propagating to parent frames (prevents double-toggle)
-        self._display_label.bind("<Button-1>", lambda e: (self._toggle_popup(), "break")[1])
+        self._display_label.bind(BTN_CLICK, lambda e: (self._toggle_popup(), "break")[1])
         # Re-evaluate truncation whenever the label is resized
-        self._display_label.bind("<Configure>", lambda e: self._update_display_text())
+        self._display_label.bind(EVENT_CONFIGURE, lambda e: self._update_display_text())
 
         self._update_display_text()
 
@@ -314,14 +315,14 @@ class SearchableCombo(ctk.CTkFrame):
         # When not scrolling, _resize_popup() sets the scrollregion explicitly to match
         # canvas height — this binding must be a no-op to avoid overriding that fix.
         self._inner_frame.bind(
-            "<Configure>",
+            EVENT_CONFIGURE,
             lambda e: self._list_canvas.configure(
                 scrollregion=self._list_canvas.bbox("all")
             ) if self._is_popup_scrolling else None,
         )
         # Keep inner_frame width equal to canvas width
         self._list_canvas.bind(
-            "<Configure>",
+            EVENT_CONFIGURE,
             lambda e: self._list_canvas.itemconfigure(
                 self._canvas_window_id, width=e.width
             ),
@@ -340,9 +341,9 @@ class SearchableCombo(ctk.CTkFrame):
 
         self._popup_scroll_fn = _forward_scroll
         for _sw in (self._list_canvas, self._inner_frame):
-            _sw.bind("<MouseWheel>", _forward_scroll, "+")
-            _sw.bind("<Button-4>", _forward_scroll, "+")
-            _sw.bind("<Button-5>", _forward_scroll, "+")
+            _sw.bind(EVENT_MOUSEWHEEL, _forward_scroll, "+")
+            _sw.bind(EVENT_SCROLL_UP, _forward_scroll, "+")
+            _sw.bind(EVENT_SCROLL_DOWN, _forward_scroll, "+")
 
         # Store popup state so _resize_popup() can update geometry on each filter change
         self._popup_outer = outer
@@ -471,6 +472,51 @@ class SearchableCombo(ctk.CTkFrame):
 
         self._render_page(initial=True)
 
+    @staticmethod
+    def _truncate_to_width(text: str, font, avail_w: int) -> str:
+        """Ellipsize text to fit avail_w pixels using font measurement."""
+        if font.measure(text) <= avail_w:
+            return text
+        ellipsis = "…"
+        target_w = avail_w - font.measure(ellipsis)
+        while text and font.measure(text) > target_w:
+            text = text[:-1]
+        return text + ellipsis
+
+    def _bind_popup_scroll(self, widget) -> None:
+        """Forward wheel/scroll events from a popup child to the popup scroller."""
+        if hasattr(self, "_popup_scroll_fn") and self._popup_scroll_fn:
+            widget.bind(EVENT_MOUSEWHEEL, self._popup_scroll_fn, "+")
+            widget.bind(EVENT_SCROLL_UP, self._popup_scroll_fn, "+")
+            widget.bind(EVENT_SCROLL_DOWN, self._popup_scroll_fn, "+")
+
+    def _make_item_button(self, val: str, display_text: str):
+        """Build one popup item button for value val (showing possibly-truncated display_text)."""
+        btn = ctk.CTkButton(
+            self._inner_frame,
+            text=display_text,
+            anchor="w",
+            height=28,
+            fg_color=theme.C.section if val == self._selected else "transparent",
+            hover_color=theme.C.section,
+            text_color=theme.C.text_primary,
+            font=self._combo_font or theme.font("base"),
+            corner_radius=theme.G.corner_btn,
+            command=lambda v=val: self._select(v),
+        )
+        btn.pack(fill="x", padx=4, pady=1)
+        ToolTip(btn, val)  # tooltip shows ORIGINAL (full) text
+        self._bind_popup_scroll(btn)
+        return btn
+
+    def _add_separator(self, divider_color) -> None:
+        """Draw the recent/alphabetical divider line in the popup list."""
+        sep = tk.Frame(self._inner_frame, height=1, bg=divider_color)
+        sep.pack(fill="x", padx=8, pady=4)
+        self._popup_separators.append(sep)
+        self._extra_h += 9  # 1px line + 4px pady top/bottom
+        self._bind_popup_scroll(sep)
+
     def _render_page(self, initial: bool = False):
         """Append the next slice of item buttons. Called for the first page and again
         each time the user scrolls near the bottom (infinite scroll)."""
@@ -496,46 +542,10 @@ class SearchableCombo(ctk.CTkFrame):
 
         for idx in range(start, end):
             val = items[idx]
-            display_text = val
-            if f.measure(val) > avail_w:
-                ellipsis = "…"
-                target_w = avail_w - f.measure(ellipsis)
-                while display_text and f.measure(display_text) > target_w:
-                    display_text = display_text[:-1]
-                display_text += ellipsis
-
-            btn = ctk.CTkButton(
-                self._inner_frame,
-                text=display_text,
-                anchor="w",
-                height=28,
-                fg_color=theme.C.section if val == self._selected else "transparent",
-                hover_color=theme.C.section,
-                text_color=theme.C.text_primary,
-                font=self._combo_font or theme.font("base"),
-                corner_radius=theme.G.corner_btn,
-                command=lambda v=val: self._select(v),
-            )
-            btn.pack(fill="x", padx=4, pady=1)
-
-            # Add tooltip with ORIGINAL (full) text
-            ToolTip(btn, val)
-
-            if hasattr(self, "_popup_scroll_fn") and self._popup_scroll_fn:
-                btn.bind("<MouseWheel>", self._popup_scroll_fn, "+")
-                btn.bind("<Button-4>", self._popup_scroll_fn, "+")
-                btn.bind("<Button-5>", self._popup_scroll_fn, "+")
+            btn = self._make_item_button(val, self._truncate_to_width(val, f, avail_w))
             self._popup_btns.append(btn)
-
             if show_separator and idx == self._separator_after - 1:
-                sep = tk.Frame(self._inner_frame, height=1, bg=divider_color)
-                sep.pack(fill="x", padx=8, pady=4)
-                self._popup_separators.append(sep)
-                self._extra_h += 9  # 1px line + 4px pady top/bottom
-                if hasattr(self, "_popup_scroll_fn") and self._popup_scroll_fn:
-                    sep.bind("<MouseWheel>", self._popup_scroll_fn, "+")
-                    sep.bind("<Button-4>", self._popup_scroll_fn, "+")
-                    sep.bind("<Button-5>", self._popup_scroll_fn, "+")
+                self._add_separator(divider_color)
 
         self._rendered_count = end
         # Preserve the scroll position when appending; only the first page resets to top.
@@ -568,7 +578,7 @@ class SearchableCombo(ctk.CTkFrame):
         self._register_after_id = None
         if self._popup and self._popup.winfo_exists():
             self._global_click_root = self.winfo_toplevel()
-            self._click_bind_id = self._global_click_root.bind("<Button-1>", self._on_global_click, "+")
+            self._click_bind_id = self._global_click_root.bind(BTN_CLICK, self._on_global_click, "+")
 
     def _on_global_click(self, event):
         """Close the popup when the user clicks outside it."""
@@ -579,35 +589,29 @@ class SearchableCombo(ctk.CTkFrame):
         if not (px <= event.x_root <= px + pw and py <= event.y_root <= py + ph):
             self._close_popup()
 
-    def _close_popup(self):
-        # Cancel pending debounced render
-        if self._render_after_id:
+    @staticmethod
+    def _safe_unbind(root, sequence, bind_id) -> None:
+        """Unbind a handler from root, ignoring errors if root/binding is already gone."""
+        if bind_id and root:
             try:
-                self.after_cancel(self._render_after_id)
+                root.unbind(sequence, bind_id)
             except Exception:
                 pass
-            self._render_after_id = None
-        # Cancel pending after() that registers the global click handler
-        if self._register_after_id:
-            try:
-                self.after_cancel(self._register_after_id)
-            except Exception:
-                pass
-            self._register_after_id = None
-        # Remove the global click binding using the cached root
-        if self._click_bind_id and self._global_click_root:
-            try:
-                self._global_click_root.unbind("<Button-1>", self._click_bind_id)
-            except Exception:
-                pass
+
+    def _cancel_popup_callbacks(self) -> None:
+        """Cancel pending after() callbacks and unbind global handlers from the popup."""
+        for attr in ("_render_after_id", "_register_after_id"):
+            after_id = getattr(self, attr)
+            if after_id:
+                try:
+                    self.after_cancel(after_id)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+        self._safe_unbind(self._global_click_root, BTN_CLICK, self._click_bind_id)
         self._click_bind_id = None
         self._global_click_root = None
-        # Remove the root <Unmap> binding
-        if self._unmap_bind_id and self._unmap_root:
-            try:
-                self._unmap_root.unbind("<Unmap>", self._unmap_bind_id)
-            except Exception:
-                pass
+        self._safe_unbind(self._unmap_root, "<Unmap>", self._unmap_bind_id)
         self._unmap_bind_id = None
         self._unmap_root = None
         # Remove the search trace to avoid stale callbacks
@@ -617,6 +621,9 @@ class SearchableCombo(ctk.CTkFrame):
             except Exception:
                 pass
         self._search_trace_id = None
+
+    def _close_popup(self):
+        self._cancel_popup_callbacks()
         if self._popup and self._popup.winfo_exists():
             self._popup.destroy()
         self._popup = None
@@ -660,8 +667,8 @@ class SearchableCombo(ctk.CTkFrame):
             return self._variable.get()
         return self._selected
 
-    def configure(self, **kwargs):
-        """Handle combo-specific kwargs before forwarding the rest to CTkFrame."""
+    def _configure_data(self, kwargs) -> bool:
+        """Apply data-affecting kwargs (values/separator). Returns True if the popup needs a refresh."""
         refresh_popup = False
         if "values" in kwargs:
             self._values = list(kwargs.pop("values"))
@@ -669,25 +676,32 @@ class SearchableCombo(ctk.CTkFrame):
         if "separator_after" in kwargs:
             self._separator_after = kwargs.pop("separator_after")
             refresh_popup = True
+        return refresh_popup
+
+    def _configure_label_style(self, kwargs) -> None:
+        """Apply state/command/text_color/font kwargs (affect the display label)."""
+        has_label = hasattr(self, "_display_label")
         if "state" in kwargs:
-            s = kwargs.pop("state")
-            self._state = s
-            if hasattr(self, "_display_label"):
+            self._state = kwargs.pop("state")
+            if has_label:
                 self._display_label.configure(
-                    text_color=theme.C.text_muted if s == "disabled" else theme.C.text_primary
+                    text_color=theme.C.text_muted if self._state == "disabled" else theme.C.text_primary
                 )
         if "command" in kwargs:
             self._command = kwargs.pop("command")
         if "text_color" in kwargs:
             tc = kwargs.pop("text_color")
-            if hasattr(self, "_display_label"):
+            if has_label:
                 self._display_label.configure(text_color=tc)
         if "font" in kwargs:
             f = kwargs.pop("font")
             self._combo_font = f
-            if hasattr(self, "_display_label"):
+            if has_label:
                 self._display_label.configure(font=f)
                 self._update_display_text()
+
+    def _configure_button_style(self, kwargs) -> None:
+        """Apply button color kwargs (affect arrow + separator)."""
         if "button_color" in kwargs:
             bc = kwargs.pop("button_color")
             self._button_color = bc
@@ -698,6 +712,16 @@ class SearchableCombo(ctk.CTkFrame):
                 self._separator.configure(fg_color=effective)
         if "button_hover_color" in kwargs:
             kwargs.pop("button_hover_color")  # absorbed into button_color logic
+
+    def _configure_style(self, kwargs) -> None:
+        """Apply visual/behavioral kwargs (label group + button group)."""
+        self._configure_label_style(kwargs)
+        self._configure_button_style(kwargs)
+
+    def configure(self, **kwargs):
+        """Handle combo-specific kwargs before forwarding the rest to CTkFrame."""
+        refresh_popup = self._configure_data(kwargs)
+        self._configure_style(kwargs)
         # Live-refresh an OPEN dropdown when its data changed (e.g. async branch load),
         # so the list updates in place instead of requiring a close/reopen.
         if refresh_popup and self._popup is not None and self._popup.winfo_exists() \

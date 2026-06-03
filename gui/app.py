@@ -280,7 +280,12 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
     def _update_topbar_group_ui(self, groups: list):
         """Show group combo in topbar when >1 group or active group has >1 path."""
         names = [g["name"] for g in groups]
-        active = self._active_group_name if self._active_group_name in names else (names[0] if names else "")
+        if self._active_group_name in names:
+            active = self._active_group_name
+        elif names:
+            active = names[0]
+        else:
+            active = ""
         active_group = next((g for g in groups if g["name"] == active), None)
         active_paths = len(active_group.get("paths", [])) if active_group else 0
         if len(names) > 1 or active_paths > 1:
@@ -529,15 +534,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             if self.project_analyzer:
                 repos = self.project_analyzer.detect_repos_for_group(paths)
             else:
-                # Fallback: use legacy detect_repos for each path and deduplicate
-                seen = set()
-                repos = []
-                for p in paths:
-                    for r in detect_repos(p):
-                        if r.path not in seen:
-                            seen.add(r.path)
-                            repos.append(r)
-                repos.sort(key=lambda r: r.name.lower())
+                repos = self._detect_repos_fallback(paths)
             self._repos = repos
 
             from application.use_cases.manage_services_use_case import ManageServicesUseCase
@@ -547,16 +544,30 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 self._manage_services_use_case = ManageServicesUseCase(self.process_manager, repos)
                 self._manage_services_use_case.set_logger(self._log)
 
-            def _update():
-                self._build_cards(repos)
-                self._statusbar.configure(text=t("label.ready"))
-                self._log(t("log.repos_detected", count=len(repos), names=", ".join(r.name for r in repos)))
-                if _after_scan:
-                    _after_scan()
-
-            self.after(0, _update)
+            self.after(0, lambda: self._finish_group_scan(repos, _after_scan))
 
         threading.Thread(target=_run, daemon=True).start()
+
+    @staticmethod
+    def _detect_repos_fallback(paths: list):
+        """Legacy per-path detect_repos with cross-path dedup, sorted by name."""
+        seen = set()
+        repos = []
+        for p in paths:
+            for r in detect_repos(p):
+                if r.path not in seen:
+                    seen.add(r.path)
+                    repos.append(r)
+        repos.sort(key=lambda r: r.name.lower())
+        return repos
+
+    def _finish_group_scan(self, repos, _after_scan=None):
+        """Rebuild cards and status bar after a group scan completes (UI thread)."""
+        self._build_cards(repos)
+        self._statusbar.configure(text=t("label.ready"))
+        self._log(t("log.repos_detected", count=len(repos), names=", ".join(r.name for r in repos)))
+        if _after_scan:
+            _after_scan()
 
     def _on_group_changed(self, group_name: str):
         """Called when the user selects a different group in the topbar combo."""
@@ -906,6 +917,22 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
     def _check_tray_status(self):
         self.after(0, self._do_update_tray_status)
 
+    def _apply_window_icon(self, color: str):
+        """Set the window (and open toplevels') icon to the colored .ico for the given status color."""
+        win_icon_path = os.path.join(self._icons_dir, f"icon_{color}.ico")
+        if not os.path.exists(win_icon_path):
+            return
+        try:
+            self.iconbitmap(win_icon_path)
+        except Exception:
+            pass
+        for child in self.winfo_children():
+            if isinstance(child, ctk.CTkToplevel) and child.winfo_exists():
+                try:
+                    child.iconbitmap(win_icon_path)
+                except Exception:
+                    pass
+
     def _do_update_tray_status(self):
         """Update tray icon color and tooltip based on running services."""
         running = [
@@ -915,18 +942,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         color = "green" if running else "red"
         if color != self._current_icon_color:
             self._current_icon_color = color
-            win_icon_path = os.path.join(self._icons_dir, f"icon_{color}.ico")
-            if os.path.exists(win_icon_path):
-                try:
-                    self.iconbitmap(win_icon_path)
-                except Exception:
-                    pass
-                for child in self.winfo_children():
-                    if isinstance(child, ctk.CTkToplevel) and child.winfo_exists():
-                        try:
-                            child.iconbitmap(win_icon_path)
-                        except Exception:
-                            pass
+            self._apply_window_icon(color)
         if self._tray_icon:
             try:
                 self._tray_icon.icon = self._get_tray_image(color)

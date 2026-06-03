@@ -214,7 +214,7 @@ class RepoConfigManagerDialog(BaseDialog):
             btn.pack(fill="x", pady=2)
             self._config_btns[name] = btn
 
-    def _select_config(self, name: str):
+    def _select_config(self, name: str | None = None):
         if self._current_selected and self._current_selected != name:
             self._check_unsaved_changes()
 

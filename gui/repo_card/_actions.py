@@ -13,7 +13,7 @@ from core.i18n import t
 _ANSI_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
-def _create_subprocess(cmd_str: str, cwd: str, env: dict = None, shell: bool = True) -> subprocess.Popen:
+def _create_subprocess(cmd_str: str, cwd: str, env: dict | None = None, shell: bool = True) -> subprocess.Popen:
     """Helper to create a unified subprocess."""
     creationflags = (
         getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
@@ -108,7 +108,6 @@ class ActionsMixin:
             if self._log:
                 self._log(t("log.install_fail", name=self._repo.name))
         # Revert card status indicator back to stopped (or running if service is up)
-        final_status = 'running' if self._status == 'installing' else self._status
         if self._status == 'installing':
             self._update_status(self._repo.name, 'stopped')
         self._update_button_visibility()
@@ -118,18 +117,10 @@ class ActionsMixin:
     def _run_install_cmd(self, bypass_confirm=False, on_complete=None):
         """Run the appropriate install command."""
         repo = self._repo
-        path = repo.path
 
         install_cfg = getattr(repo, 'ui_config', {}).get('install', {})
         check_dirs = install_cfg.get('check_dirs', [])
-        already_installed = False
-
-        if check_dirs:
-            already_installed = True
-            for cd in check_dirs:
-                if not os.path.isdir(os.path.join(path, cd)):
-                    already_installed = False
-                    break
+        already_installed = bool(check_dirs) and self._install_dirs_ok(check_dirs)
 
         if hasattr(self, '_install_btn') and already_installed and not bypass_confirm:
             if not ask_yes_no(self, t("dialog.reinstall.title"), t("dialog.reinstall.confirm")):
@@ -137,11 +128,8 @@ class ActionsMixin:
                     on_complete()
                 return
 
-        if already_installed and repo.run_reinstall_cmd:
-            cmd_str = repo.run_reinstall_cmd
-        elif repo.run_install_cmd:
-            cmd_str = repo.run_install_cmd
-        else:
+        cmd_str = repo.run_reinstall_cmd if (already_installed and repo.run_reinstall_cmd) else repo.run_install_cmd
+        if not cmd_str:
             if on_complete:
                 on_complete()
             return
@@ -178,29 +166,27 @@ class ActionsMixin:
                 except OSError:
                     pass
 
-            is_ok = True
-            if check_dirs:
-                for cd in check_dirs:
-                    if not os.path.isdir(os.path.join(self._repo.path, cd)):
-                        is_ok = False
-                        break
-
+            is_ok = self._install_dirs_ok(check_dirs)
             self.after(0, lambda ok=is_ok: self._on_install_complete(ok, check_dirs, success_text, fail_text, on_complete))
 
         except Exception as e:
             if self._log:
                 self._log(f"Error en instalación: {e}")
+            self.after(0, lambda: self._on_install_error(fail_text, on_complete))
 
-            def _err():
-                self._is_installing = False
-                if hasattr(self, '_install_btn'):
-                    self._install_btn.configure(text=fail_text, state="normal")
-                self._update_status(self._repo.name, 'stopped')
-                self._update_button_visibility()
-                if on_complete:
-                    on_complete()
+    def _install_dirs_ok(self, check_dirs) -> bool:
+        """True if every expected post-install directory exists (or none required)."""
+        return all(os.path.isdir(os.path.join(self._repo.path, cd)) for cd in (check_dirs or []))
 
-            self.after(0, _err)
+    def _on_install_error(self, fail_text, on_complete):
+        """UI reset when an install thread raises."""
+        self._is_installing = False
+        if hasattr(self, '_install_btn'):
+            self._install_btn.configure(text=fail_text, state="normal")
+        self._update_status(self._repo.name, 'stopped')
+        self._update_button_visibility()
+        if on_complete:
+            on_complete()
 
     # ─── Start / Stop / Restart ───────────────────────────────────
 
@@ -212,7 +198,7 @@ class ActionsMixin:
                 return custom
         return self._repo.run_command or ''
 
-    def _prepare_start_env(self, config_entry=None) -> dict | None:
+    def _prepare_start_env(self) -> dict | None:
         """Build env dict for the start subprocess (Java override if needed)."""
         java_home = ''
         if hasattr(self, 'selected_java_var'):
@@ -333,41 +319,41 @@ class ActionsMixin:
             self._log(f"Ejecutando: {cmd_str}")
 
         self._update_status(repo.name, 'starting')
+        self._action_pool.submit(self._run_custom_command, cmd_str)
 
-        def _run():
+    def _resolve_custom_final_status(self) -> str:
+        """Final status after a custom process exits: respects manual-stop, else error if never left 'starting'."""
+        if getattr(self, '_is_stopping_manually', False):
+            self._is_stopping_manually = False
+            return 'stopped'
+        return 'error' if self._status == 'starting' else 'stopped'
+
+    def _run_custom_command(self, cmd_str: str):
+        """Worker body for a custom start command (runs in the action pool)."""
+        repo = self._repo
+        try:
+            process = _create_subprocess(cmd_str, cwd=repo.path, env=None, shell=True)
+
+            # Stay in 'starting' — transition to 'running' is driven by ready_pattern
+            if not repo.ready_pattern:
+                self._update_status(repo.name, 'running')
+
+            self._stream_start_output(process, repo)
+
             try:
-                process = _create_subprocess(cmd_str, cwd=repo.path, env=None, shell=True)
-
-                # Stay in 'starting' — transition to 'running' is driven by ready_pattern
-                if not repo.ready_pattern:
-                    self._update_status(repo.name, 'running')
-
-                self._stream_start_output(process, repo)
-
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
                 try:
-                    process.wait(timeout=30)
-                except subprocess.TimeoutExpired:
-                    try:
-                        process.kill()
-                        process.wait(timeout=5)
-                    except OSError:
-                        pass
+                    process.kill()
+                    process.wait(timeout=5)
+                except OSError:
+                    pass
 
-                # If still 'starting' when process exits, it failed (unless stopped manually)
-                if getattr(self, '_is_stopping_manually', False):
-                    final_status = 'stopped'
-                    self._is_stopping_manually = False
-                else:
-                    final_status = 'error' if self._status == 'starting' else 'stopped'
-
-                self._update_status(repo.name, final_status)
-
-            except Exception as e:
-                self._update_status(repo.name, 'error')
-                if self._log:
-                    self._log(f"Error: {e}")
-
-        self._action_pool.submit(_run)
+            self._update_status(repo.name, self._resolve_custom_final_status())
+        except Exception as e:
+            self._update_status(repo.name, 'error')
+            if self._log:
+                self._log(f"Error: {e}")
 
     def _show_docker_unavailable_alert(self):
         """Show an error dialog when Docker daemon is not reachable."""
@@ -509,21 +495,21 @@ class ActionsMixin:
             from core.git_manager import clean_repo
             success, _ = clean_repo(self._repo.path, self._log)
             if success:
-                def _restore():
-                    if hasattr(self, '_config_combo'):
-                        self._config_combo.set(t("label.no_selection"))
-                        self._on_config_change(t("label.no_selection"))
-                    if hasattr(self, '_config_combos'):
-                        for target_file, combo in self._config_combos.items():
-                            combo.set(t("label.no_selection"))
-                            from core.config_manager import save_active_config
-                            save_active_config(self.get_config_key(target_file), t("label.no_selection"))
-                            # We don't trigger self._on_config_change for all because clean reverting
-                            # the files makes git restore the originals automatically.
-                    self._refresh_badge()
-                    self._check_pull_status()
-
-                self.after(500, _restore)
+                self.after(500, self._restore_after_clean)
 
         self._action_pool.submit(_run)
+
+    def _restore_after_clean(self):
+        """Reset config selectors to 'no selection' after a clean reverts files."""
+        if hasattr(self, '_config_combo'):
+            self._config_combo.set(t("label.no_selection"))
+            self._on_config_change(t("label.no_selection"))
+        if hasattr(self, '_config_combos'):
+            from core.config_manager import save_active_config
+            for target_file, combo in self._config_combos.items():
+                combo.set(t("label.no_selection"))
+                # No per-combo _on_config_change: clean already let git restore originals.
+                save_active_config(self.get_config_key(target_file), t("label.no_selection"))
+        self._refresh_badge()
+        self._check_pull_status()
 

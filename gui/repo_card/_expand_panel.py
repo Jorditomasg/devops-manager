@@ -237,7 +237,7 @@ class ExpandPanelMixin:
                 if (current_file.endswith('.properties') and basename.endswith('.yml')) or basename == 'environment.ts':
                     env_dirs[parent] = f
 
-        target_files = sorted(list(env_dirs.values()))
+        target_files = sorted(env_dirs.values())
         self._config_combos = {}
 
         # Extract label prefix from UI config if defined, defaults to 'App'
@@ -298,7 +298,12 @@ class ExpandPanelMixin:
         else:
             pending_val = None
 
-        chosen = pending_val if (pending_val and pending_val in opts) else (active_config if active_config in opts else None)
+        if pending_val and pending_val in opts:
+            chosen = pending_val
+        elif active_config in opts:
+            chosen = active_config
+        else:
+            chosen = None
         if chosen:
             combo.set(chosen)
             self.after(500, self._on_config_change, chosen, target_file, True)

@@ -153,6 +153,22 @@ class RepoCard(
         threading.Thread(target=_run, daemon=True).start()
         return True
 
+    def _set_multi_config_profile(self, profile):
+        """Apply a profile across the per-env-file config combos (dict → per-file, else same value to all)."""
+        if isinstance(profile, dict):
+            for target_file, combo in self._config_combos.items():
+                rel = os.path.relpath(target_file, self._repo.path).replace('\\', '/')
+                val = profile.get(rel) or profile.get(target_file) or t("label.no_selection")
+                combo.set(val)
+                self._update_header_hints()
+                self._on_config_change(val, target_file, skip_log=True)
+        else:
+            p = profile if isinstance(profile, str) and profile else t("label.no_selection")
+            for target_file, combo in self._config_combos.items():
+                combo.set(p)
+                self._update_header_hints()
+                self._on_config_change(p, target_file, skip_log=True)
+
     def set_profile(self, profile):
         self._pending_profile = profile  # always persist regardless of widget state
         if hasattr(self, '_config_combo'):
@@ -161,19 +177,7 @@ class RepoCard(
             self._update_header_hints()
             self._on_config_change(p if p else t("label.no_selection"))
         elif hasattr(self, '_config_combos') and self._config_combos:
-            if isinstance(profile, dict):
-                for target_file, combo in self._config_combos.items():
-                    rel = os.path.relpath(target_file, self._repo.path).replace('\\', '/')
-                    val = profile.get(rel) or profile.get(target_file) or t("label.no_selection")
-                    combo.set(val)
-                    self._update_header_hints()
-                    self._on_config_change(val, target_file, skip_log=True)
-            else:
-                p = profile if isinstance(profile, str) and profile else t("label.no_selection")
-                for target_file, combo in self._config_combos.items():
-                    combo.set(p)
-                    self._update_header_hints()
-                    self._on_config_change(p, target_file, skip_log=True)
+            self._set_multi_config_profile(profile)
 
     def set_custom_command(self, cmd: str):
         """Set custom command (from persisted settings)."""
@@ -189,21 +193,25 @@ class RepoCard(
             return self._cmd_entry.get().strip()
         return self._pending_custom_command
 
+    def _collect_multi_config_profile(self) -> dict:
+        """Build the {rel_path: profile} map from the per-env-file config combos."""
+        res = {}
+        for tf, combo in self._config_combos.items():
+            var = self._profile_in_profile_vars.get(tf)
+            if var is not None and not var.get():
+                continue  # this env file is excluded from profile
+            v = combo.get()
+            if v and v not in (t("label.no_selection"), ''):
+                rel = os.path.relpath(tf, self._repo.path).replace('\\', '/')
+                res[rel] = v
+        return res
+
     def get_current_profile(self):
         if hasattr(self, '_config_combo'):
             val = self._config_combo.get()
             return val if val != t("label.no_selection") else ''
         elif hasattr(self, '_config_combos') and self._config_combos:
-            res = {}
-            for tf, combo in self._config_combos.items():
-                var = self._profile_in_profile_vars.get(tf)
-                if var is not None and not var.get():
-                    continue  # this env file is excluded from profile
-                v = combo.get()
-                if v and v not in (t("label.no_selection"), ''):
-                    rel = os.path.relpath(tf, self._repo.path).replace('\\', '/')
-                    res[rel] = v
-            return res
+            return self._collect_multi_config_profile()
         # Expand panel not built yet — return the pending value set by set_profile()
         return self._pending_profile if self._pending_profile is not None else ''
 
@@ -283,34 +291,31 @@ class RepoCard(
                     break
         self._docker_profile_services = resolved
 
-    def set_docker_compose_active(self, active_files: list):
-        """Apply active compose files from profile, modifying UI and stopping old ones."""
-        old_active = self._active_compose_files.copy()
-
-        # We need absolute paths, profile might just save basenames if we want it robust,
-        # but here we expect full paths or we match by basename.
+    def _resolve_active_compose_paths(self, active_files: list) -> set:
+        """Map saved compose entries (abs path or basename) back to repo absolute paths."""
         new_active = set()
         for f in active_files:
-            # Map basename back to absolute path in repo.docker_compose_files
             for repo_f in self._repo.docker_compose_files:
                 if repo_f == f or os.path.basename(repo_f) == f or os.path.basename(repo_f) == os.path.basename(f):
                     new_active.add(repo_f)
                     break
+        return new_active
 
-        self._active_compose_files = new_active
+    def _stop_compose_files_async(self, to_stop: set) -> None:
+        """Background-stop compose files that are no longer active."""
+        if not to_stop:
+            return
 
-        # Stop ones that are no longer active
-        to_stop = old_active - new_active
-        if to_stop:
-            def _stop_bg():
-                from core.db_manager import docker_compose_down
-                for f in to_stop:
-                    if self._log:
-                        self._log(f"Deteniendo compose inactivo: {os.path.basename(f)}")
-                    docker_compose_down(f, log=self._log)
-            threading.Thread(target=_stop_bg, daemon=True).start()
+        def _stop_bg():
+            from core.db_manager import docker_compose_down
+            for f in to_stop:
+                if self._log:
+                    self._log(f"Deteniendo compose inactivo: {os.path.basename(f)}")
+                docker_compose_down(f, log=self._log)
+        threading.Thread(target=_stop_bg, daemon=True).start()
 
-        # Update UI borders
+    def _update_compose_button_borders(self, new_active: set) -> None:
+        """Recolor compose buttons to reflect which files are active in the profile."""
         for dc_file, btn in self._docker_compose_buttons.items():
             if dc_file in new_active:
                 btn.configure(fg_color=theme.C.docker_active_fg, border_color=theme.C.docker_border_active)
@@ -318,6 +323,14 @@ class RepoCard(
             else:
                 btn.configure(fg_color=theme.C.docker_stopped_fg, border_color=theme.C.docker_border_stopped)
                 ToolTip(btn, "Haga clic para gestionar servicios")
+
+    def set_docker_compose_active(self, active_files: list):
+        """Apply active compose files from profile, modifying UI and stopping old ones."""
+        old_active = self._active_compose_files.copy()
+        new_active = self._resolve_active_compose_paths(active_files)
+        self._active_compose_files = new_active
+        self._stop_compose_files_async(old_active - new_active)
+        self._update_compose_button_borders(new_active)
 
     def do_pull(self):
         self._pull()

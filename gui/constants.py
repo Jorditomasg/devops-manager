@@ -5,6 +5,10 @@ PROFILE_DIRTY_SUFFIX = " *"
 
 # ── Event bindings ──────────────────────────────────────────────
 BTN_CLICK          = "<Button-1>"
+EVENT_CONFIGURE    = "<Configure>"
+EVENT_MOUSEWHEEL   = "<MouseWheel>"   # Windows / macOS scroll
+EVENT_SCROLL_UP    = "<Button-4>"     # X11 scroll up
+EVENT_SCROLL_DOWN  = "<Button-5>"     # X11 scroll down
 
 # ── Timing (milliseconds / seconds) ────────────────────────────
 BADGE_REFRESH_MS   = 30_000   # git badge poll interval per card

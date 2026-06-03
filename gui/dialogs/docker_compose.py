@@ -280,6 +280,24 @@ class DockerComposeDialog(BaseDialog):
 
     # ─── Status refresh ───────────────────────────────────────────────────────
 
+    @staticmethod
+    def _service_state_style(state: str):
+        """(color, label) for a compose service state."""
+        if state == "running":
+            return theme.C.status_running, t("label.status.running")
+        return theme.C.status_stopped, t("label.status.stopped")
+
+    def _apply_status_map(self, status_map: dict):
+        if not self.winfo_exists():
+            return
+        for sname, widgets in self._service_rows.items():
+            color, status_text = self._service_state_style(status_map.get(sname, "stopped"))
+            widgets["status_lbl"].configure(text="●", text_color=color)
+            if "status_text_lbl" in widgets:
+                widgets["status_text_lbl"].configure(text=status_text, text_color=color)
+        if self._on_status_change:
+            self._on_status_change()
+
     def _refresh_status(self):
         if not self._services:
             return
@@ -287,25 +305,7 @@ class DockerComposeDialog(BaseDialog):
         def _bg_check():
             from core.db_manager import get_compose_service_status
             status_map = get_compose_service_status(self._compose_file)
-
-            def _update_ui():
-                if not self.winfo_exists():
-                    return
-                for sname, widgets in self._service_rows.items():
-                    state = status_map.get(sname, "stopped")
-                    if state == "running":
-                        color = theme.C.status_running
-                        status_text = t("label.status.running")
-                    else:
-                        color = theme.C.status_stopped
-                        status_text = t("label.status.stopped")
-                    widgets["status_lbl"].configure(text="●", text_color=color)
-                    if "status_text_lbl" in widgets:
-                        widgets["status_text_lbl"].configure(text=status_text, text_color=color)
-                if self._on_status_change:
-                    self._on_status_change()
-
-            self.after(0, _update_ui)
+            self.after(0, lambda: self._apply_status_map(status_map))
 
         threading.Thread(target=_bg_check, daemon=True).start()
 

@@ -160,51 +160,48 @@ class ProfileManagerMixin:
             for r_name, t_cfg in target_repos.items()
         )
 
+    @staticmethod
+    def _branch_differs(card, t_cfg: dict) -> bool:
+        """True if the card's branch tracking/value deviates from saved t_cfg."""
+        saved_branch = t_cfg.get('branch')
+        if saved_branch is None:
+            # Branch excluded from profile when saved — dirty if checkbox is now on
+            return card.get_branch_in_profile()
+        # Branch tracked when saved — dirty if checkbox is now off, or branch changed
+        if not card.get_branch_in_profile():
+            return True
+        return card.get_branch() != saved_branch
+
+    @staticmethod
+    def _profile_differs(card, t_cfg: dict) -> bool:
+        """True if the card's profile tracking/value/per-file state deviates from saved t_cfg."""
+        saved_profile = t_cfg.get('profile')
+        if 'profile' in t_cfg and t_cfg['profile'] is None:
+            return card.get_profile_in_profile()
+        if not card.get_profile_in_profile():
+            return True
+        cur_prof = card.get_current_profile()
+        if (cur_prof or saved_profile) and cur_prof != saved_profile:
+            return True  # None, '', and {} are all treated as equal
+        saved_tracked = t_cfg.get('profile_tracked')
+        cur_tracked = card.get_profile_tracked_files()
+        if saved_tracked is not None and cur_tracked is not None:
+            return set(saved_tracked) != set(cur_tracked)
+        return False
+
     def _card_differs_from_saved(self, card_by_name: dict, r_name: str, t_cfg: dict) -> bool:
         """Returns True if the card for r_name deviates from the saved config t_cfg."""
         if r_name not in card_by_name:
             return True
         card = card_by_name[r_name]
-
-        saved_branch = t_cfg.get('branch')
-        if saved_branch is None:
-            # Branch excluded from profile when saved — dirty if checkbox is now on
-            if card.get_branch_in_profile():
-                return True
-        else:
-            # Branch tracked when saved — dirty if checkbox is now off, or branch changed
-            if not card.get_branch_in_profile():
-                return True
-            if card.get_branch() != saved_branch:
-                return True
-        saved_profile = t_cfg.get('profile')
-        profile_not_tracked = 'profile' in t_cfg and t_cfg['profile'] is None
-        if profile_not_tracked:
-            if card.get_profile_in_profile():
-                return True
-        else:
-            if not card.get_profile_in_profile():
-                return True
-            cur_prof = card.get_current_profile()
-            if not cur_prof and not saved_profile:
-                pass  # treat None, '', and {} as perfectly equal
-            elif cur_prof != saved_profile:
-                return True
-            # Check per-file checkbox state
-            saved_tracked = t_cfg.get('profile_tracked')
-            cur_tracked = card.get_profile_tracked_files()
-            if saved_tracked is not None and cur_tracked is not None:
-                if set(saved_tracked) != set(cur_tracked):
-                    return True
-        if card.get_custom_command() != t_cfg.get('custom_command', ''):
-            return True
-        if card.is_selected() != t_cfg.get('selected', True):
-            return True
-        if self._docker_active_differs(card, t_cfg):
-            return True
-        if self._docker_services_differ(card, t_cfg):
-            return True
-        return False
+        return (
+            self._branch_differs(card, t_cfg)
+            or self._profile_differs(card, t_cfg)
+            or card.get_custom_command() != t_cfg.get('custom_command', '')
+            or card.is_selected() != t_cfg.get('selected', True)
+            or self._docker_active_differs(card, t_cfg)
+            or self._docker_services_differ(card, t_cfg)
+        )
 
     @staticmethod
     def _docker_active_differs(card, t_cfg: dict) -> bool:

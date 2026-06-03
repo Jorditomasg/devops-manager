@@ -260,7 +260,7 @@ class SettingsDialog(BaseDialog):
             path = os.path.join(desktop_dir, "devops-manager.desktop")
             with open(path, "w") as f:
                 f.write(desktop_entry)
-            os.chmod(path, 0o755)
+            os.chmod(path, 0o700)
             created.append(path)
 
         if created:
@@ -345,7 +345,7 @@ class SettingsDialog(BaseDialog):
         IID_IPersistFile = guid_from_str('{0000010B-0000-0000-C000-000000000046}')
 
         try:
-            ppsl, vtbl, str_method, get_vtbl, IID_IShellLinkW = SettingsDialog._build_shell_link_object(
+            ppsl, vtbl, str_method, get_vtbl, _ = SettingsDialog._build_shell_link_object(
                 ole32, GUID, guid_from_str, ctypes
             )
             SettingsDialog._set_link_properties(

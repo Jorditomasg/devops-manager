@@ -72,58 +72,86 @@ class ServiceLauncher:
         if status_callback:
             status_callback(name, 'starting')
 
-        def _run():
-            try:
-                use_shell = True
-                process = subprocess.Popen(
-                    cmd_str, cwd=repo_path, env=env, shell=use_shell,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
-                )
-                svc.process = process
-
-                for raw_line in iter(process.stdout.readline, b''):
-                    line = raw_line.decode('utf-8', errors='replace').strip()
-                    if line and log:
-                        log(line)
-
-                try:
-                    process.wait(timeout=600)
-                except subprocess.TimeoutExpired:
-                    if log:
-                        log(f"[svc] ⚠️ {name} install timed out after 10 min, killing process")
-                    try:
-                        process.kill()
-                        process.wait(timeout=5)
-                    except OSError:
-                        pass
-                svc.status = 'stopped'
-                if status_callback:
-                    status_callback(name, 'stopped')
-                if log:
-                    if process.returncode == 0:
-                        log(f"[svc] ✅ {name} installed successfully")
-                    else:
-                        log(f"[svc] {name} installation finished with exit code: {process.returncode}")
-            except (subprocess.SubprocessError, OSError) as e:
-                logging.error(f"System error starting service {name}: {e}", exc_info=True)
-                svc.status = 'error'
-                if status_callback:
-                    status_callback(name, 'error')
-                if log:
-                    log(f"[svc] {name} system error: {e}")
-            except Exception as e:
-                logging.error(f"Unexpected error starting service {name}: {e}", exc_info=True)
-                svc.status = 'error'
-                if status_callback:
-                    status_callback(name, 'error')
-                if log:
-                    log(f"[svc] {name} error: {e}")
-
-        thread = threading.Thread(target=_run, daemon=True, name=f'svc-{name}')
+        thread = threading.Thread(
+            target=self._run_install_service,
+            args=(svc, name, repo_path, cmd_str, env, log, status_callback),
+            daemon=True, name=f'svc-{name}',
+        )
         svc.thread = thread
         thread.start()
         return True
+
+    @staticmethod
+    def _spawn_install_process(cmd_str: str, repo_path: str, env):
+        """Start the install subprocess with piped, line-buffered output."""
+        return subprocess.Popen(
+            cmd_str, cwd=repo_path, env=env, shell=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            creationflags=(getattr(subprocess, 'CREATE_NO_WINDOW', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)) if os.name == 'nt' else 0
+        )
+
+    def _run_install_service(self, svc, name, repo_path, cmd_str, env, log, status_callback):
+        """Worker body: run the install command, stream output, report completion/errors."""
+        try:
+            process = self._spawn_install_process(cmd_str, repo_path, env)
+            svc.process = process
+
+            for raw_line in iter(process.stdout.readline, b''):
+                line = raw_line.decode('utf-8', errors='replace').strip()
+                if line and log:
+                    log(line)
+
+            try:
+                process.wait(timeout=600)
+            except subprocess.TimeoutExpired:
+                if log:
+                    log(f"[svc] ⚠️ {name} install timed out after 10 min, killing process")
+                try:
+                    process.kill()
+                    process.wait(timeout=5)
+                except OSError:
+                    pass
+            self._mark_stopped(svc, name, status_callback)
+            if log:
+                if process.returncode == 0:
+                    log(f"[svc] ✅ {name} installed successfully")
+                else:
+                    log(f"[svc] {name} installation finished with exit code: {process.returncode}")
+        except (subprocess.SubprocessError, OSError) as e:
+            logging.error(f"System error starting service {name}: {e}", exc_info=True)
+            self._mark_install_error(svc, name, status_callback, log, f"[svc] {name} system error: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error starting service {name}: {e}", exc_info=True)
+            self._mark_install_error(svc, name, status_callback, log, f"[svc] {name} error: {e}")
+
+    @staticmethod
+    def _mark_install_error(svc, name, status_callback, log, msg: str):
+        """Set service to error, notify callback, log the message."""
+        svc.status = 'error'
+        if status_callback:
+            status_callback(name, 'error')
+        if log:
+            log(msg)
+
+    @staticmethod
+    def _terminate_process_tree(process) -> None:
+        """Send a terminate signal to a service process (whole tree on Windows)."""
+        if os.name == 'nt':
+            # Windows: use taskkill to kill the entire process tree
+            subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(process.pid)],
+                capture_output=True, timeout=15,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+            )
+        else:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+
+    @staticmethod
+    def _mark_stopped(svc, name: str, status_callback: Callable = None) -> None:
+        """Set service status to stopped and notify the callback."""
+        svc.status = 'stopped'
+        if status_callback:
+            status_callback(name, 'stopped')
 
     def stop_service(self, name: str, log: LogCallback = None,
                      status_callback: Callable = None) -> bool:
@@ -137,21 +165,9 @@ class ServiceLauncher:
         try:
             if log:
                 log(f"[svc] Stopping {name}...")
-
-            if os.name == 'nt':
-                # Windows: use taskkill to kill the entire process tree
-                subprocess.run(
-                    ['taskkill', '/F', '/T', '/PID', str(svc.process.pid)],
-                    capture_output=True, timeout=15,
-                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
-                )
-            else:
-                os.killpg(os.getpgid(svc.process.pid), signal.SIGTERM)
-
+            self._terminate_process_tree(svc.process)
             svc.process.wait(timeout=10)
-            svc.status = 'stopped'
-            if status_callback:
-                status_callback(name, 'stopped')
+            self._mark_stopped(svc, name, status_callback)
             if log:
                 log(f"[svc] {name} stopped")
             return True
@@ -162,9 +178,7 @@ class ServiceLauncher:
                 svc.process.kill()
             except OSError:
                 pass
-            svc.status = 'stopped'
-            if status_callback:
-                status_callback(name, 'stopped')
+            self._mark_stopped(svc, name, status_callback)
             if log:
                 log(f"[svc] {name} force-stopped: {e}")
             return True

@@ -110,7 +110,7 @@ class HeaderMixin:
             font=theme.font("md", bold=True), text_color=theme.C.text_accent
         )
         self._pull_count_label.pack(side="left", padx=(4, 0))
-        self._pull_count_label.bind("<Button-1>", lambda e: self._pull())
+        self._pull_count_label.bind(BTN_CLICK, lambda e: self._pull())
         ToolTip(self._pull_count_label, t("tooltip.pending_pulls"))
 
         # Unstaged / untracked changes badge
@@ -119,7 +119,7 @@ class HeaderMixin:
             font=theme.font("md", bold=True), text_color=theme.C.text_warning_badge
         )
         self._changes_count_label.pack(side="left", padx=(4, 4))
-        self._changes_count_label.bind("<Button-1>", self._show_modified_files)
+        self._changes_count_label.bind(BTN_CLICK, self._show_modified_files)
         ToolTip(self._changes_count_label, t("tooltip.modified_files"))
 
         # Merge-conflict badge (red, shown only while unmerged paths exist)
@@ -128,7 +128,7 @@ class HeaderMixin:
             font=theme.font("md", bold=True), text_color=theme.C.status_error
         )
         self._conflict_count_label.pack(side="left", padx=(0, 4))
-        self._conflict_count_label.bind("<Button-1>", self._show_conflicts)
+        self._conflict_count_label.bind(BTN_CLICK, self._show_conflicts)
         ToolTip(self._conflict_count_label, t("tooltip.conflict_files"))
 
         # Danger env badge (yellow, shown when a dangerous env is active)
@@ -280,53 +280,57 @@ class HeaderMixin:
             elif not is_installing:
                 self._install_btn.configure(state="normal")
 
+    def _hint_branch_part(self) -> str:
+        """Branch hint fragment ('⎇ name') or ''."""
+        if hasattr(self, '_branch_combo'):
+            branch = self._branch_combo.get()
+            if branch and branch != "cargando...":
+                return f"⎇ {branch}"
+            return ""
+        if self._current_branch:
+            return f"⎇ {self._current_branch}"
+        return ""
+
+    @staticmethod
+    def _first_profile_fragment(values) -> str:
+        """'⚙ value' for the first meaningful value in an iterable, or ''."""
+        for v in values:
+            if v and v not in (t("label.no_selection"), ''):
+                return f"⚙ {v}"
+        return ""
+
+    def _hint_profile_part(self) -> str:
+        """Profile/env hint fragment ('⚙ value') from the first active config, or ''."""
+        if hasattr(self, '_config_combos') and self._config_combos:
+            return self._first_profile_fragment(c.get() for c in self._config_combos.values())
+        pending = getattr(self, '_pending_profile', None)
+        if isinstance(pending, dict):
+            return self._first_profile_fragment(pending.values())
+        if isinstance(pending, str) and pending:
+            return f"⚙ {pending}"
+        return ""
+
+    def _hint_command_part(self) -> str:
+        """Custom-command hint fragment ('$ cmd') or ''."""
+        if hasattr(self, '_cmd_entry'):
+            cmd = self._cmd_entry.get().strip()
+            if cmd:
+                return f"$ {cmd}"
+        return f"$ {self._repo.run_command}" if self._repo.run_command else ""
+
+    def _repo_is_installed(self) -> bool:
+        """True if every expected install check_dir exists (or none configured)."""
+        install_cfg = getattr(self._repo, 'ui_config', {}).get('install', {})
+        check_dirs = install_cfg.get('check_dirs', []) if install_cfg else []
+        return all(os.path.isdir(os.path.join(self._repo.path, cd)) for cd in check_dirs)
+
     def _update_header_hints(self):
         """Update the branch + profile hint text in the header."""
         if not self.winfo_exists():
             return
-        parts = []
-        # Branch
-        if hasattr(self, '_branch_combo'):
-            branch = self._branch_combo.get()
-            if branch and branch != "cargando...":
-                parts.append(f"⎇ {branch}")
-        elif self._current_branch:
-            parts.append(f"⎇ {self._current_branch}")
-        # Profile / Env
-        if hasattr(self, '_config_combos') and self._config_combos:
-            for _, combo in self._config_combos.items():
-                v = combo.get()
-                if v and v not in (t("label.no_selection"), ''):
-                    parts.append(f"⚙ {v}")
-                    break
-        else:
-            pending = getattr(self, '_pending_profile', None)
-            if isinstance(pending, dict):
-                for v in pending.values():
-                    if v and v not in (t("label.no_selection"), ''):
-                        parts.append(f"⚙ {v}")
-                        break
-            elif isinstance(pending, str) and pending:
-                parts.append(f"⚙ {pending}")
-        # Custom command
-        if hasattr(self, '_cmd_entry'):
-            cmd = self._cmd_entry.get().strip()
-            if cmd:
-                parts.append(f"$ {cmd}")
-            elif self._repo.run_command:
-                parts.append(f"$ {self._repo.run_command}")
-        elif self._repo.run_command:
-            parts.append(f"$ {self._repo.run_command}")
+        parts = [p for p in (self._hint_branch_part(), self._hint_profile_part(), self._hint_command_part()) if p]
 
-        is_installed = True
-        install_cfg = getattr(self._repo, 'ui_config', {}).get('install', {})
-        check_dirs = install_cfg.get('check_dirs', []) if install_cfg else []
-
-        if check_dirs:
-            for cd in check_dirs:
-                if not os.path.isdir(os.path.join(self._repo.path, cd)):
-                    is_installed = False
-                    break
+        is_installed = self._repo_is_installed()
 
         if not is_installed and self._repo.run_install_cmd:
             warn_text = t("install.status_deps_missing")

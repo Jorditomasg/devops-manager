@@ -6,57 +6,67 @@ import subprocess
 import re
 from typing import Dict, List
 
-def auto_detect_java_paths() -> Dict[str, str]:
-    """Auto-detect common Java installations on Windows, Linux, and macOS.
-    Returns a dict mapping a descriptive name to the JAVA_HOME path.
-    """
-    found_javas = {}
-    search_paths = []
-
+def _java_search_paths() -> List[str]:
+    """Platform-specific base directories where JDKs are commonly installed."""
     if os.name == 'nt':
-        search_paths = [
+        return [
             r"C:\Program Files\Java",
             r"C:\Program Files\Eclipse Adoptium",
             r"C:\Program Files\Amazon Corretto",
             r"C:\Program Files\Microsoft",
             r"C:\Program Files\BellSoft",
-            os.path.expanduser(r"~\.jdks")
+            os.path.expanduser(r"~\.jdks"),
         ]
-    else:
-        search_paths = [
-            "/usr/lib/jvm",
-            "/Library/Java/JavaVirtualMachines",
-            os.path.expanduser("~/.jdks"),
-            os.path.expanduser("~/.sdkman/candidates/java")
-        ]
+    return [
+        "/usr/lib/jvm",
+        "/Library/Java/JavaVirtualMachines",
+        os.path.expanduser("~/.jdks"),
+        os.path.expanduser("~/.sdkman/candidates/java"),
+    ]
 
-    for base_dir in search_paths:
-        if os.path.isdir(base_dir):
-            for entry in os.listdir(base_dir):
-                full_path = os.path.join(base_dir, entry)
-                if os.path.isdir(full_path):
-                    # For macOS, the actual home is usually Contents/Home
-                    if os.name == 'posix' and 'JavaVirtualMachines' in base_dir:
-                        mac_home = os.path.join(full_path, 'Contents', 'Home')
-                        if os.path.isdir(mac_home):
-                            full_path = mac_home
-                    
-                    # Verify it's a valid JDK/JRE by checking for bin/java
-                    java_exe = os.path.join(full_path, 'bin', 'java.exe' if os.name == 'nt' else 'java')
-                    if os.path.isfile(java_exe):
-                        version = _get_java_version(java_exe)
-                        if version:
-                            name = f"Java {version} ({entry})"
-                            found_javas[name] = full_path
+
+def _jdk_home(base_dir: str, entry: str) -> str:
+    """Resolve the JAVA_HOME for a JDK directory entry (handles macOS Contents/Home)."""
+    full_path = os.path.join(base_dir, entry)
+    if os.name == 'posix' and 'JavaVirtualMachines' in base_dir:
+        mac_home = os.path.join(full_path, 'Contents', 'Home')
+        if os.path.isdir(mac_home):
+            return mac_home
+    return full_path
+
+
+def _java_label(java_home: str, suffix: str):
+    """(name, java_home) when java_home holds a valid java with a detectable version, else (None, None)."""
+    java_exe = os.path.join(java_home, 'bin', 'java.exe' if os.name == 'nt' else 'java')
+    if not os.path.isfile(java_exe):
+        return None, None
+    version = _get_java_version(java_exe)
+    if not version:
+        return None, None
+    return f"Java {version} ({suffix})", java_home
+
+
+def auto_detect_java_paths() -> Dict[str, str]:
+    """Auto-detect common Java installations on Windows, Linux, and macOS.
+    Returns a dict mapping a descriptive name to the JAVA_HOME path.
+    """
+    found_javas = {}
+    for base_dir in _java_search_paths():
+        if not os.path.isdir(base_dir):
+            continue
+        for entry in os.listdir(base_dir):
+            if not os.path.isdir(os.path.join(base_dir, entry)):
+                continue
+            name, home = _java_label(_jdk_home(base_dir, entry), entry)
+            if name:
+                found_javas[name] = home
 
     # Also add JAVA_HOME if set and valid
     env_java_home = os.environ.get('JAVA_HOME')
     if env_java_home and os.path.isdir(env_java_home):
-        java_exe = os.path.join(env_java_home, 'bin', 'java.exe' if os.name == 'nt' else 'java')
-        if os.path.isfile(java_exe):
-            version = _get_java_version(java_exe)
-            if version:
-                found_javas[f"Java {version} (JAVA_HOME)"] = env_java_home
+        name, home = _java_label(env_java_home, 'JAVA_HOME')
+        if name:
+            found_javas[name] = home
 
     return found_javas
 

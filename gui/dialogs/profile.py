@@ -181,7 +181,7 @@ class ProfileDialog(BaseDialog):
 
     def _load_profile(self):
         name = self._selected_profile.get()
-        if not name or name == "(Sin configs)":
+        if not name:
             show_warning(self, t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
@@ -200,7 +200,6 @@ class ProfileDialog(BaseDialog):
         if changes_text == t("dialog.profile.no_changes"):
             # If nothing really changes (or everything is identical), apply directly.
             self._apply_basic_config(data)
-            return
         else:
             from core.profile_manager import get_missing_repos
             missing = get_missing_repos(self._workspace_dir, data)
@@ -218,30 +217,29 @@ class ProfileDialog(BaseDialog):
                 on_complete=self._on_import_complete
             )
 
+    @staticmethod
+    def _branch_profile_diff(cur_cfg: dict, target_cfg: dict) -> list:
+        """Branch + profile change descriptions between current and target config."""
+        repo_changes = []
+        if target_cfg.get('branch') and cur_cfg.get('branch') != target_cfg.get('branch'):
+            repo_changes.append(
+                t("dialog.profile.change_branch", from_val=cur_cfg.get('branch') or 'N/A', to_val=target_cfg.get('branch'))
+            )
+        cur_profile = cur_cfg.get('profile') or 'N/A'
+        tgt_profile = target_cfg.get('profile') or 'N/A'
+        if tgt_profile != 'N/A' and cur_profile != tgt_profile:
+            repo_changes.append(t("dialog.profile.change_profile", from_val=cur_profile, to_val=tgt_profile))
+        return repo_changes
+
     def _describe_branch_changes(self, changes: list, target_repos: dict,
                                   current_repos: dict, missing_names: set):
         """Populate changes with branch and profile diffs for existing repos."""
         for repo_name, target_cfg in target_repos.items():
-            if repo_name in missing_names:
+            if repo_name in missing_names or repo_name not in current_repos:
                 continue
-            if repo_name in current_repos:
-                cur_cfg = current_repos[repo_name]
-                repo_changes = []
-
-                # Check branch
-                if target_cfg.get('branch') and cur_cfg.get('branch') != target_cfg.get('branch'):
-                    repo_changes.append(
-                        t("dialog.profile.change_branch", from_val=cur_cfg.get('branch') or 'N/A', to_val=target_cfg.get('branch'))
-                    )
-
-                # Check profile
-                cur_profile = cur_cfg.get('profile') or 'N/A'
-                tgt_profile = target_cfg.get('profile') or 'N/A'
-                if tgt_profile != 'N/A' and cur_profile != tgt_profile:
-                    repo_changes.append(t("dialog.profile.change_profile", from_val=cur_profile, to_val=tgt_profile))
-
-                if repo_changes:
-                    changes.append(f"🔄 {repo_name}:\n    " + "\n    ".join(repo_changes))
+            repo_changes = self._branch_profile_diff(current_repos[repo_name], target_cfg)
+            if repo_changes:
+                changes.append(f"🔄 {repo_name}:\n    " + "\n    ".join(repo_changes))
 
     def _describe_command_changes(self, changes: list, target_repos: dict):
         """Append config files overwrite line to changes if present."""
@@ -308,7 +306,7 @@ class ProfileDialog(BaseDialog):
 
     def _delete_profile(self):
         name = self._selected_profile.get()
-        if not name or name == "(Sin configs)":
+        if not name:
             show_warning(self, t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
@@ -324,7 +322,7 @@ class ProfileDialog(BaseDialog):
 
     def _export_profile(self):
         name = self._selected_profile.get()
-        if not name or name == "(Sin configs)":
+        if not name:
             show_warning(self, t("misc.warning_title"), t("dialog.profile.error_no_selection"))
             return
 
@@ -505,7 +503,7 @@ class ImportOptionsDialog(BaseDialog):
         profile_javas = set()
         for r in profile_data.get('repos', {}).values():
             jv = r.get('java_version')
-            if jv and jv != "Sistema (Por Defecto)":
+            if jv and jv != t("label.java_default"):
                 profile_javas.add(jv)
 
         for p_java in profile_javas:
@@ -562,37 +560,40 @@ class ImportOptionsDialog(BaseDialog):
                             variable=self._overwrite_configs_var, command=self._update_preview,
                             checkbox_width=20, checkbox_height=20).pack(anchor="w", padx=10, pady=(5, 10))
 
+    def _build_java_mapping_row(self, frame, missing_jv, profile_data: dict):
+        """Build one mapping row for a locally-missing Java version."""
+        row = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
+        row.pack(fill="x", padx=15, pady=2)
+        ctk.CTkLabel(row, text=t("dialog.import.java_needs", version=missing_jv), width=140, anchor="e").pack(side="left", padx=(0, 10))
+        options = [t("label.java_default")] + self._local_javas
+        var = ctk.StringVar(value=t("label.java_default"))
+        combo = ctk.CTkComboBox(row, values=options, variable=var, width=170)
+        combo.pack(side="left")
+        self._java_mappings[missing_jv] = var
+
+        # Buscar qué repositorios necesitan esta versión
+        repos_needing_java = [
+            repo_name for repo_name, repo_cfg in profile_data.get('repos', {}).items()
+            if repo_cfg.get('java_version') == missing_jv
+        ]
+        if repos_needing_java:
+            repos_txt = t("dialog.import.java_used_in") + ", ".join(repos_needing_java)
+            if len(repos_txt) > 50:
+                repos_txt = repos_txt[:47] + "..."
+            ctk.CTkLabel(row, text=repos_txt, font=theme.font("sm", mono=True),
+                         text_color=theme.C.text_placeholder).pack(side="left", padx=(10, 0))
+
     def _build_java_mappings_section(self, frame, profile_data: dict):
         """Build Java version mapping table for versions missing locally."""
         self._java_mappings = {}
-        if self._missing_javas:
-            ctk.CTkLabel(frame, text=t("dialog.import.map_java_title"),
-                         font=theme.font("base", bold=True),
-                         text_color=theme.C.status_starting).pack(anchor="w", padx=10, pady=(5, 0))
-
-            for missing_jv in self._missing_javas:
-                row = ctk.CTkFrame(frame, corner_radius=0, fg_color="transparent")
-                row.pack(fill="x", padx=15, pady=2)
-                ctk.CTkLabel(row, text=t("dialog.import.java_needs", version=missing_jv), width=140, anchor="e").pack(side="left", padx=(0, 10))
-                options = ["Sistema (Por Defecto)"] + self._local_javas
-                var = ctk.StringVar(value="Sistema (Por Defecto)")
-                combo = ctk.CTkComboBox(row, values=options, variable=var, width=170)
-                combo.pack(side="left")
-                self._java_mappings[missing_jv] = var
-
-                # Buscar qué repositorios necesitan esta versión
-                repos_needing_java = []
-                for repo_name, repo_cfg in profile_data.get('repos', {}).items():
-                    if repo_cfg.get('java_version') == missing_jv:
-                        repos_needing_java.append(repo_name)
-
-                if repos_needing_java:
-                    repos_txt = t("dialog.import.java_used_in") + ", ".join(repos_needing_java)
-                    if len(repos_txt) > 50:
-                        repos_txt = repos_txt[:47] + "..."
-                    ctk.CTkLabel(row, text=repos_txt, font=theme.font("sm", mono=True),
-                                 text_color=theme.C.text_placeholder).pack(side="left", padx=(10, 0))
-            ctk.CTkLabel(frame, text="").pack(pady=2)
+        if not self._missing_javas:
+            return
+        ctk.CTkLabel(frame, text=t("dialog.import.map_java_title"),
+                     font=theme.font("base", bold=True),
+                     text_color=theme.C.status_starting).pack(anchor="w", padx=10, pady=(5, 0))
+        for missing_jv in self._missing_javas:
+            self._build_java_mapping_row(frame, missing_jv, profile_data)
+        ctk.CTkLabel(frame, text="").pack(pady=2)
 
     def _build_preview_section(self, parent):
         """Build changes preview textbox for step 1."""
@@ -621,28 +622,36 @@ class ImportOptionsDialog(BaseDialog):
                                        wrap="none", state="disabled")
         self._log_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
+    def _base_change_lines(self) -> list:
+        """Preview lines for the base (branch/profile) changes section."""
+        if not self._base_changes_text or t("dialog.profile.no_changes") in self._base_changes_text:
+            return []
+        out = [t("dialog.import.changes_header")]
+        for line in self._base_changes_text.splitlines():
+            if "Clonar nuevo repo" not in line and "Sobrescribir archivos" not in line and line.strip() != "":
+                out.append(line)
+        out.append("")
+        return out
+
+    def _clone_preview_lines(self) -> list:
+        """Preview lines for the 'repos to clone' section."""
+        if not (self._clone_var.get() and self._missing):
+            return []
+        out = [t("dialog.import.clone_header")]
+        for m in self._missing:
+            repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
+            java_ver = repo_cfg.get('java_version')
+            req_java_text = t("dialog.import.uses_java", version=java_ver) if java_ver and java_ver != t("label.java_default") else ""
+            out.append(t("dialog.import.will_clone", name=m['name'], branch=m.get('branch', 'default'), java=req_java_text))
+        out.append("")
+        return out
+
     def _update_preview(self):
         """Update the preview textbox dynamically based on selected checkboxes."""
         self._preview_box.configure(state="normal")
         self._preview_box.delete("1.0", "end")
 
-        lines = []
-
-        if self._base_changes_text and t("dialog.profile.no_changes") not in self._base_changes_text:
-            lines.append(t("dialog.import.changes_header"))
-            for line in self._base_changes_text.splitlines():
-                if "Clonar nuevo repo" not in line and "Sobrescribir archivos" not in line and line.strip() != "":
-                    lines.append(line)
-            lines.append("")
-
-        if self._clone_var.get() and self._missing:
-            lines.append(t("dialog.import.clone_header"))
-            for m in self._missing:
-                repo_cfg = self._profile_data.get('repos', {}).get(m['name'], {})
-                java_ver = repo_cfg.get('java_version')
-                req_java_text = t("dialog.import.uses_java", version=java_ver) if java_ver and java_ver != "Sistema (Por Defecto)" else ""
-                lines.append(t("dialog.import.will_clone", name=m['name'], branch=m.get('branch', 'default'), java=req_java_text))
-            lines.append("")
+        lines = self._base_change_lines() + self._clone_preview_lines()
 
         if self._overwrite_configs_var.get():
             n_files = sum(len(r.get('config_files', {})) for r in self._profile_data.get('repos', {}).values())

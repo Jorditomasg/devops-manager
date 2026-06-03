@@ -205,31 +205,34 @@ class GitMixin:
 
         def _run():
             from core.git_manager import checkout, get_current_branch
-            from gui.dialogs.messagebox import show_error
             success, msg = checkout(self._repo.path, branch, self._log)
             actual_branch = get_current_branch(self._repo.path)
-
             if success and actual_branch == branch:
-                def _update():
-                    if not self.winfo_exists(): return
-                    self._current_branch = branch
-                    if hasattr(self, '_branch_combo'):
-                        self._branch_combo.set(branch)
-                    self._update_header_hints()
-                    self._check_pull_status()
-                    self._refresh_badge()
-                    self._trigger_change_callback()
-                self.after(0, _update)
+                self.after(0, lambda: self._on_branch_changed_ok(branch))
             else:
-                def _err():
-                    if not self.winfo_exists(): return
-                    show_error(self, t("dialog.git.checkout_error_title"), t("dialog.git.checkout_error_msg", branch=branch, msg=msg))
-                    if hasattr(self, '_branch_combo'):
-                        self._branch_combo.set(actual_branch)
-                        self._update_header_hints()
-                self.after(0, _err)
+                self.after(0, lambda: self._on_branch_change_failed(branch, actual_branch, msg))
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def _on_branch_changed_ok(self, branch: str):
+        """UI update after a successful checkout (UI thread)."""
+        if not self.winfo_exists(): return
+        self._current_branch = branch
+        if hasattr(self, '_branch_combo'):
+            self._branch_combo.set(branch)
+        self._update_header_hints()
+        self._check_pull_status()
+        self._refresh_badge()
+        self._trigger_change_callback()
+
+    def _on_branch_change_failed(self, branch: str, actual_branch: str, msg: str):
+        """Revert combo + show error after a failed checkout (UI thread)."""
+        from gui.dialogs.messagebox import show_error
+        if not self.winfo_exists(): return
+        show_error(self, t("dialog.git.checkout_error_title"), t("dialog.git.checkout_error_msg", branch=branch, msg=msg))
+        if hasattr(self, '_branch_combo'):
+            self._branch_combo.set(actual_branch)
+            self._update_header_hints()
 
     def _show_modified_files(self, event=None):
         """Show list of modified files in the repo's log panel."""

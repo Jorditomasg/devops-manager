@@ -49,6 +49,26 @@ def detect_repos(workspace_dir: str) -> list[RepoInfo]:
     return repos
 
 
+def _extract_main_spring_config(repo, path: str) -> None:
+    """Detect Spring profiles + server info from the repo's main application config, if any."""
+    main_spring_config = next((f for f in repo.environment_files if os.path.basename(f) in ['application.yml', 'application.yaml', 'application.properties']), None)
+    if not main_spring_config:
+        return
+    # Extraer perfiles de Spring si hay un directorio por defecto
+    default_env_dir = getattr(repo, 'env_default_dir', '')
+    if default_env_dir and not repo.profiles:
+        repo.profiles = _detect_spring_profiles(os.path.join(path, default_env_dir))
+    try:
+        if main_spring_config.endswith('.properties'):
+            _extract_spring_info_from_props(repo, main_spring_config)
+        else:
+            with open(main_spring_config, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+            _extract_spring_server_info(repo, config)
+    except Exception:
+        pass
+
+
 def _classify_repo(name: str, path: str, analyzer=None) -> Optional[RepoInfo]:
     """Classify a repo based on its contents using YAML configs."""
     if analyzer is None:
@@ -78,24 +98,7 @@ def _classify_repo(name: str, path: str, analyzer=None) -> Optional[RepoInfo]:
     if 'java_version' in repo.features:
         repo.java_version = _extract_java_version_from_pom(path)
         
-    main_spring_config = next((f for f in repo.environment_files if os.path.basename(f) in ['application.yml', 'application.yaml', 'application.properties']), None)
-    if main_spring_config:
-        # Extraer perfiles de Spring si hay un directorio por defecto
-        default_env_dir = getattr(repo, 'env_default_dir', '')
-        if default_env_dir:
-            resources_dir = os.path.join(path, default_env_dir)
-            if not repo.profiles:  
-                repo.profiles = _detect_spring_profiles(resources_dir)
-                
-        try:
-            if main_spring_config.endswith('.properties'):
-                _extract_spring_info_from_props(repo, main_spring_config)
-            else:
-                with open(main_spring_config, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f) or {}
-                _extract_spring_server_info(repo, config)
-        except Exception:
-            pass
+    _extract_main_spring_config(repo, path)
 
     if 'docker_checkboxes' in repo.features:
         dc_files = _find_docker_compose_files(path)

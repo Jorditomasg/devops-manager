@@ -236,48 +236,60 @@ class ProjectAnalyzerService:
                 
         return cmd
 
-    def _resolve_env_files(self, path: str, repo_type: str, env_files_conf: Dict[str, Any]) -> tuple[List[str], List[str]]:
-        patterns = env_files_conf.get('patterns', [])
-        exclude_dirs = env_files_conf.get('exclude_dirs', ['.git', 'node_modules'])
-
-        env_files_found = []
-        profiles_found = set()
-
-        if not patterns:
-            return env_files_found, list(profiles_found)
-
+    def _scan_default_dir_env_files(self, target: str, patterns, profiles_found: set) -> list:
+        """Match env files in a single directory (first matching pattern per file wins)."""
         import fnmatch
-        exclude_set = set(exclude_dirs)
+        found = []
+        for f in os.listdir(target):
+            fpath = os.path.join(target, f)
+            if not os.path.isfile(fpath):
+                continue
+            for pattern in patterns:
+                if fnmatch.fnmatch(f, pattern):
+                    found.append(fpath)
+                    self._extract_profile_from_filename(f, pattern, profiles_found)
+                    break
+        return found
 
-        default_dir = env_files_conf.get('default_dir', '')
-        if default_dir:
-            target = os.path.join(path, default_dir) if default_dir != '.' else path
-            if os.path.isdir(target):
-                for f in os.listdir(target):
-                    if not os.path.isfile(os.path.join(target, f)):
-                        continue
-                    for pattern in patterns:
-                        if fnmatch.fnmatch(f, pattern):
-                            env_files_found.append(os.path.join(target, f))
-                            self._extract_profile_from_filename(f, pattern, profiles_found)
-                            break
-
-                if env_files_found:
-                    if repo_type == 'spring-boot' and any(f.endswith(('application.yml', 'application.yaml', 'application.properties')) for f in env_files_found):
-                        profiles_found.add('default')
-                    return env_files_found, sorted(profiles_found)
-
+    def _walk_env_files(self, path: str, patterns, exclude_set: set, profiles_found: set) -> list:
+        """Match env files across the whole tree, skipping excluded dirs."""
+        import fnmatch
+        found = []
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if d not in exclude_set]
             for f in files:
                 for pattern in patterns:
                     if fnmatch.fnmatch(f, pattern):
-                        env_files_found.append(os.path.join(root, f))
+                        found.append(os.path.join(root, f))
                         self._extract_profile_from_filename(f, pattern, profiles_found)
+        return found
 
-        if repo_type == 'spring-boot' and any(f.endswith(('application.yml', 'application.yaml', 'application.properties')) for f in env_files_found):
+    @staticmethod
+    def _has_spring_default(repo_type: str, env_files_found: list) -> bool:
+        return repo_type == 'spring-boot' and any(
+            f.endswith(('application.yml', 'application.yaml', 'application.properties')) for f in env_files_found
+        )
+
+    def _resolve_env_files(self, path: str, repo_type: str, env_files_conf: Dict[str, Any]) -> tuple[List[str], List[str]]:
+        patterns = env_files_conf.get('patterns', [])
+        if not patterns:
+            return [], []
+        exclude_set = set(env_files_conf.get('exclude_dirs', ['.git', 'node_modules']))
+        profiles_found = set()
+
+        default_dir = env_files_conf.get('default_dir', '')
+        if default_dir:
+            target = os.path.join(path, default_dir) if default_dir != '.' else path
+            if os.path.isdir(target):
+                env_files_found = self._scan_default_dir_env_files(target, patterns, profiles_found)
+                if env_files_found:
+                    if self._has_spring_default(repo_type, env_files_found):
+                        profiles_found.add('default')
+                    return env_files_found, sorted(profiles_found)
+
+        env_files_found = self._walk_env_files(path, patterns, exclude_set, profiles_found)
+        if self._has_spring_default(repo_type, env_files_found):
             profiles_found.add('default')
-
         return env_files_found, sorted(profiles_found)
 
     def _extract_profile_from_filename(self, filename: str, pattern: str, profiles_found: set):

@@ -12,6 +12,7 @@ from typing import Optional
 
 
 PROFILES_DIR_NAME = '.devops-profiles'
+PROFILE_EXT = '.json'
 
 
 def _sanitize_group_name(name: str) -> str:
@@ -19,7 +20,7 @@ def _sanitize_group_name(name: str) -> str:
     return re.sub(r'[<>:"/\\|?*]', '_', name).strip('._') or 'default'
 
 
-def get_profiles_dir(group_name: str = None) -> str:
+def get_profiles_dir(group_name: str | None = None) -> str:
     """Get or create the profiles directory for a group.
     'Default' and None both map to the root .devops-profiles/ dir (backwards compat).
     All other group names get their own subdirectory.
@@ -37,7 +38,7 @@ def get_profiles_dir(group_name: str = None) -> str:
 def save_profile(profile_name: str, config: dict, group_name: str = None) -> str:
     """Save a profile to the profiles directory."""
     profiles_dir = get_profiles_dir(group_name)
-    filepath = os.path.join(profiles_dir, f'{profile_name}.json')
+    filepath = os.path.join(profiles_dir, f'{profile_name}{PROFILE_EXT}')
 
     config['name'] = profile_name
     config['created'] = datetime.now().isoformat()
@@ -51,7 +52,7 @@ def save_profile(profile_name: str, config: dict, group_name: str = None) -> str
 def load_profile(profile_name: str, group_name: str = None) -> Optional[dict]:
     """Load a profile from the profiles directory."""
     profiles_dir = get_profiles_dir(group_name)
-    filepath = os.path.join(profiles_dir, f'{profile_name}.json')
+    filepath = os.path.join(profiles_dir, f'{profile_name}{PROFILE_EXT}')
 
     if not os.path.isfile(filepath):
         return None
@@ -73,12 +74,12 @@ def list_profiles(group_name: str = None) -> list:
     profiles_dir = get_profiles_dir(group_name)
     profiles = []
     if os.path.isdir(profiles_dir):
-        profiles = [f[:-5] for f in os.listdir(profiles_dir) if f.endswith('.json')]
+        profiles = [f[:-len(PROFILE_EXT)] for f in os.listdir(profiles_dir) if f.endswith(PROFILE_EXT)]
 
     if not profiles and group_name and group_name != "Default":
         root_dir = get_profiles_dir(None)
         if os.path.isdir(root_dir):
-            profiles = [f[:-5] for f in os.listdir(root_dir) if f.endswith('.json')]
+            profiles = [f[:-len(PROFILE_EXT)] for f in os.listdir(root_dir) if f.endswith(PROFILE_EXT)]
 
     return sorted(profiles)
 
@@ -86,7 +87,7 @@ def list_profiles(group_name: str = None) -> list:
 def delete_profile(profile_name: str, group_name: str = None) -> bool:
     """Delete a profile."""
     profiles_dir = get_profiles_dir(group_name)
-    filepath = os.path.join(profiles_dir, f'{profile_name}.json')
+    filepath = os.path.join(profiles_dir, f'{profile_name}{PROFILE_EXT}')
     try:
         os.remove(filepath)
         return True
@@ -198,29 +199,27 @@ def _capture_saved_environments(repo) -> dict:
     return envs_by_file
 
 
+def _relative_config_dir(repo, ef: str) -> str:
+    """Repo-relative POSIX directory of a config file; '' at root or when unknown."""
+    if not (hasattr(repo, 'path') and repo.path):
+        return ""
+    try:
+        rel_dir = os.path.relpath(os.path.dirname(ef), repo.path).replace(os.sep, '/')
+        return "" if rel_dir == '.' else rel_dir
+    except ValueError:
+        return ""
+
+
 def _capture_config_files(repo) -> dict:
     """Read and capture the content of all config files for a repo."""
     files_by_dir = {}
     for ef in getattr(repo, 'environment_files', []):
         if not os.path.isfile(ef):
             continue
-        fname = os.path.basename(ef)
-        try:
-            if hasattr(repo, 'path') and repo.path:
-                rel_dir = os.path.relpath(os.path.dirname(ef), repo.path)
-                rel_dir = rel_dir.replace(os.sep, '/')
-                if rel_dir == '.':
-                    rel_dir = ""
-            else:
-                rel_dir = ""
-        except ValueError:
-            rel_dir = ""
-
+        rel_dir = _relative_config_dir(repo, ef)
         try:
             with open(ef, 'r', encoding='utf-8') as fh:
-                if rel_dir not in files_by_dir:
-                    files_by_dir[rel_dir] = {}
-                files_by_dir[rel_dir][fname] = fh.read()
+                files_by_dir.setdefault(rel_dir, {})[os.path.basename(ef)] = fh.read()
         except OSError:
             pass
     return files_by_dir

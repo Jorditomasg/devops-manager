@@ -24,29 +24,38 @@ def _run_git_command(args: list[str], repo_path: str, timeout: int = 10) -> subp
 
 
 
+def _parse_local_branches(stdout: str) -> list[str]:
+    """Branch names from `git branch --no-color` output."""
+    out = []
+    for line in stdout.splitlines():
+        b = line.strip().lstrip('* ').strip()
+        if b and not b.startswith('('):
+            out.append(b)
+    return out
+
+
+def _parse_remote_branches(stdout: str) -> list[str]:
+    """Branch names (origin/ stripped) from `git branch -r --no-color` output."""
+    out = []
+    for line in stdout.splitlines():
+        b = line.strip()
+        if b and '->' not in b:
+            out.append(b.replace('origin/', '', 1))
+    return out
+
+
 def get_branches(repo_path: str, include_remote: bool = True) -> list[str]:
     """List all branches (local + remote) for a repo."""
     branches = []
     try:
-        # Local branches
         result = _run_git_command(['git', 'branch', '--no-color'], repo_path)
         if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                b = line.strip().lstrip('* ').strip()
-                if b and not b.startswith('('):
-                    branches.append(b)
+            branches.extend(_parse_local_branches(result.stdout))
 
         if include_remote:
-            # Remote branches
             result = _run_git_command(['git', 'branch', '-r', '--no-color'], repo_path)
             if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    b = line.strip()
-                    if b and '->' not in b:
-                        # Remove origin/ prefix for display
-                        short = b.replace('origin/', '', 1)
-                        if short not in branches:
-                            branches.append(short)
+                branches.extend(_parse_remote_branches(result.stdout))
     except (subprocess.SubprocessError, OSError):
         pass
     return sorted(set(branches))
@@ -214,6 +223,16 @@ def checkout(repo_path: str, branch: str, log: LogCallback = None) -> tuple[bool
 
 
 
+def _emit_clone_progress(line: str, progress_callback) -> None:
+    """Parse a percentage from a `git clone --progress` line and report it."""
+    if not (progress_callback and '%' in line):
+        return
+    try:
+        progress_callback(int(line.split('%')[0].split()[-1]))
+    except (ValueError, IndexError):
+        pass
+
+
 def clone(url: str, dest: str, log: LogCallback = None,
           progress_callback: Optional[Callable[[int], None]] = None) -> tuple[bool, str]:
     """Clone a repository to dest directory."""
@@ -235,13 +254,7 @@ def clone(url: str, dest: str, log: LogCallback = None,
             stderr_output.append(line.strip())
             if log:
                 log(f"[git] {line.strip()}")
-            # Parse progress percentage
-            if progress_callback and '%' in line:
-                try:
-                    pct = int(line.split('%')[0].split()[-1])
-                    progress_callback(pct)
-                except (ValueError, IndexError):
-                    pass
+            _emit_clone_progress(line, progress_callback)
 
         process.wait()
         msg = '\n'.join(stderr_output)
@@ -300,6 +313,35 @@ def get_commits_behind(repo_path: str) -> int:
     return 0
 
 
+def _parse_status_branch_header(header_line: str, out: dict) -> None:
+    """Parse the `## branch...upstream [ahead N, behind M]` porcelain header into out."""
+    import re as _re
+    if not header_line.startswith('## '):
+        return
+    header = header_line[3:]
+    branch_part = header.split('...')[0].split(' ')[0]
+    out['branch'] = branch_part if branch_part else 'unknown'
+    m = _re.search(r'behind (\d+)', header)
+    if m:
+        out['behind'] = int(m.group(1))
+
+
+def _count_status_line(line: str, out: dict) -> None:
+    """Tally one porcelain status line into staged/unstaged/conflicts counts."""
+    if len(line) < 2:
+        return
+    x, y = line[0], line[1]
+    if x == '?' and y == '?':
+        out['unstaged'] += 1       # untracked
+    elif (x + y) in _UNMERGED_CODES:
+        out['conflicts'] += 1      # merge conflict (unmerged path)
+    else:
+        if x != ' ':
+            out['staged'] += 1     # index change
+        if y != ' ':
+            out['unstaged'] += 1   # worktree change
+
+
 def get_status_summary(repo_path: str) -> dict:
     """Single git call returning branch, behind count, staged and unstaged file counts.
 
@@ -309,7 +351,6 @@ def get_status_summary(repo_path: str) -> dict:
       - Subsequent lines: XY <path>  where X=index (staged), Y=worktree (unstaged)
     Returns: {'branch': str, 'behind': int, 'staged': int, 'unstaged': int, 'conflicts': int}
     """
-    import re as _re
     out = {'branch': 'unknown', 'behind': 0, 'staged': 0, 'unstaged': 0, 'conflicts': 0}
     try:
         result = _run_git_command(
@@ -321,31 +362,11 @@ def get_status_summary(repo_path: str) -> dict:
     if result.returncode != 0:
         return out
 
-    for i, line in enumerate(result.stdout.splitlines()):
-        if i == 0:
-            # ## main...origin/main [ahead 1, behind 2]
-            if line.startswith('## '):
-                header = line[3:]
-                branch_part = header.split('...')[0].split(' ')[0]
-                out['branch'] = branch_part if branch_part else 'unknown'
-                m = _re.search(r'behind (\d+)', header)
-                if m:
-                    out['behind'] = int(m.group(1))
-            continue
-
-        if len(line) < 2:
-            continue
-        x, y = line[0], line[1]
-        if x == '?' and y == '?':
-            out['unstaged'] += 1       # untracked
-        elif (x + y) in _UNMERGED_CODES:
-            out['conflicts'] += 1      # merge conflict (unmerged path)
-        else:
-            if x != ' ':
-                out['staged'] += 1     # index change
-            if y != ' ':
-                out['unstaged'] += 1   # worktree change
-
+    lines = result.stdout.splitlines()
+    if lines:
+        _parse_status_branch_header(lines[0], out)
+    for line in lines[1:]:
+        _count_status_line(line, out)
     return out
 
 
@@ -453,6 +474,102 @@ def _pull_ff_only(repo_path: str, log: LogCallback, name: str) -> None:
             log(f"[merge] {name}: aviso al hacer pull — {msg}")
 
 
+def _create_merge_new_branch(repo_path, name, base, new_branch, pull_target, log) -> tuple[bool, str]:
+    """Checkout base, optionally pull, then create new_branch from it. Returns (ok, error_message)."""
+    def _log(msg):
+        if log:
+            log(msg)
+    if not new_branch:
+        return False, 'missing new branch name'
+    if base:
+        ok, msg = checkout(repo_path, base, log)
+        if not ok:
+            return False, msg
+    if pull_target:
+        _pull_ff_only(repo_path, log, name)
+    cr = _run_git_command(['git', 'checkout', '-b', new_branch], repo_path, timeout=30)
+    if cr.returncode != 0:
+        emsg = (cr.stderr or cr.stdout).strip()
+        _log(f"[merge] {name}: no se pudo crear '{new_branch}' — {emsg}")
+        return False, emsg
+    _log(f"[merge] {name}: rama '{new_branch}' creada desde '{base}'.")
+    return True, ''
+
+
+def _position_merge_destination(repo_path, name, target_mode, target, base, new_branch, pull_target, log) -> tuple[bool, str]:
+    """Checkout/create the destination branch per target_mode. Returns (ok, error_message)."""
+    if target_mode == 'new':
+        return _create_merge_new_branch(repo_path, name, base, new_branch, pull_target, log)
+    if target_mode == 'existing':
+        if not target:
+            return False, 'missing target branch'
+        ok, msg = checkout(repo_path, target, log)
+        if not ok:
+            return False, msg
+    if pull_target:
+        _pull_ff_only(repo_path, log, name)
+    return True, ''
+
+
+def _push_after_merge(repo_path, name, log) -> tuple[bool, str]:
+    """Push the destination (auto --set-upstream on first push). Returns (ok, error_message)."""
+    def _log(msg):
+        if log:
+            log(msg)
+    _log(f"[merge] {name}: push...")
+    pr = _run_git_command(['git', 'push'], repo_path, timeout=120)
+    if pr.returncode != 0:
+        # Likely no upstream yet (new branch) — retry with --set-upstream.
+        cur = get_current_branch(repo_path)
+        pr2 = _run_git_command(['git', 'push', '--set-upstream', 'origin', cur], repo_path, timeout=120)
+        if pr2.returncode != 0:
+            emsg = (pr2.stderr or pr2.stdout).strip()
+            _log(f"[merge] {name}: merge OK pero push FALLÓ — {emsg}")
+            return False, emsg
+    _log(f"[merge] {name}: push OK")
+    return True, ''
+
+
+def _prepare_merge(repo_path, name, source_remote, dirty_ignore, log) -> Optional[dict]:
+    """Pre-merge guards: block on a dirty tree, fetch remote refs. Returns a failure
+    result-fragment to short-circuit, or None to proceed."""
+    def _log(msg):
+        if log:
+            log(msg)
+    changes = get_local_changes(repo_path, ignore_files=dirty_ignore or [])
+    if changes:
+        _log(f"[merge] {name}: cancelado — hay cambios locales sin commitear.")
+        return {'status': 'blocked_dirty', 'dirty': changes, 'message': 'dirty working tree'}
+    if source_remote:
+        _log(f"[merge] {name}: fetch...")
+        fr = _run_git_command(['git', 'fetch', '--all', '--prune'], repo_path, timeout=120)
+        if fr.returncode != 0:
+            emsg = (fr.stderr or fr.stdout).strip()
+            _log(f"[merge] {name}: fetch FALLÓ — {emsg}")
+            return {'status': 'error', 'message': emsg}
+    return None
+
+
+def _execute_merge(repo_path, name, merge_ref, log) -> dict:
+    """Run `git merge merge_ref`. Returns {status: ok|conflict|error, message, conflicts}."""
+    def _log(msg):
+        if log:
+            log(msg)
+    _log(f"[merge] {name}: git merge {merge_ref}...")
+    mr = _run_git_command(['git', 'merge', merge_ref], repo_path, timeout=120)
+    merge_out = (mr.stdout + '\n' + mr.stderr).strip()
+    if merge_out:
+        _log(f"[merge] {merge_out}")
+    if mr.returncode != 0:
+        conflicts = get_conflicted_files(repo_path)
+        if conflicts:
+            _log(f"[merge] {name}: ⚠️ CONFLICTO en {len(conflicts)} fichero(s). "
+                 f"Resolvé manualmente y commiteá.")
+            return {'status': 'conflict', 'message': merge_out, 'conflicts': conflicts}
+        return {'status': 'error', 'message': merge_out, 'conflicts': []}
+    return {'status': 'ok', 'message': merge_out, 'conflicts': []}
+
+
 def merge_branch(repo_path: str, *, source: str, source_remote: bool = True,
                  target_mode: str = 'current', target: Optional[str] = None,
                  base: Optional[str] = None, new_branch: Optional[str] = None,
@@ -487,96 +604,36 @@ def merge_branch(repo_path: str, *, source: str, source_remote: bool = True,
             log(msg)
 
     try:
-        # 1. Refuse to merge with a dirty working tree.
-        changes = get_local_changes(repo_path, ignore_files=dirty_ignore or [])
-        if changes:
-            result['status'] = 'blocked_dirty'
-            result['dirty'] = changes
-            result['message'] = 'dirty working tree'
-            _log(f"[merge] {name}: cancelado — hay cambios locales sin commitear.")
+        # 1+2. Refuse a dirty tree; refresh remote refs when merging from a remote branch.
+        prep = _prepare_merge(repo_path, name, source_remote, dirty_ignore, log)
+        if prep is not None:
+            result.update(prep)
             return result
 
-        # 2. Refresh remote refs when merging from a remote branch.
-        if source_remote:
-            _log(f"[merge] {name}: fetch...")
-            fr = _run_git_command(['git', 'fetch', '--all', '--prune'], repo_path, timeout=120)
-            if fr.returncode != 0:
-                result['message'] = (fr.stderr or fr.stdout).strip()
-                _log(f"[merge] {name}: fetch FALLÓ — {result['message']}")
-                return result
-
         # 3. Position the destination branch.
-        if target_mode == 'new':
-            if not new_branch:
-                result['message'] = 'missing new branch name'
-                return result
-            if base:
-                ok, msg = checkout(repo_path, base, log)
-                if not ok:
-                    result['message'] = msg
-                    return result
-            if pull_target:
-                _pull_ff_only(repo_path, log, name)
-            cr = _run_git_command(['git', 'checkout', '-b', new_branch], repo_path, timeout=30)
-            if cr.returncode != 0:
-                result['message'] = (cr.stderr or cr.stdout).strip()
-                _log(f"[merge] {name}: no se pudo crear '{new_branch}' — {result['message']}")
-                return result
-            _log(f"[merge] {name}: rama '{new_branch}' creada desde '{base}'.")
-        elif target_mode == 'existing':
-            if not target:
-                result['message'] = 'missing target branch'
-                return result
-            ok, msg = checkout(repo_path, target, log)
-            if not ok:
-                result['message'] = msg
-                return result
-            if pull_target:
-                _pull_ff_only(repo_path, log, name)
-        else:  # 'current'
-            if pull_target:
-                _pull_ff_only(repo_path, log, name)
+        ok, emsg = _position_merge_destination(
+            repo_path, name, target_mode, target, base, new_branch, pull_target, log
+        )
+        if not ok:
+            result['message'] = emsg
+            return result
 
         # 4. Merge.
         merge_ref = f'origin/{source}' if source_remote else source
-        _log(f"[merge] {name}: git merge {merge_ref}...")
-        mr = _run_git_command(['git', 'merge', merge_ref], repo_path, timeout=120)
-        merge_out = (mr.stdout + '\n' + mr.stderr).strip()
-        if merge_out:
-            _log(f"[merge] {merge_out}")
-
-        if mr.returncode != 0:
-            conflicts = get_conflicted_files(repo_path)
-            if conflicts:
-                result['status'] = 'conflict'
-                result['conflicts'] = conflicts
-                result['message'] = merge_out
-                _log(f"[merge] {name}: ⚠️ CONFLICTO en {len(conflicts)} fichero(s). "
-                     f"Resolvé manualmente y commiteá.")
-                return result
-            result['status'] = 'error'
-            result['message'] = merge_out
+        mres = _execute_merge(repo_path, name, merge_ref, log)
+        result['status'] = mres['status']
+        result['message'] = mres['message']
+        result['conflicts'] = mres['conflicts']
+        if mres['status'] != 'ok':
             return result
-
-        result['status'] = 'ok'
-        result['message'] = merge_out
 
         # 5. Optional push.
         if push:
-            _log(f"[merge] {name}: push...")
-            pr = _run_git_command(['git', 'push'], repo_path, timeout=120)
-            if pr.returncode != 0:
-                # Likely no upstream yet (new branch) — retry with --set-upstream.
-                cur = get_current_branch(repo_path)
-                pr2 = _run_git_command(
-                    ['git', 'push', '--set-upstream', 'origin', cur], repo_path, timeout=120
-                )
-                if pr2.returncode != 0:
-                    result['status'] = 'ok_push_failed'
-                    result['message'] = (pr2.stderr or pr2.stdout).strip()
-                    _log(f"[merge] {name}: merge OK pero push FALLÓ — {result['message']}")
-                    return result
-            _log(f"[merge] {name}: push OK")
+            pushed, push_emsg = _push_after_merge(repo_path, name, log)
+            if not pushed:
+                result['status'] = 'ok_push_failed'
+                result['message'] = push_emsg
+                return result
 
         _log(f"[merge] {name}: ✓ merge completado.")
         return result

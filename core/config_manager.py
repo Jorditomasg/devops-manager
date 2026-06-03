@@ -186,6 +186,32 @@ def save_repo_configs(config_key: str, configs_dict: dict, config_path: str = ''
         pass
 
 
+def _next_repetido_name(merged: dict) -> str:
+    """First unused 'repetidoN' key in merged."""
+    i = 1
+    while f"repetido{i}" in merged:
+        i += 1
+    return f"repetido{i}"
+
+
+def _merge_config_set(existing: dict, incoming: dict, renames: dict) -> dict:
+    """Merge incoming into a copy of existing; content-conflicting names become 'repetidoN'.
+
+    Records original→new renames in the passed-in renames dict.
+    """
+    merged = dict(existing)
+    for name, content in incoming.items():
+        if name not in merged:
+            merged[name] = content
+        elif merged[name] == content:
+            continue  # identical content – skip
+        else:
+            candidate = _next_repetido_name(merged)
+            merged[candidate] = content
+            renames[name] = candidate
+    return merged
+
+
 def merge_repo_configs(config_key: str, configs_dict: dict, config_path: str = '') -> dict:
     """Merge configs_dict into existing repo_configs with smart conflict resolution.
 
@@ -210,33 +236,15 @@ def merge_repo_configs(config_key: str, configs_dict: dict, config_path: str = '
         if 'repo_configs' not in config:
             config['repo_configs'] = {}
 
-        def _merge(existing: dict, incoming: dict) -> dict:
-            merged = dict(existing)
-            for name, content in incoming.items():
-                if name not in merged:
-                    merged[name] = content
-                elif merged[name] == content:
-                    pass  # identical content – skip
-                else:
-                    i = 1
-                    while True:
-                        candidate = f"repetido{i}"
-                        if candidate not in merged:
-                            merged[candidate] = content
-                            renames[name] = candidate
-                            break
-                        i += 1
-            return merged
-
         if '::' in config_key:
             repo, module = config_key.split('::', 1)
             if repo not in config['repo_configs'] or not isinstance(config['repo_configs'][repo], dict):
                 config['repo_configs'][repo] = {}
             existing = config['repo_configs'][repo].get(module, {})
-            config['repo_configs'][repo][module] = _merge(existing, configs_dict)
+            config['repo_configs'][repo][module] = _merge_config_set(existing, configs_dict, renames)
         else:
             existing = config['repo_configs'].get(config_key, {})
-            config['repo_configs'][config_key] = _merge(existing, configs_dict)
+            config['repo_configs'][config_key] = _merge_config_set(existing, configs_dict, renames)
 
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
