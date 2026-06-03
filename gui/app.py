@@ -605,6 +605,7 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._java_versions = self._settings.get('java_versions', {})
 
         # Single column list layout
+        expanded_restore_idx = 0  # counts only cards restored as expanded, for staggering
         for idx, repo in enumerate(repos):
             card = RepoCard(
                 self._cards_scroll, repo,
@@ -625,6 +626,16 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
                 card.set_custom_command(state['custom_command'])
             if state.get('java_version'):
                 card.selected_java_var.set(state['java_version'])
+
+            # Restore expanded state — build the panel staggered (60ms apart, only
+            # counting cards actually being reopened) so many open cards don't freeze
+            # the UI thread with back-to-back synchronous widget construction.
+            if state.get('expanded'):
+                card.after(
+                    60 * expanded_restore_idx,
+                    lambda c=card: c.winfo_exists() and c._toggle_expand(),
+                )
+                expanded_restore_idx += 1
 
             # Stagger branch loading (30ms apart)
             if card._branch_load_id:
@@ -733,7 +744,8 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             state[card.get_name()] = {
                 'selected': card.is_selected(),
                 'custom_command': card.get_custom_command(),
-                'java_version': card.selected_java_var.get()
+                'java_version': card.selected_java_var.get(),
+                'expanded': card._expanded,
             }
         self._settings['repo_state'] = state
 

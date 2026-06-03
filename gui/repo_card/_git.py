@@ -73,31 +73,11 @@ class GitMixin:
                 from core.git_manager import get_status_summary
                 s = get_status_summary(self._repo.path)
                 current = s['branch']
-                behind = s['behind']
-                unstaged = s['unstaged']
-                conflicts = s.get('conflicts', 0)
-                self._cached_behind = behind
 
                 def _update():
                     if not self.winfo_exists():
                         return
-                    if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
-                        self._changes_count_label.configure(text=f"📝 {unstaged}" if unstaged > 0 else "")
-                    if hasattr(self, '_conflict_count_label') and self._conflict_count_label.winfo_exists():
-                        self._conflict_count_label.configure(text=f"⚠️ {conflicts}" if conflicts > 0 else "")
-                    if hasattr(self, '_pull_count_label') and self._pull_count_label.winfo_exists():
-                        self._pull_count_label.configure(text=f"📥 {behind}" if behind > 0 else "")
-                    if hasattr(self, '_pull_btn'):
-                        if behind > 0:
-                            self._pull_btn.configure(
-                                text=f"⬇ Pull ({behind})",
-                                fg_color=theme.btn_style("blue_active")["fg_color"],
-                            )
-                        else:
-                            self._pull_btn.configure(
-                                text="⬇ Pull",
-                                fg_color=theme.btn_style("blue")["fg_color"],
-                            )
+                    self._apply_badge_labels(s)
                     if current and current not in ('unknown', 'HEAD') and current != self._current_branch:
                         self._current_branch = current
                         if hasattr(self, '_branch_combo'):
@@ -110,6 +90,34 @@ class GitMixin:
             finally:
                 self._GIT_BADGE_SEMAPHORE.release()
         threading.Thread(target=_run, daemon=True).start()
+
+    def _apply_badge_labels(self, s: dict):
+        """Update header badge labels and the Pull button from a status summary dict.
+
+        UI-thread only. Shared by _refresh_badge and _refresh_branch so a single
+        `git status` call can drive both the branch combo and the badges at startup.
+        """
+        behind = s['behind']
+        unstaged = s['unstaged']
+        conflicts = s.get('conflicts', 0)
+        self._cached_behind = behind
+        if hasattr(self, '_changes_count_label') and self._changes_count_label.winfo_exists():
+            self._changes_count_label.configure(text=f"📝 {unstaged}" if unstaged > 0 else "")
+        if hasattr(self, '_conflict_count_label') and self._conflict_count_label.winfo_exists():
+            self._conflict_count_label.configure(text=f"⚠️ {conflicts}" if conflicts > 0 else "")
+        if hasattr(self, '_pull_count_label') and self._pull_count_label.winfo_exists():
+            self._pull_count_label.configure(text=f"📥 {behind}" if behind > 0 else "")
+        if hasattr(self, '_pull_btn'):
+            if behind > 0:
+                self._pull_btn.configure(
+                    text=f"⬇ Pull ({behind})",
+                    fg_color=theme.btn_style("blue_active")["fg_color"],
+                )
+            else:
+                self._pull_btn.configure(
+                    text="⬇ Pull",
+                    fg_color=theme.btn_style("blue")["fg_color"],
+                )
 
     def _load_ordered_branches(self):
         """Worker-thread helper: read branches, order them by checkout recency, and
@@ -127,8 +135,12 @@ class GitMixin:
         def _run():
             self._GIT_BRANCH_SEMAPHORE.acquire()
             try:
-                from core.git_manager import get_current_branch
-                current = get_current_branch(self._repo.path)
+                # Single `git status` yields branch + behind + file counts, so we
+                # skip the redundant get_current_branch subprocess and the separate
+                # _refresh_badge thread that used to run on every startup branch load.
+                from core.git_manager import get_status_summary
+                s = get_status_summary(self._repo.path)
+                current = s['branch']
                 branches, rc = self._load_ordered_branches()
 
                 if not self._repo.git_remote_url:
@@ -144,8 +156,7 @@ class GitMixin:
                     if hasattr(self, '_branch_combo'):
                         self._branch_combo.set(current)
                     self._update_header_hints()
-                    self._check_pull_status()
-                    self._refresh_badge()
+                    self._apply_badge_labels(s)
                     if not _suppress_change_cb:
                         self._trigger_change_callback()
                 self.after(0, _update)
