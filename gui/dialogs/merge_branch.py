@@ -3,7 +3,7 @@ import threading
 import customtkinter as ctk
 
 from gui.dialogs._base import BaseDialog
-from gui.dialogs.messagebox import show_warning
+from gui.dialogs.messagebox import show_warning, ask_yes_no
 from gui.widgets import SearchableCombo
 from gui.log_helpers import insert_log_line
 from gui import theme
@@ -37,9 +37,24 @@ class MergeBranchDialog(BaseDialog):
         self._pull_var = ctk.BooleanVar(value=True)
         self._push_var = ctk.BooleanVar(value=False)
 
+        # Default-tracking: a selector follows the freshly-fetched current branch until
+        # the user picks a value manually (SearchableCombo.set() does NOT fire `command`,
+        # so these flags only flip on a real user selection).
+        self._user_touched_dest = False
+        self._user_touched_base = False
+
+        # Merge/cancel lifecycle: capture enough to UNDO the merge on Cancel.
+        self._merge_started = False
+        self._merge_in_flight = False
+        self._cancel_requested = False
+        self._merge_pushed = False
+        self._revert_point: dict | None = None
+
         self._build()
         self._sync_state()
         self._load_branches_async()
+        # Closing the window (X) behaves like Cancel — may revert an applied merge.
+        self.protocol("WM_DELETE_WINDOW", self._on_cancel)
 
     # ── UI ─────────────────────────────────────────────────────────────────
 
@@ -83,7 +98,7 @@ class MergeBranchDialog(BaseDialog):
         self._merge_btn.pack(side="right", padx=(10, 0))
         ctk.CTkButton(
             btn_frame, text=t("btn.cancel"), width=100,
-            command=self.destroy, **theme.btn_style("neutral")
+            command=self._on_cancel, **theme.btn_style("neutral")
         ).pack(side="right")
 
         # If the card already knows both the branch list AND the current branch,
@@ -135,7 +150,8 @@ class MergeBranchDialog(BaseDialog):
             text_color=theme.C.text_secondary, font=theme.font("md")
         ).pack(side="left")
         self._base_combo = SearchableCombo(
-            new_row, values=[], width=160, **theme.combo_style()
+            new_row, values=[], width=160,
+            command=self._on_base_change, **theme.combo_style()
         )
         self._base_combo.pack(side="left", padx=(4, 10))
         self._new_entry = ctk.CTkEntry(
@@ -215,25 +231,34 @@ class MergeBranchDialog(BaseDialog):
         self._refresh_source_values()
 
     def _apply_defaults(self, branches):
-        """Default the destination and base selectors to the current branch when they
-        are empty or hold a stale value. The source default is handled separately."""
+        """Default the destination and base selectors to the current branch. Until the
+        user picks a value manually, each selector TRACKS the freshly-fetched current
+        branch — so a late async refresh (or a stale card cache used for the immediate
+        populate) can't pin a wrong default on reopen. The source default is handled
+        separately."""
         if not branches:
             return
         current = self._current_branch if self._current_branch in branches else branches[0]
-        self._ensure_selection(self._existing_combo, current, branches)
-        self._ensure_selection(self._base_combo, current, branches)
+        self._default_or_keep(self._existing_combo, current, branches, self._user_touched_dest)
+        self._default_or_keep(self._base_combo, current, branches, self._user_touched_base)
 
     @staticmethod
-    def _ensure_selection(combo, preferred, branches):
+    def _default_or_keep(combo, preferred, branches, user_touched):
+        """Keep the user's explicit, still-valid choice; otherwise (re)set to *preferred*."""
         cur = combo.get().strip()
-        if cur and cur in branches:
-            return  # keep the user's valid choice
+        if user_touched and cur and cur in branches:
+            return
         combo.set(preferred)
 
     def _on_destination_change(self, _value):
-        """When the destination branch changes, recompute the source list so it can
-        never equal the destination."""
+        """When the destination branch changes, mark it user-chosen and recompute the
+        source list so it can never equal the destination."""
+        self._user_touched_dest = True
         self._refresh_source_values()
+
+    def _on_base_change(self, _value):
+        """Mark the base branch as user-chosen so async refreshes won't override it."""
+        self._user_touched_base = True
 
     def _refresh_source_values(self):
         """Rebuild the source selector excluding the current destination branch, so a
@@ -336,9 +361,28 @@ class MergeBranchDialog(BaseDialog):
         params = self._collect_params()
         if params is None:
             return
+        self._capture_revert_point(params)
+        self._merge_started = True
+        self._cancel_requested = False
+        self._merge_pushed = False
         self._clear_dialog_log()
         self._merge_btn.configure(state="disabled", text=t("dialog.merge.btn_running"))
+        self._merge_in_flight = True
         threading.Thread(target=self._do_merge, args=(params,), daemon=True).start()
+
+    def _capture_revert_point(self, params):
+        """Snapshot the pre-merge state so a later Cancel can undo it: the branch the
+        user is on now, plus (existing mode) the destination's current commit. Runs on
+        the UI thread before any mutation — the git reads here are quick rev-parse calls."""
+        from core.git_manager import get_current_branch, get_commit_sha
+        mode = params['target_mode']
+        rp = {'mode': mode, 'original_branch': get_current_branch(self._repo_path)}
+        if mode == 'existing':
+            rp['dest'] = params['target']
+            rp['dest_head_before'] = get_commit_sha(self._repo_path, params['target'])
+        else:
+            rp['new_branch'] = params['new_branch']
+        self._revert_point = rp
 
     def _do_merge(self, params):
         from core.git_manager import merge_branch
@@ -347,12 +391,72 @@ class MergeBranchDialog(BaseDialog):
         def _done():
             if not self.winfo_exists():
                 return
+            self._merge_in_flight = False
             status = result.get('status')
+            # "Pushed" only when the merge AND its push both succeeded; a failed push
+            # ('ok_push_failed') leaves the remote untouched, so it stays revertible.
+            self._merge_pushed = (status == 'ok' and bool(params.get('push')))
+            if self._cancel_requested:
+                if self._merge_pushed:
+                    show_warning(self, t("dialog.merge.revert_pushed_title"),
+                                 t("dialog.merge.revert_pushed_msg"))
+                    self.destroy()
+                else:
+                    self._do_revert()
+                return
             if status in ('ok', 'ok_push_failed') and self._on_complete:
                 self._on_complete()
             self._report(status, result)
 
         self.after(0, _done)
+
+    # ── Cancel / revert ────────────────────────────────────────────────────────
+
+    def _on_cancel(self):
+        """Cancel handler. Closes the dialog, and — if a merge was already applied and
+        is still local — offers to undo it and return to the original branch."""
+        # Nothing applied yet → just close.
+        if not self._merge_started or self._revert_point is None:
+            self.destroy()
+            return
+        # Policy: once pushed, the remote already has it — don't revert locally.
+        if self._merge_pushed:
+            show_warning(self, t("dialog.merge.revert_pushed_title"),
+                         t("dialog.merge.revert_pushed_msg"))
+            self.destroy()
+            return
+        # Confirm the destructive revert (discards the merge commit + the pull).
+        if not ask_yes_no(self, t("dialog.merge.revert_confirm_title"),
+                          t("dialog.merge.revert_confirm_msg")):
+            return
+        if self._merge_in_flight:
+            # Can't safely interrupt git mid-step; flag it and revert when it returns.
+            self._cancel_requested = True
+            self._merge_btn.configure(state="disabled")
+            self._append_dialog_log(t("dialog.merge.cancel_pending"))
+        else:
+            self._do_revert()
+
+    def _do_revert(self):
+        """Undo the applied merge in a worker, refresh the card, then close."""
+        if not self.winfo_exists():
+            return
+        self._merge_btn.configure(state="disabled")
+        self._append_dialog_log(t("dialog.merge.reverting"))
+        rp = self._revert_point
+
+        def _run():
+            from core.git_manager import revert_merge
+            revert_merge(self._repo_path, rp, log=self._merge_log)
+
+            def _after():
+                if self._on_complete:
+                    self._on_complete()
+                if self.winfo_exists():
+                    self.destroy()
+            self.after(0, _after)
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def _to_close_button(self):
         """Turn the primary button into a Close action — used after a terminal outcome

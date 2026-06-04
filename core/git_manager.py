@@ -120,6 +120,26 @@ def get_current_branch(repo_path: str) -> str:
     return 'unknown'
 
 
+def get_commit_sha(repo_path: str, ref: str = 'HEAD') -> Optional[str]:
+    """Resolve *ref* to a full commit SHA, or None if it can't be resolved."""
+    try:
+        result = _run_git_command(['git', 'rev-parse', '--verify', '--quiet', ref], repo_path, timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        pass
+    return None
+
+
+def _merge_in_progress(repo_path: str) -> bool:
+    """True when a merge is half-done (MERGE_HEAD present), e.g. left by a conflict."""
+    try:
+        result = _run_git_command(['git', 'rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], repo_path, timeout=5)
+        return result.returncode == 0
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
 def fetch(repo_path: str, log: LogCallback = None) -> tuple[bool, str]:
     """Fetch all remotes."""
     try:
@@ -648,3 +668,71 @@ def merge_branch(repo_path: str, *, source: str, source_remote: bool = True,
         result['message'] = str(e)
         _log(f"[merge] {name}: error inesperado — {e}")
         return result
+
+
+def revert_merge(repo_path: str, revert_point: dict, log: LogCallback = None) -> dict:
+    """Undo a merge done by :func:`merge_branch`, returning the working tree to the
+    branch the user was on before it started.
+
+    *revert_point* is a snapshot captured BEFORE the merge mutated anything::
+
+        {'mode': 'existing' | 'new',
+         'original_branch': str,
+         # existing mode:
+         'dest': str, 'dest_head_before': <SHA>,
+         # new mode:
+         'new_branch': str}
+
+    Steps: abort an in-progress (conflicted) merge, hard-reset a completed merge on
+    the destination back to its pre-merge commit, return to the original branch, and
+    delete a branch created only for this merge ('new' mode). A push that already
+    reached the remote is NOT undone here — the caller decides whether to call this.
+
+    Returns ``{'status': 'ok'}`` or ``{'status': 'error', 'message': str}``.
+    """
+    name = os.path.basename(repo_path)
+
+    def _log(msg: str) -> None:
+        if log:
+            log(msg)
+
+    try:
+        mode = revert_point.get('mode')
+        original = revert_point.get('original_branch')
+
+        # 1. Abort a half-finished merge (conflict state) before touching refs.
+        if _merge_in_progress(repo_path):
+            _run_git_command(['git', 'merge', '--abort'], repo_path, timeout=30)
+            _log(f"[merge] {name}: merge en progreso abortado.")
+
+        # 2. Undo a completed merge: reset the destination back to its pre-merge commit
+        #    (this also drops the optional fast-forward pull done before the merge).
+        if mode == 'existing':
+            dest = revert_point.get('dest')
+            head_before = revert_point.get('dest_head_before')
+            if dest and head_before:
+                co = _run_git_command(['git', 'checkout', dest], repo_path, timeout=30)
+                if co.returncode == 0:
+                    _run_git_command(['git', 'reset', '--hard', head_before], repo_path, timeout=30)
+                    _log(f"[merge] {name}: '{dest}' restaurada a {head_before[:8]}.")
+
+        # 3. Back to the branch the user started on.
+        if original and original not in ('unknown', 'HEAD'):
+            _run_git_command(['git', 'checkout', original], repo_path, timeout=30)
+            _log(f"[merge] {name}: de vuelta en '{original}'.")
+
+        # 4. Drop a branch created only for this merge ('new' mode).
+        if mode == 'new':
+            new_branch = revert_point.get('new_branch')
+            if new_branch:
+                _run_git_command(['git', 'branch', '-D', new_branch], repo_path, timeout=30)
+                _log(f"[merge] {name}: rama '{new_branch}' eliminada.")
+
+        _log(f"[merge] {name}: ✓ cambios revertidos.")
+        return {'status': 'ok'}
+    except (subprocess.SubprocessError, OSError) as e:
+        _log(f"[merge] {name}: error al revertir — {e}")
+        return {'status': 'error', 'message': str(e)}
+    except Exception as e:
+        _log(f"[merge] {name}: error inesperado al revertir — {e}")
+        return {'status': 'error', 'message': str(e)}
