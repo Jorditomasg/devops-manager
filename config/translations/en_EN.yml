@@ -113,6 +113,10 @@ dialog.confirm_close.btn_cancel: "Cancel"
 dialog.confirm_close.btn_confirm: "Close anyway"
 
 # ── Dialog — Settings ─────────────────────────────────────────────────────────
+dialog.settings.language_title: "🌐 Language"
+dialog.settings.workspace_title: "📁 Workspace"
+dialog.settings.behavior_title: "🪟 Behavior"
+dialog.settings.shortcut_title: "🔗 Shortcut"
 dialog.settings.java_title: "☕ Java Versions"
 dialog.settings.shortcut_desc: "Create a Desktop shortcut to launch the application without opening a terminal."
 dialog.settings.shortcut_desc_win: "Creates a .lnk shortcut on the Desktop. Launches via wscript.exe — no terminal window."

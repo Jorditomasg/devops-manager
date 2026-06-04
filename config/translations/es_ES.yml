@@ -113,6 +113,10 @@ dialog.confirm_close.btn_cancel: "Cancelar"
 dialog.confirm_close.btn_confirm: "Cerrar igual"
 
 # ── Dialog — Settings ─────────────────────────────────────────────────────────
+dialog.settings.language_title: "🌐 Idioma"
+dialog.settings.workspace_title: "📁 Workspace"
+dialog.settings.behavior_title: "🪟 Comportamiento"
+dialog.settings.shortcut_title: "🔗 Acceso directo"
 dialog.settings.java_title: "☕ Versiones de Java"
 dialog.settings.shortcut_desc: "Crea un acceso directo en el Escritorio para lanzar la aplicación sin abrir la terminal."
 dialog.settings.shortcut_desc_win: "Crea un acceso directo .lnk en el Escritorio. Se lanza con wscript.exe, sin ventana de terminal."
