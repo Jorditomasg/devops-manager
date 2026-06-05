@@ -112,6 +112,16 @@ dialog.confirm_close.message_many: "There are {count} services running.\nDo you 
 dialog.confirm_close.btn_cancel: "Cancel"
 dialog.confirm_close.btn_confirm: "Close anyway"
 
+# ── Dialog — Instance conflict ────────────────────────────────────────────────
+dialog.instance_conflict.title: "An instance is already open"
+dialog.instance_conflict.message_one: "Another DevOps Manager instance is already open for this workspace."
+dialog.instance_conflict.message_many: "{count} DevOps Manager instances are already open for this workspace."
+dialog.instance_conflict.detail: "What do you want to do?"
+dialog.instance_conflict.btn_close_others: "Close the others"
+dialog.instance_conflict.btn_open_anyway: "Open anyway"
+dialog.instance_conflict.btn_cancel: "Cancel"
+dialog.instance_conflict.closing: "Closing the other instances…"
+
 # ── Dialog — Settings ─────────────────────────────────────────────────────────
 dialog.settings.language_title: "🌐 Language"
 dialog.settings.workspace_title: "📁 Workspace"

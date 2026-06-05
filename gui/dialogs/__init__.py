@@ -8,6 +8,7 @@ from gui.dialogs.repo_config_manager import RepoConfigManagerDialog
 from gui.dialogs.docker_compose import DockerComposeDialog
 from gui.dialogs.workspace_groups import WorkspaceGroupsDialog
 from gui.dialogs.merge_branch import MergeBranchDialog
+from gui.dialogs.instance_conflict import InstanceConflictDialog
 from gui.dialogs.messagebox import show_info, show_warning, show_error, ask_yes_no
 
 __all__ = [
@@ -15,6 +16,6 @@ __all__ = [
     "ProfileDialog", "ImportOptionsDialog",
     "SettingsDialog", "JavaVersionEditorDialog",
     "RepoConfigManagerDialog", "DockerComposeDialog",
-    "WorkspaceGroupsDialog", "MergeBranchDialog",
+    "WorkspaceGroupsDialog", "MergeBranchDialog", "InstanceConflictDialog",
     "show_info", "show_warning", "show_error", "ask_yes_no",
 ]

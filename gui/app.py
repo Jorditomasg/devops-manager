@@ -112,6 +112,9 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
 
         # Setup Tray
         self._tray_icon = None
+        # True while the window is hidden into the tray. Drives tray-icon
+        # self-healing without relying on the (racy) Tk window state.
+        self._in_tray = False
         self._init_tray()
 
         # Snapshot of window state kept current while visible — used by tray restore
@@ -130,6 +133,29 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         self._focus_refresh_after = None
         self.bind("<FocusIn>", self._on_window_focus)
         self.bind("<FocusOut>", self._on_window_focusout)
+
+        # ── Single-instance coordination ────────────────────────────────────
+        # Detect other LIVE instances managing this same workspace. If any exist,
+        # let the user close them (graceful — stops their services), open anyway
+        # (allow several at once), or cancel this startup. Runs before the heavy
+        # UI build so a cancel costs nothing.
+        from core.instance_manager import InstanceManager
+        self._instance_mgr = InstanceManager(self._workspace_dir)
+        others = self._instance_mgr.find_other_instances()
+        if others:
+            from gui.dialogs import InstanceConflictDialog
+            dlg = InstanceConflictDialog(self, self._instance_mgr, others)
+            self.wait_window(dlg)
+            if dlg.choice == 'cancel':
+                self._instance_mgr.cleanup()
+                self.destroy()
+                os._exit(0)
+            if dlg.remaining:
+                logging.warning(
+                    "%d instancia(s) no se cerraron a tiempo; abriendo igualmente",
+                    len(dlg.remaining),
+                )
+        self._instance_mgr.start_server(on_shutdown=self._on_remote_shutdown)
 
         self._build_ui()
         self._scan_repos()
@@ -816,28 +842,53 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             # and just hide its taskbar entry. Restore via deiconify() is then
             # native-fast — no CTk Canvas repaint, no full re-render.
             self._set_taskbar_visible(False)
+            self._in_tray = True
+            self._spawn_tray_icon()
 
-            # Recreate the tray icon to avoid state issues
-            any_running = False
-            for card in getattr(self, '_repo_cards', []):
-                if getattr(card, '_status', '') in ('running', 'starting'):
-                    any_running = True
-                    break
+    def _tray_icon_alive(self) -> bool:
+        """True when a tray icon exists AND its detached thread is still running.
 
-            import pystray
-            color = "green" if any_running else "red"
-            image = self._get_tray_image(color)
+        pystray sets ``_running`` once the detached loop is live (via
+        ``_mark_ready``) and carries that loop on ``_setup_thread``. A missing
+        icon, a cleared ``_running`` flag, or a dead thread all mean the icon is
+        gone from the notification area — even if ``self._tray_icon`` still holds
+        a (now useless) reference."""
+        icon = self._tray_icon
+        if icon is None or not getattr(icon, '_running', False):
+            return False
+        thread = getattr(icon, '_setup_thread', None)
+        return thread is None or thread.is_alive()
 
-            menu = pystray.Menu(self._build_tray_menu)
-            self._tray_icon = pystray.Icon("devops_manager", image, "DevOps Manager", menu)
+    def _spawn_tray_icon(self):
+        """Create and start a fresh detached tray icon, stopping any previous one
+        first so repeated minimises never leak orphaned icons/threads."""
+        self._stop_tray_icon()
+        import pystray
+        color = "green" if any(
+            getattr(card, '_status', '') in ('running', 'starting')
+            for card in getattr(self, '_repo_cards', [])
+        ) else "red"
+        image = self._get_tray_image(color)
+        menu = pystray.Menu(self._build_tray_menu)
+        self._tray_icon = pystray.Icon("devops_manager", image, "DevOps Manager", menu)
+        # run_detached handles the background thread natively in pystray
+        self._tray_icon.run_detached()
 
-            # run_detached handles the background thread natively in pystray
-            self._tray_icon.run_detached()
+    def _stop_tray_icon(self):
+        """Stop and drop the current tray icon, swallowing teardown races."""
+        icon = self._tray_icon
+        self._tray_icon = None
+        if icon is not None:
+            try:
+                icon.stop()
+            except (RuntimeError, AttributeError):
+                pass
 
     def _restore_window(self, icon, item):
-        if self._tray_icon:
-            self._tray_icon.stop()
-            self._tray_icon = None
+        # Clear the flag BEFORE stopping so the self-healing loop never respawns
+        # an icon during the stop→deiconify window.
+        self._in_tray = False
+        self._stop_tray_icon()
 
         def _show():
             # Window was kept iconic (not withdrawn) so deiconify() is native-fast:
@@ -926,6 +977,15 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
     def _quit_app(self, icon, item):
         self.after(0, self._on_close)
 
+    def _on_remote_shutdown(self):
+        """Called from the IPC server thread when another instance asks us to quit.
+        Bounce to the Tk main thread and close forcefully (no confirm dialog)."""
+        try:
+            self.after(0, lambda: self._on_close(force=True))
+        except RuntimeError:
+            # Interpreter/Tk already tearing down — exit hard.
+            os._exit(0)
+
     def _check_tray_status(self):
         self.after(0, self._do_update_tray_status)
 
@@ -955,6 +1015,19 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
         if color != self._current_icon_color:
             self._current_icon_color = color
             self._apply_window_icon(color)
+
+        # Self-heal: if we are hidden in the tray but the detached icon died or
+        # never registered, the window would be unreachable (taskbar entry is
+        # hidden while minimised). Recreate it; if even that fails, fall back to
+        # showing the taskbar entry so the user is never stranded.
+        if self._in_tray and self._settings.get('minimize_to_tray', True) \
+                and not self._tray_icon_alive():
+            try:
+                self._spawn_tray_icon()
+            except Exception:
+                logging.exception("Tray icon recovery failed; restoring taskbar entry")
+                self._set_taskbar_visible(True)
+
         if self._tray_icon:
             try:
                 self._tray_icon.icon = self._get_tray_image(color)
@@ -1006,14 +1079,17 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             if getattr(card, '_status', '') in ('running', 'starting'):
                 card.do_stop()
 
-    def _on_close(self):
-        """Handle window close — show confirmation if services are running."""
+    def _on_close(self, force: bool = False):
+        """Handle window close — show confirmation if services are running.
+
+        ``force=True`` skips the confirmation (used when another instance asked us
+        to shut down) and still stops every service and saves state."""
         ToolTip.hide_all()
         running_count = sum(
             1 for card in self._repo_cards
             if getattr(card, '_status', '') in ('running', 'starting')
         )
-        if running_count:
+        if running_count and not force:
             from gui.dialogs import ConfirmCloseDialog
             dlg = ConfirmCloseDialog(self, running_count)
             self.wait_window(dlg)
@@ -1026,15 +1102,14 @@ class DevOpsManagerApp(ProfileManagerMixin, ctk.CTk):
             if hasattr(self, '_original_stderr'):
                 sys.stderr = self._original_stderr
 
-            if hasattr(self, '_tray_icon') and self._tray_icon is not None:
-                try:
-                    self._tray_icon.stop()
-                except (RuntimeError, AttributeError):
-                    pass
+            self._stop_tray_icon()
+
+            if hasattr(self, '_instance_mgr'):
+                self._instance_mgr.cleanup()
 
             if hasattr(self, '_service_launcher'):
                 self._service_launcher.stop_all(self._log)
-                
+
             self._save_repo_state()
             self._save_settings(self._settings)
         except Exception as e:
